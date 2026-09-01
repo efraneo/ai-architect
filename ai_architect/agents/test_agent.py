@@ -1,10 +1,11 @@
 """
 Compatibility Test Agent.
 
-The canonical LLM test generation implementation lives under
-``ai_architect.llm.test_agent``.  This adapter exposes the AgentManager
-``BaseAgent.run(context)`` contract without coupling AgentManager to the
-LLM-specific API.
+This adapter exposes the AgentManager ``BaseAgent.run(context)`` contract
+for test generation, talking to the provider through ``ProviderManager``.
+
+It used to point at ``ai_architect.llm.test_agent``, an earlier version that
+was removed; the code had already migrated to ``ai_architect.providers``.
 """
 
 from __future__ import annotations

@@ -19,6 +19,7 @@ from ai_architect.patch_generator.patch_generator import PatchGenerator
 from ai_architect.patch_generator.patch_validator import PatchValidator
 from ai_architect.planner.planner import Planner
 from ai_architect.providers.provider_manager import ProviderManager
+from ai_architect.test_runner.test_runner import TestRunner
 
 
 def auto_commit_activo() -> bool:
@@ -31,6 +32,16 @@ def auto_commit_activo() -> bool:
     return os.getenv("AUTO_COMMIT", "false").strip().lower() == "true"
 
 
+def run_tests_activo() -> bool:
+    """Whether to run the target project's tests before deciding.
+
+    On by default: deciding without running them is what the flow used to do,
+    and it is worse. It can be turned off for a large repository whose suite
+    is slow, at the cost of a much weaker decision.
+    """
+    return os.getenv("RUN_TESTS", "true").strip().lower() == "true"
+
+
 class ImprovementEngine(ImprovementEngineFacadeMixin):
     """High-level improvement orchestrator."""
 
@@ -38,6 +49,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         self,
         memory: MemoryEngine | None = None,
         git: GitManager | None = None,
+        tests: TestRunner | None = None,
     ) -> None:
         self.analysis = AnalysisEngine()
         self.context_builder = AnalysisContextBuilder()
@@ -57,6 +69,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         # Injectable so the tests never touch a real repository. When it is
         # None, one is built for the repository being improved.
         self.git = git
+
+        # Runs the target project's suite. Injectable so this project's own
+        # tests do not spawn a pytest inside another pytest.
+        self.tests = tests or TestRunner()
 
         # Compatibility aliases for the existing public API.
         self.builder = self.patch_generator.builder
@@ -119,9 +135,14 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
 
         structurally_valid = self.validate_structure(patch)
 
+        pruebas = self._ejecutar_pruebas(repository)
+
         # Structural validation is not approval: a well-formed patch can still
         # be a bad idea. The decision engine weighs the analysis metrics, the
-        # findings and the size of the change, and it is what decides.
+        # findings, the size of the change and the state of the suite.
+        #
+        # Before, tests_ok carried `structurally_valid`, so the engine believed
+        # the tests had passed when nothing had been run.
         decision = self.decision.decide(
             metrics=self.metrics(analysis),
             findings=self.recommendations(analysis),
@@ -129,8 +150,9 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
                 "instruction": instruction,
                 "files": patch.total_files,
                 "tasks": plan.total_tasks,
+                "structurally_valid": bool(structurally_valid),
             },
-            tests_ok=bool(structurally_valid),
+            tests_ok=bool(pruebas["success"]),
             repository=str(repository),
         )
 
@@ -178,6 +200,46 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             "decision": decision,
             "committed": commit["committed"],
             "commit_reason": commit["reason"],
+            "tests": pruebas,
+        }
+
+    def _ejecutar_pruebas(self, repository: Path) -> dict[str, Any]:
+        """Run the target project's suite and summarise the result.
+
+        Running someone else's tests means running their code, and it can be
+        slow, so it is behind ``RUN_TESTS`` (on by default). When it is off, or
+        when the run itself fails, ``success`` is False: the decision engine
+        then works with "the tests do not back this change", which is the
+        prudent direction. Announcing a success that was never measured is
+        exactly the bug this replaces.
+        """
+        if not run_tests_activo():
+            return {
+                "executed": False,
+                "success": False,
+                "reason": "RUN_TESTS desactivado",
+                "passed": 0,
+                "failed": 0,
+            }
+
+        try:
+            resultado = self.tests.run(repository)
+        except Exception as e:  # noqa: BLE001 - una suite ajena puede hacer de todo
+            return {
+                "executed": False,
+                "success": False,
+                "reason": f"no se pudieron ejecutar: {e}",
+                "passed": 0,
+                "failed": 0,
+            }
+
+        return {
+            "executed": True,
+            "success": bool(resultado.success),
+            "reason": "suite en verde" if resultado.success else "la suite falla",
+            "passed": resultado.passed,
+            "failed": resultado.failed,
+            "duration": resultado.duration,
         }
 
     def _commit_si_procede(

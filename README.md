@@ -22,7 +22,7 @@ ahí trabaja solo:
 2. **Planifica** qué cambiar, con el contexto que extrajo del análisis.
 3. **Genera** el parche con un LLM.
 4. **Valida** el parche antes de tocar nada.
-5. **Ejecuta** las pruebas.
+5. **Ejecuta** las pruebas del proyecto de verdad (`RUN_TESTS`).
 6. **Decide** con una puntuación de confianza y riesgo si el cambio se acepta.
 7. **Recuerda** lo aprendido para la siguiente ejecución.
 8. **Commitea**, solo si se lo permites (ver *Commit automático*).
@@ -146,6 +146,7 @@ Motores independientes que se coordinan entre sí:
 | Analizador | `analyzer/` | Estructura, dependencias, duplicados y complejidad |
 | Planificador | `planner/` | Convierte el análisis en un plan de cambios |
 | Proveedores | `providers/` | Claude, OpenAI, Gemini, Ollama y OpenRouter tras una interfaz común |
+| Pruebas | `test_runner/` | Ejecuta la suite del proyecto y alimenta la decisión |
 | Generador de parches | `patch_generator/` | Construye y valida el diff |
 | Ejecución | `execution/` | Aplica el parche de forma atómica y lanza las pruebas |
 | Revisor | `reviewer/` | Puntúa el resultado y decide la aprobación |
@@ -160,7 +161,7 @@ Motores independientes que se coordinan entre sí:
 ## Desarrollo
 
 ```bash
-pytest                      # 249 tests
+pytest                      # 269 tests
 ruff check .                # linter
 black .                     # formato
 mypy ai_architect           # tipos
@@ -179,8 +180,8 @@ pre-commit install
 
 | | |
 |---|---|
-| Tests | 249 |
-| Cobertura | 44 % |
+| Tests | 269 |
+| Cobertura | 50 % |
 | Errores de tipo | 0 |
 
 > La cobertura sigue siendo baja para un proyecto de este tamaño y es el
