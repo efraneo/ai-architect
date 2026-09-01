@@ -66,10 +66,7 @@ def test_reviewer_rejects_report_with_error(
     source = repository / "example.py"
 
     source.write_text(
-        "\n".join(
-            f"value_{index} = {index}"
-            for index in range(601)
-        ),
+        "\n".join(f"value_{index} = {index}" for index in range(601)),
         encoding="utf-8",
     )
 

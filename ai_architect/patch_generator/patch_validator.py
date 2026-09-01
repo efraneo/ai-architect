@@ -149,10 +149,7 @@ class PatchValidator:
             "DELETE",
         }
 
-        return all(
-            str(item.action).upper() in valid
-            for item in patch.files
-        )
+        return all(str(item.action).upper() in valid for item in patch.files)
 
     # ========================================================
     # Structural Validation
@@ -278,11 +275,14 @@ class PatchValidator:
         self,
         patch: Patch,
     ) -> float:
-        deductions = len(
-            self.issues(
-                patch,
+        deductions = (
+            len(
+                self.issues(
+                    patch,
+                )
             )
-        ) * 25
+            * 25
+        )
 
         return max(
             0.0,

@@ -7,7 +7,7 @@ Patch Builder
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .models import (
     Patch,
@@ -37,7 +37,7 @@ class PatchBuilder:
             title=title,
             description=description,
             created_at=datetime.now(
-                timezone.utc,
+                UTC,
             ),
         )
 

@@ -106,19 +106,13 @@ def test_patch_roundtrip_preserves_files(
 
     assert loaded.total_files == 3
 
-    assert loaded.files[0].path == (
-        "ai_architect/example.py"
-    )
+    assert loaded.files[0].path == ("ai_architect/example.py")
     assert loaded.files[0].action == "MODIFY"
 
-    assert loaded.files[1].path == (
-        "ai_architect/new_file.py"
-    )
+    assert loaded.files[1].path == ("ai_architect/new_file.py")
     assert loaded.files[1].action == "CREATE"
 
-    assert loaded.files[2].path == (
-        "ai_architect/old_file.py"
-    )
+    assert loaded.files[2].path == ("ai_architect/old_file.py")
     assert loaded.files[2].action == "DELETE"
 
 
@@ -179,13 +173,19 @@ def test_patch_roundtrip_remains_structurally_valid(
 
     validator = PatchValidator()
 
-    assert validator.validate_structure(
-        loaded,
-    ) is True
+    assert (
+        validator.validate_structure(
+            loaded,
+        )
+        is True
+    )
 
-    assert validator.approved(
-        loaded,
-    ) is True
+    assert (
+        validator.approved(
+            loaded,
+        )
+        is True
+    )
 
 
 def test_patch_roundtrip_preserves_rejection(
@@ -208,13 +208,19 @@ def test_patch_roundtrip_preserves_rejection(
 
     validator = PatchValidator()
 
-    assert validator.validate_structure(
-        loaded,
-    ) is True
+    assert (
+        validator.validate_structure(
+            loaded,
+        )
+        is True
+    )
 
-    assert validator.approved(
-        loaded,
-    ) is False
+    assert (
+        validator.approved(
+            loaded,
+        )
+        is False
+    )
 
 
 def test_patch_writer_serializes_file_statistics(
@@ -231,20 +237,11 @@ def test_patch_writer_serializes_file_statistics(
         encoding="utf-8",
     )
 
-    assert (
-        "MODIFY ai_architect/example.py 7 3"
-        in text
-    )
+    assert "MODIFY ai_architect/example.py 7 3" in text
 
-    assert (
-        "CREATE ai_architect/new_file.py 12 0"
-        in text
-    )
+    assert "CREATE ai_architect/new_file.py 12 0" in text
 
-    assert (
-        "DELETE ai_architect/old_file.py 0 9"
-        in text
-    )
+    assert "DELETE ai_architect/old_file.py 0 9" in text
 
 
 def test_patch_loader_loads_legacy_file_entries(
@@ -265,8 +262,7 @@ def test_patch_loader_loads_legacy_file_entries(
                 "--------------------------------",
                 "MODIFY ai_architect/example.py",
                 "",
-                "diff --git a/ai_architect/example.py "
-                "b/ai_architect/example.py",
+                "diff --git a/ai_architect/example.py " "b/ai_architect/example.py",
                 "--- a/ai_architect/example.py",
                 "+++ b/ai_architect/example.py",
                 "@@ -1 +1 @@",
@@ -286,9 +282,7 @@ def test_patch_loader_loads_legacy_file_entries(
     assert loaded.total_files == 1
 
     assert loaded.files[0].action == "MODIFY"
-    assert loaded.files[0].path == (
-        "ai_architect/example.py"
-    )
+    assert loaded.files[0].path == ("ai_architect/example.py")
 
     assert loaded.files[0].additions == 0
     assert loaded.files[0].deletions == 0

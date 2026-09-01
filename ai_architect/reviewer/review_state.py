@@ -64,16 +64,9 @@ class ReviewStateMixin:
         report = self.last_report
 
         return {
-            "healthy": (
-                report is None
-                or report.approved
-            ),
+            "healthy": (report is None or report.approved),
             "reviewed": self.reviewed_files,
-            "approved": (
-                report.approved
-                if report is not None
-                else False
-            ),
+            "approved": (report.approved if report is not None else False),
         }
 
     def ready(self) -> bool:
@@ -109,10 +102,7 @@ class ReviewStateMixin:
 
     def approved(self) -> bool:
         """Return the approval state of the last review."""
-        return bool(
-            self.last_report is not None
-            and self.last_report.approved
-        )
+        return bool(self.last_report is not None and self.last_report.approved)
 
     def reviewed(self) -> int:
         """Return the number of reviewed files."""
@@ -134,8 +124,4 @@ class ReviewStateMixin:
         report: ReviewReport,
         severity: Severity,
     ) -> int:
-        return sum(
-            1
-            for issue in report.issues
-            if issue.severity == severity
-        )
+        return sum(1 for issue in report.issues if issue.severity == severity)

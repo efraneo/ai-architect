@@ -10,8 +10,7 @@ def test_review_engine_reviews_python_files(
     source = tmp_path / "sample.py"
 
     source.write_text(
-        "def hello() -> str:\n"
-        '    return "hello"\n',
+        "def hello() -> str:\n" '    return "hello"\n',
         encoding="utf-8",
     )
 
@@ -55,10 +54,7 @@ def test_review_engine_detects_large_file(
     source = tmp_path / "large.py"
 
     source.write_text(
-        "\n".join(
-            "value = 1"
-            for _ in range(601)
-        ),
+        "\n".join("value = 1" for _ in range(601)),
         encoding="utf-8",
     )
 
@@ -69,8 +65,7 @@ def test_review_engine_detects_large_file(
     assert report.total_issues >= 1
 
     assert any(
-        issue.severity == Severity.CRITICAL
-        and issue.rule == "MAX_FILE_LINES"
+        issue.severity == Severity.CRITICAL and issue.rule == "MAX_FILE_LINES"
         for issue in report.issues
     )
 
@@ -137,10 +132,7 @@ def test_review_engine_statistics(
     source = tmp_path / "sample.py"
 
     source.write_text(
-        "\n".join(
-            "value = 1"
-            for _ in range(601)
-        ),
+        "\n".join("value = 1" for _ in range(601)),
         encoding="utf-8",
     )
 
@@ -186,10 +178,7 @@ def test_review_engine_issues_by_severity(
     source = tmp_path / "large.py"
 
     source.write_text(
-        "\n".join(
-            "value = 1"
-            for _ in range(601)
-        ),
+        "\n".join("value = 1" for _ in range(601)),
         encoding="utf-8",
     )
 
@@ -203,7 +192,4 @@ def test_review_engine_issues_by_severity(
     )
 
     assert critical
-    assert all(
-        issue.severity == Severity.CRITICAL
-        for issue in critical
-    )
+    assert all(issue.severity == Severity.CRITICAL for issue in critical)

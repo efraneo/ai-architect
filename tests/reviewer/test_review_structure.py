@@ -37,19 +37,17 @@ def test_review_engine_exposes_review_helpers() -> None:
 
 
 def test_review_engine_core_size_is_reasonable() -> None:
-    path = (
-        Path(__file__).parents[2]
-        / "ai_architect"
-        / "reviewer"
-        / "review_engine.py"
-    )
+    path = Path(__file__).parents[2] / "ai_architect" / "reviewer" / "review_engine.py"
 
     assert path.exists()
-    assert len(
-        path.read_text(
-            encoding="utf-8",
-        ).splitlines()
-    ) < 400
+    assert (
+        len(
+            path.read_text(
+                encoding="utf-8",
+            ).splitlines()
+        )
+        < 400
+    )
 
 
 def test_review_report_formatter_formats_report() -> None:

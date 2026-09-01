@@ -37,9 +37,7 @@ class ReviewEngine(ReviewStateMixin):
         report = ReviewReport()
 
         python_files = [
-            Path(file.path)
-            for file in workspace.files
-            if file.extension == ".py"
+            Path(file.path) for file in workspace.files if file.extension == ".py"
         ]
 
         total_score = 0.0
@@ -64,10 +62,14 @@ class ReviewEngine(ReviewStateMixin):
             reviewed += 1
             report.issues.extend(file_report.issues)
 
-        report.score = round(
-            total_score / reviewed,
-            2,
-        ) if reviewed else 0.0
+        report.score = (
+            round(
+                total_score / reviewed,
+                2,
+            )
+            if reviewed
+            else 0.0
+        )
 
         self.reviewed_files = reviewed
         self.last_report = report
@@ -226,47 +228,39 @@ class ReviewEngine(ReviewStateMixin):
         report: ReviewReport,
         severity: Severity,
     ) -> int:
-        return sum(
-            1
-            for issue in report.issues
-            if issue.severity == severity
-        )
+        return sum(1 for issue in report.issues if issue.severity == severity)
 
     @staticmethod
     def issues_by_severity(
         report: ReviewReport,
         severity: Severity,
     ) -> list[ReviewIssue]:
-        return [
-            issue
-            for issue in report.issues
-            if issue.severity == severity
-        ]
+        return [issue for issue in report.issues if issue.severity == severity]
 
-    @staticmethod
     def statistics(
-        report: ReviewReport,
+        self,
+        report: ReviewReport | None = None,
     ) -> dict:
+        """Return the statistics for ``report``, or for the last review.
+
+        Both forms are in use: ``commands/review.py`` and :meth:`to_dict` pass
+        an explicit report, while :class:`Reviewer` calls it with no arguments
+        and expects the numbers of the last review. Before, this was a
+        staticmethod that required ``report``, so the no-argument call raised
+        ``TypeError`` at runtime.
+        """
+        if report is None:
+            return super().statistics()
+
         return {
+            "reviewed": self.reviewed_files,
             "score": report.score,
             "approved": report.approved,
             "total": report.total_issues,
-            "critical": ReviewEngine._count(
-                report,
-                Severity.CRITICAL,
-            ),
-            "errors": ReviewEngine._count(
-                report,
-                Severity.ERROR,
-            ),
-            "warnings": ReviewEngine._count(
-                report,
-                Severity.WARNING,
-            ),
-            "info": ReviewEngine._count(
-                report,
-                Severity.INFO,
-            ),
+            "critical": self._count(report, Severity.CRITICAL),
+            "errors": self._count(report, Severity.ERROR),
+            "warnings": self._count(report, Severity.WARNING),
+            "info": self._count(report, Severity.INFO),
         }
 
     def to_dict(

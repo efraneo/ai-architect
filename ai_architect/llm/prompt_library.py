@@ -20,8 +20,7 @@ class PromptLibrary:
     entre proveedores LLM.
     """
 
-    SYSTEM_PROMPT = dedent(
-        """
+    SYSTEM_PROMPT = dedent("""
         You are QUANT AI Architect.
 
         You are an expert software architect.
@@ -35,8 +34,7 @@ class PromptLibrary:
         - Preserve formatting whenever possible.
         - Never remove functionality.
         - Return ONLY valid source code.
-        """
-    ).strip()
+        """).strip()
 
     def improve_code(
         self,
@@ -44,8 +42,7 @@ class PromptLibrary:
         repository_context: str,
     ) -> str:
 
-        return dedent(
-            f"""
+        return dedent(f"""
             {self.SYSTEM_PROMPT}
 
             =====================================================
@@ -69,16 +66,14 @@ class PromptLibrary:
             3. Avoid breaking existing APIs.
             4. Produce clean Python code.
             5. Return ONLY the final file.
-            """
-        ).strip()
+            """).strip()
 
     def review_code(
         self,
         source: str,
     ) -> str:
 
-        return dedent(
-            f"""
+        return dedent(f"""
             {self.SYSTEM_PROMPT}
 
             Review the following Python source code.
@@ -96,16 +91,14 @@ class PromptLibrary:
             SOURCE
 
             {source}
-            """
-        ).strip()
+            """).strip()
 
     def explain_code(
         self,
         source: str,
     ) -> str:
 
-        return dedent(
-            f"""
+        return dedent(f"""
             {self.SYSTEM_PROMPT}
 
             Explain this code.
@@ -120,8 +113,7 @@ class PromptLibrary:
             SOURCE
 
             {source}
-            """
-        ).strip()
+            """).strip()
 
     def refactor_code(
         self,
@@ -129,8 +121,7 @@ class PromptLibrary:
         objective: str,
     ) -> str:
 
-        return dedent(
-            f"""
+        return dedent(f"""
             {self.SYSTEM_PROMPT}
 
             Refactor the following code.
@@ -151,5 +142,4 @@ class PromptLibrary:
             {source}
 
             Return ONLY the refactored source.
-            """
-        ).strip()
+            """).strip()

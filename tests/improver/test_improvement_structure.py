@@ -13,5 +13,10 @@ def test_improvement_engine_keeps_facade_api() -> None:
 
 
 def test_improvement_engine_core_stays_under_size_budget() -> None:
-    path = Path(__file__).parents[2] / "ai_architect" / "improver" / "improvement_engine.py"
+    path = (
+        Path(__file__).parents[2]
+        / "ai_architect"
+        / "improver"
+        / "improvement_engine.py"
+    )
     assert len(path.read_text(encoding="utf-8").splitlines()) < 600

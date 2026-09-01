@@ -122,12 +122,10 @@ class PatchWriter:
 
         for patch_file in patch.files:
             lines.append(
-                (
-                    f"{patch_file.action} "
-                    f"{patch_file.path} "
-                    f"{patch_file.additions} "
-                    f"{patch_file.deletions}"
-                )
+                f"{patch_file.action} "
+                f"{patch_file.path} "
+                f"{patch_file.additions} "
+                f"{patch_file.deletions}"
             )
 
         lines.append("")
@@ -154,11 +152,7 @@ class PatchWriter:
             lines,
         )
 
-        return (
-            prefix
-            + "\n"
-            + diff
-        )
+        return prefix + "\n" + diff
 
     # ========================================================
     # Utilities

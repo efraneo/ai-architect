@@ -225,12 +225,14 @@ class ExperienceMemory:
             "experiences": total,
             "successful": successful,
             "failed": failed,
-            "success_rate": round(
-                successful * 100 / total,
-                2,
-            )
-            if total
-            else 0.0,
+            "success_rate": (
+                round(
+                    successful * 100 / total,
+                    2,
+                )
+                if total
+                else 0.0
+            ),
             "average_confidence": round(
                 average_confidence,
                 3,

@@ -122,7 +122,7 @@ class DecisionReport:
 
     def to_dict(
         self,
-    ) -> dict:
+    ) -> dict[str, Any]:
 
         data = asdict(
             self,

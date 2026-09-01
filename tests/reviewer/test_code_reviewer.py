@@ -27,8 +27,7 @@ def test_code_reviewer_accepts_normal_file(tmp_path: Path) -> None:
     target = tmp_path / "sample.py"
 
     target.write_text(
-        "def hello() -> str:\n"
-        '    return "hello"\n',
+        "def hello() -> str:\n" '    return "hello"\n',
         encoding="utf-8",
     )
 
@@ -45,10 +44,7 @@ def test_code_reviewer_detects_large_file(tmp_path: Path) -> None:
     target = tmp_path / "large.py"
 
     target.write_text(
-        "\n".join(
-            "x = 1"
-            for _ in range(601)
-        ),
+        "\n".join("x = 1" for _ in range(601)),
         encoding="utf-8",
     )
 
@@ -57,8 +53,7 @@ def test_code_reviewer_detects_large_file(tmp_path: Path) -> None:
     report = reviewer.review(target)
 
     assert any(
-        issue.rule == "MAX_FILE_LINES"
-        and issue.severity == Severity.CRITICAL
+        issue.rule == "MAX_FILE_LINES" and issue.severity == Severity.CRITICAL
         for issue in report.issues
     )
 
