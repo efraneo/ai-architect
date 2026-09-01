@@ -21,9 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from ai_architect.filesystem.project_walker import (
-    ProjectFile
-)
+from ai_architect.filesystem.project_walker import ProjectFile
 
 
 @dataclass(slots=True)
@@ -61,20 +59,13 @@ class Workspace:
         """
         Cantidad de archivos Python.
         """
-        return sum(
-            1
-            for file in self.files
-            if file.extension == ".py"
-        )
+        return sum(1 for file in self.files if file.extension == ".py")
 
     def total_size(self) -> int:
         """
         Tamaño total del proyecto.
         """
-        return sum(
-            file.size_bytes
-            for file in self.files
-        )
+        return sum(file.size_bytes for file in self.files)
 
     def clear(self) -> None:
         """

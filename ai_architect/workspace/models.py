@@ -47,7 +47,4 @@ class WorkspaceSnapshot:
 
     @property
     def total_size(self) -> int:
-        return sum(
-            file.size
-            for file in self.files
-        )
+        return sum(file.size for file in self.files)

@@ -36,13 +36,9 @@ class WorkspaceManager:
     def reload(self) -> WorkspaceSnapshot:
 
         if self._snapshot is None:
-            raise RuntimeError(
-                "Workspace no abierto."
-            )
+            raise RuntimeError("Workspace no abierto.")
 
-        return self.open(
-            self._snapshot.root
-        )
+        return self.open(self._snapshot.root)
 
     def clear(self) -> None:
 

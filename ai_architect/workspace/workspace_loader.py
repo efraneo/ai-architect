@@ -21,7 +21,6 @@ from .models import (
     WorkspaceSnapshot,
 )
 
-
 LANGUAGE_MAP = {
     ".py": "python",
     ".yaml": "yaml",
@@ -68,28 +67,19 @@ class WorkspaceLoader:
             extension = project_file.extension
 
             snapshot.files.append(
-
                 WorkspaceFile(
-
                     path=str(project_file.path),
-
                     extension=extension,
-
                     language=LANGUAGE_MAP.get(
                         extension,
                         "unknown",
                     ),
-
                     sha256=self.hasher.sha256(
                         project_file.path,
                     ),
-
                     size=project_file.size_bytes,
-
                     modified=project_file.path.stat().st_mtime,
-
                 )
-
             )
 
         return snapshot
