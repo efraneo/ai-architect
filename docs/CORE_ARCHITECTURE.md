@@ -126,7 +126,6 @@ El proyecto está dividido en los siguientes dominios funcionales:
 - swarm
 - testing
 - test_runner
-- workflows
 - workspace
 
 ---
