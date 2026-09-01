@@ -176,6 +176,35 @@ bueno. Con `--apply`, juzga el código que va a quedar.
 Un repositorio que ya venía en rojo no condena al parche: lo que lo condena
 es romper algo que funcionaba o aumentar el número de fallos.
 
+El resultado dice siempre **en qué quedaron tus archivos**:
+
+| `working_tree` | Qué significa |
+|---|---|
+| `untouched` | No se aplicó nada. Tu repositorio está como estaba |
+| `modified` | Se aplicó y **sigue puesto**. Revísalo |
+| `restored` | Se aplicó, rompía las pruebas, y se deshizo |
+| `dirty` | Rompía las pruebas y **no se pudo deshacer**. Hay que mirarlo a mano |
+
+### Por qué no siempre commitea, aunque las pruebas pasen
+
+`AUTO_COMMIT=true` no basta. El motor de decisión exige **score ≥ 90 y
+confianza ≥ 0,70** para aprobar solo; con score ≥ 70 pide revisión humana
+(`MANUAL_REVIEW`). Sobre un repositorio mediocre verás esto:
+
+```
+aprobado: False
+decisión: MANUAL_REVIEW  score 78.55  grado C  confianza 0.642
+```
+
+No es un fallo: es la política, y falla hacia el "no" a propósito. Con
+`--apply` el cambio se queda aplicado para que lo revises tú.
+
+### Dónde deja sus cosas
+
+`improve` escribe el parche en `.ai_architect/` **dentro del repositorio
+analizado**, para que quede junto al código al que pertenece. Conviene
+añadirlo a tu `.gitignore`.
+
 ### Varias mejoras de una vez
 
 Cada instrucción es una tarea: se ordenan por prioridad —la primera es la más

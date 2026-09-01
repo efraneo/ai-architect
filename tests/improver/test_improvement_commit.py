@@ -223,3 +223,89 @@ def test_la_memoria_anota_si_se_commiteo(repo: Path, tmp_path: Path) -> None:
         motor.improve(repo, instruction="algo")
 
     assert motor.memory.store.last(1)[0].metadata["committed"] is True
+
+
+# --- Cuando el parche ya está aplicado --------------------------------------
+#
+# Con `--apply` la verificación deja el cambio puesto en el árbol de trabajo.
+# El commit lo aplicaba otra vez, y el segundo intento falla: un parche
+# bueno, verificado y con las pruebas en verde **no llegaba a commitearse**,
+# y el motivo que daba —"el parche no se pudo aplicar"— hacía pensar que el
+# cambio era malo cuando era exactamente al revés.
+
+
+def test_si_ya_esta_aplicado_no_se_aplica_otra_vez(repo: Path, tmp_path: Path) -> None:
+    git = git_falso()
+    motor = motor_con(tmp_path, git=git)
+
+    with mock.patch.dict(os.environ, {"AUTO_COMMIT": "true"}):
+        resultado = motor._commit_si_procede(
+            repository=repo,
+            patch=mock.Mock(approved=True),
+            diff=DIFF,
+            instruction="algo",
+            ya_aplicado=True,
+        )
+
+    git.apply_patch.assert_not_called()
+    git.commit.assert_called_once()
+    assert resultado["committed"] is True
+
+
+def test_si_no_esta_aplicado_se_aplica(repo: Path, tmp_path: Path) -> None:
+    git = git_falso()
+    motor = motor_con(tmp_path, git=git)
+
+    with mock.patch.dict(os.environ, {"AUTO_COMMIT": "true"}):
+        motor._commit_si_procede(
+            repository=repo,
+            patch=mock.Mock(approved=True),
+            diff=DIFF,
+            instruction="algo",
+            ya_aplicado=False,
+        )
+
+    git.apply_patch.assert_called_once()
+
+
+def test_un_cambio_deshecho_no_se_commitea(repo: Path, tmp_path: Path) -> None:
+    """Si la verificación lo deshizo, el árbol ya no lo tiene: commitearlo
+    lo volvería a aplicar."""
+    git = git_falso()
+    motor = motor_con(tmp_path, git=git)
+
+    with mock.patch.dict(os.environ, {"AUTO_COMMIT": "true"}):
+        resultado = motor._commit_si_procede(
+            repository=repo,
+            patch=mock.Mock(approved=True),
+            diff=DIFF,
+            instruction="algo",
+            deshecho=True,
+        )
+
+    git.apply_patch.assert_not_called()
+    git.commit.assert_not_called()
+    assert resultado["committed"] is False
+    assert "rompía las pruebas" in resultado["reason"]
+
+
+def test_el_ciclo_entero_con_un_parche_bueno(repo: Path, tmp_path: Path) -> None:
+    """Verificar y commitear: la combinación del ciclo autónomo."""
+    git = git_falso()
+    motor = motor_con(tmp_path, git=git)
+
+    with mock.patch(
+        "ai_architect.improver.improvement_engine.verificar",
+        return_value={
+            "applied": True,
+            "reverted": False,
+            "reason": "no empeora",
+            "tests_before": {"executed": True, "success": True},
+            "tests": {"executed": True, "success": True, "failed": 0},
+        },
+    ):
+        with mock.patch.dict(os.environ, {"AUTO_COMMIT": "true"}):
+            resultado = motor.improve(repo, instruction="algo", apply=True)
+
+    assert resultado["committed"] is True
+    git.apply_patch.assert_not_called()

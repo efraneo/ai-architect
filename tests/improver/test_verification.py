@@ -22,7 +22,11 @@ from pathlib import Path
 
 import pytest
 
-from ai_architect.improver.verification import peor_que, verificar
+from ai_architect.improver.verification import (
+    estado_del_arbol,
+    peor_que,
+    verificar,
+)
 
 BUENO = """--- a/modulo.py
 +++ b/modulo.py
@@ -196,3 +200,54 @@ def test_fuera_de_un_repositorio_git_no_se_aplica(tmp_path: Path) -> None:
 
     assert resultado["applied"] is False
     assert "Git repository" in resultado["reason"]
+
+
+# --- En qué quedaron los archivos del usuario -------------------------------
+#
+# Es lo primero que quiere saber quien ejecuta esto sobre su repositorio.
+
+
+def test_sin_verificacion_no_se_tocó_nada() -> None:
+    assert estado_del_arbol(None) == "untouched"
+
+
+def test_si_no_se_aplicó_no_se_tocó_nada() -> None:
+    assert estado_del_arbol({"applied": False, "reverted": False}) == "untouched"
+
+
+def test_aplicado_y_deshecho_es_restaurado() -> None:
+    verificacion = {
+        "applied": True,
+        "reverted": True,
+        "reason": "el cambio rompe las pruebas: deshecho",
+    }
+
+    assert estado_del_arbol(verificacion) == "restored"
+
+
+def test_aplicado_y_en_pie_es_modificado() -> None:
+    verificacion = {
+        "applied": True,
+        "reverted": False,
+        "reason": "el cambio no empeora las pruebas",
+    }
+
+    assert estado_del_arbol(verificacion) == "modified"
+
+
+def test_si_habia_que_deshacerlo_y_no_se_pudo_es_sucio() -> None:
+    """No es lo mismo un cambio bueno esperando revisión que uno que rompe
+    las pruebas y se quedó puesto porque no se pudo deshacer."""
+    verificacion = {
+        "applied": True,
+        "reverted": False,
+        "reason": "el cambio rompe las pruebas y NO se pudo deshacer: x",
+    }
+
+    assert estado_del_arbol(verificacion) == "dirty"
+
+
+def test_el_ciclo_lo_reporta(repo: Path) -> None:
+    resultado = verificar(repo, ROTO, pruebas(), suite([pruebas(ok=False, fallos=1)]))
+
+    assert estado_del_arbol(resultado) == "restored"
