@@ -150,6 +150,8 @@ class ExecutionPipeline(ExecutionPipelineStateMixin):
                 try:
                     temporary_patch.unlink(missing_ok=True)
                 except OSError:
+                    # No poder borrar un temporal no cambia el resultado, y
+                    # lanzar desde un `finally` taparía el error de verdad.
                     pass
 
     @staticmethod

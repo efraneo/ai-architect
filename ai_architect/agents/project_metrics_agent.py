@@ -57,6 +57,11 @@ class ProjectMetricsAgent(BaseAgent):
 
         python_files = 0
 
+        # Los archivos que no se pudieron leer. Antes se descartaban en
+        # silencio con un `except: pass`, así que el tamaño y las líneas
+        # salían por debajo de lo real y nadie tenía forma de saberlo.
+        ilegibles = 0
+
         for item in files:
             if item.is_dir():
                 total_dirs += 1
@@ -66,8 +71,8 @@ class ProjectMetricsAgent(BaseAgent):
 
             try:
                 total_size += item.stat().st_size
-            except Exception:
-                pass
+            except OSError:
+                ilegibles += 1
 
             suffix = item.suffix.lower()
 
@@ -84,8 +89,8 @@ class ProjectMetricsAgent(BaseAgent):
                     ) as file:
                         total_lines += sum(1 for _ in file)
 
-                except Exception:
-                    pass
+                except OSError:
+                    ilegibles += 1
 
         average = total_lines / python_files if python_files else 0
 
@@ -93,7 +98,7 @@ class ProjectMetricsAgent(BaseAgent):
             project_path,
         )
 
-        return {
+        informe: dict[str, Any] = {
             "agent": self.name,
             "files": total_files,
             "directories": total_dirs,
@@ -108,9 +113,23 @@ class ProjectMetricsAgent(BaseAgent):
                 2,
             ),
             "languages": dict(languages),
+            "unreadable": ilegibles,
             "largest_files": largest,
             "status": "OK",
         }
+
+        if ilegibles:
+            informe["findings"] = [
+                {
+                    "type": "ilegible",
+                    "issue": (
+                        f"{ilegibles} archivos no se pudieron leer: "
+                        "las métricas salen por debajo de lo real"
+                    ),
+                }
+            ]
+
+        return informe
 
     def _largest_files(
         self,
