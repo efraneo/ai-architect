@@ -140,3 +140,21 @@ def despedir(archivo: Path | None = None, ahora: datetime | None = None) -> str:
 
 def quien_te_hizo(archivo: Path | None = None) -> str:
     return str(cargar(archivo).get("creador") or CREADOR_POR_DEFECTO)
+
+
+def voz_preferida(archivo: Path | None = None) -> str:
+    """El motor de voz que eligió el usuario, si eligió alguno.
+
+    Se guarda porque la elección es suya, no del orden por defecto: si
+    mañana instala otro motor, el que escogió sigue siendo el que suena.
+    """
+    return str(cargar(archivo).get("voz") or "")
+
+
+def preferir_voz(motor: str, archivo: Path | None = None) -> bool:
+    """Deja constancia de con cuál se queda."""
+    datos = cargar(archivo)
+
+    datos["voz"] = motor.strip()
+
+    return guardar(datos, archivo)

@@ -34,6 +34,7 @@ from ai_architect.commands import (
     improve,
     pide,
     review,
+    voz,
 )
 from ai_architect.core.env_file import cargar
 
@@ -59,6 +60,11 @@ class Comando:
 # `pide` va aparte de la tabla: es quien la usa, no uno de sus miembros.
 # Meterlo dentro le dejaría elegirse a sí mismo.
 COMANDOS: tuple[Comando, ...] = (
+    Comando(
+        "voz",
+        "Ver qué voces hay y probarlas (--probar)",
+        lambda a: voz.run(probar=a.probar, motor=a.motor, usar=a.usar),
+    ),
     Comando(
         "doctor",
         "Comprobar el entorno: proveedor, agentes y git",
@@ -132,6 +138,7 @@ PIDE = Comando(
         frase=" ".join(a.frase or []),
         si=a.si,
         soy=a.soy,
+        decir=a.decir,
     ),
 )
 
@@ -225,6 +232,32 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         help="For pide: what you want, in your own words",
+    )
+
+    parser.add_argument(
+        "--usar",
+        default="",
+        choices=["", "piper", "openai", "windows"],
+        help="For voz: remember this engine as your choice",
+    )
+
+    parser.add_argument(
+        "--motor",
+        default="",
+        choices=["", "piper", "openai", "windows"],
+        help="For voz: which engine to use, to compare how they sound",
+    )
+
+    parser.add_argument(
+        "--probar",
+        action="store_true",
+        help="For voz: say a phrase out loud with the chosen engine",
+    )
+
+    parser.add_argument(
+        "--decir",
+        action="store_true",
+        help="For pide: read the answer out loud",
     )
 
     parser.add_argument(

@@ -16,6 +16,7 @@ from . import (
     improve,
     pide,
     review,
+    voz,
 )
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "changelog",
     "pide",
     "review",
+    "voz",
     "improve",
     "execute",
     "doctor",

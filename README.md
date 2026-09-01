@@ -112,6 +112,43 @@ No lo ejecuto porque toca tus archivos. Añade --si si es eso.
 Y el modelo **solo puede elegir de la lista de comandos**. Si se inventa uno,
 se para y te lo dice.
 
+### Que te responda hablando
+
+```console
+$ architect voz
+Voces disponibles:
+     piper    no   no instalado. Baja una voz a ~/.ai_architect/voces
+  -> openai   sí   de pago por uso; suena neutro, no latino
+     windows  sí   solo hay voz femenina (Sabina, es-MX). Para una masculina,
+                   instala Raúl o Pablo en Configuración > Hora e idioma > Voz
+
+$ architect voz --probar          # la dice en alto
+$ architect pide . --frase cómo está el proyecto --decir
+```
+
+**Te dice qué tienes y qué te falta**, en vez de suponer. Para una voz
+**masculina latina**, por orden de calidad:
+
+| | |
+|---|---|
+| **Piper** | Local, gratis, sin internet. Baja el binario y una voz `es_MX-ald-medium` o `es_AR-daniel-high` a `~/.ai_architect/voces` |
+| **OpenAI** | Ya funciona si tienes la clave. Suena masculino pero **neutro, no latino**, y cuesta por uso |
+| **Windows** | Gratis y ya instalado, pero necesita que instales Raúl o Pablo: por defecto solo trae voces femeninas en español |
+
+Escúchalas y quédate con una:
+
+```bash
+architect voz --probar --motor windows    # la gratis
+architect voz --probar --motor openai     # la masculina
+architect voz --usar openai               # y me quedo con esta
+```
+
+Lo que elijas manda sobre el orden por defecto: si mañana instalas otra, la
+tuya sigue siendo la que suena.
+
+Si no hay ninguna voz, el comando sigue funcionando igual: la respuesta ya
+está en pantalla.
+
 ### Configurar la clave
 
 Copia `.env.example` a `.env` y pon tu clave. **El CLI lo lee al arrancar**,

@@ -105,3 +105,26 @@ def test_no_guarda_credenciales(archivo: Path) -> None:
 
     for prohibido in ("key", "token", "password", "secret"):
         assert prohibido not in guardado
+
+
+# --- La voz elegida ---------------------------------------------------------
+
+
+def test_al_principio_no_hay_voz_elegida(archivo: Path) -> None:
+    assert perfil.voz_preferida(archivo) == ""
+
+
+def test_se_recuerda_la_que_eligio(archivo: Path) -> None:
+    """Escuchó las dos y se quedó con una: eso no lo cambia que mañana
+    aparezca otra."""
+    perfil.configurar("Eathan", archivo=archivo)
+    perfil.preferir_voz("openai", archivo)
+
+    assert perfil.voz_preferida(archivo) == "openai"
+
+
+def test_elegir_voz_no_borra_el_trato(archivo: Path) -> None:
+    perfil.configurar("Eathan", archivo=archivo)
+    perfil.preferir_voz("openai", archivo)
+
+    assert perfil.como_llamarte(archivo) == "Eathan"
