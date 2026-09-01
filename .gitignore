@@ -42,10 +42,14 @@ dist/
 Thumbs.db
 
 # Runtime
-memory/db/
-workspace/
-knowledge/cache/
-repository/cache/
+# Anclados a la raiz con "/". Sin la barra inicial git aplica el patron en
+# cualquier nivel, asi que "workspace/" tambien capturaba
+# ai_architect/workspace/, que es codigo fuente: el paquete no llego a
+# subirse y la instalacion desde el repositorio quedaba rota.
+/memory/db/
+/workspace/
+/knowledge/cache/
+/repository/cache/
 
 # AI Architect
 *.patch
