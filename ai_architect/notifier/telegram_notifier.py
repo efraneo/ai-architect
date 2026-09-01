@@ -23,7 +23,8 @@ from pathlib import Path
 
 import requests
 
-from .env_file import valor
+from ai_architect.core.env_file import valor
+
 from .models import (
     Notification,
     NotificationResult,

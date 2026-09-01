@@ -79,6 +79,21 @@ architect {analyze,review,improve,execute,agents,auto,changelog,doctor} [proyect
           [opciones]
 ```
 
+### Configurar la clave
+
+Copia `.env.example` a `.env` y pon tu clave. **El CLI lo lee al arrancar**,
+así que no hace falta exportar nada en cada sesión:
+
+```bash
+cp .env.example .env
+# edita .env y pon OPENAI_API_KEY=...
+architect doctor        # debe decir healthy
+```
+
+Lo que ya esté exportado manda sobre el archivo: si escribes
+`OPENAI_API_KEY=otra architect improve`, se usa esa. El `.env` está en el
+`.gitignore` y no se sube.
+
 ### Comprobar la instalación
 
 No usa IA ni gasta tokens: ninguna comprobación llama a un proveedor ni sale

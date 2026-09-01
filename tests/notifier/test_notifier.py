@@ -21,7 +21,7 @@ from unittest import mock
 import pytest
 import requests
 
-from ai_architect.notifier.env_file import leer, valor
+from ai_architect.core.env_file import leer, valor
 from ai_architect.notifier.improvement_notice import (
     avisar,
     notificaciones_activas,
