@@ -75,7 +75,7 @@ OLLAMA_HOST=http://localhost:11434
 ## Uso
 
 ```
-architect {analyze,review,improve,execute,agents,doctor} [proyecto] [opciones]
+architect {analyze,review,improve,execute,agents,auto,doctor} [proyecto] [opciones]
 ```
 
 ### Comprobar la instalación
@@ -147,6 +147,19 @@ architect improve . --instruction "Extrae la lógica de validación a su propio 
 architect improve . --file ai_architect/planner/planner.py
 ```
 
+### Varias mejoras de una vez
+
+Cada instrucción es una tarea: se ordenan por prioridad —la primera es la más
+prioritaria—, se ejecutan una a una y cada resultado pasa por la puerta de
+aprobación (pruebas en verde, riesgo aceptable y confianza suficiente).
+
+```bash
+architect auto . --instructions "extrae el validador" "documenta el planner"
+```
+
+Ninguna toca el repositorio salvo que `AUTO_COMMIT` esté encendido, que es la
+misma puerta que ya protege a `architect improve`.
+
 ### Aplicar un parche
 
 `--dry-run` valida el parche **sin tocar** ningún archivo. Úsalo siempre antes
@@ -178,6 +191,7 @@ Motores independientes que se coordinan entre sí:
 | Proveedores | `providers/` | Claude, OpenAI, Gemini, Ollama y OpenRouter tras una interfaz común |
 | Pruebas | `test_runner/` | Ejecuta la suite del proyecto y alimenta la decisión |
 | Agentes | `agents/` | Revisión estática (gratis) y análisis con IA (opcional) |
+| Autónomo | `autonomous/` | Cola, orden, ejecución y puerta de aprobación |
 | Generador de parches | `patch_generator/` | Construye y valida el diff |
 | Ejecución | `execution/` | Aplica el parche de forma atómica y lanza las pruebas |
 | Revisor | `reviewer/` | Puntúa el resultado y decide la aprobación |

@@ -10,6 +10,7 @@ No test here touches an LLM: only the static half is exercised.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -214,3 +215,123 @@ def test_el_escaner_no_se_delata_a_si_mismo(
     hallazgos = manager.findings_de(inspeccion)
 
     assert [h for h in hallazgos if h.startswith("security:")] == []
+
+
+# --- La mitad de IA, en paralelo --------------------------------------------
+
+
+def test_execute_llama_a_los_cinco_agentes_de_ia(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    for agente in (
+        manager.architect,
+        manager.refactor,
+        manager.reviewer,
+        manager.tests,
+        manager.documentation,
+    ):
+        agente.run = mock.Mock(return_value={"status": "OK"})  # type: ignore[method-assign]
+
+    contexto = manager.execute(str(proyecto))
+
+    for clave in ("architect", "refactor", "review", "tests", "documentation"):
+        assert clave in contexto.data
+
+
+def test_los_cinco_corren_a_la_vez(manager: AgentManager, proyecto: Path) -> None:
+    """Cinco llamadas al proveedor en serie se suman; a la vez cuestan una."""
+    espera = 0.15
+
+    def lento(_datos):
+        time.sleep(espera)
+        return {"status": "OK"}
+
+    for agente in (
+        manager.architect,
+        manager.refactor,
+        manager.reviewer,
+        manager.tests,
+        manager.documentation,
+    ):
+        agente.run = lento  # type: ignore[method-assign]
+
+    inicio = time.perf_counter()
+    manager.execute(str(proyecto))
+    duracion = time.perf_counter() - inicio
+
+    assert duracion < espera * 3  # en serie serían cinco esperas
+
+
+def test_un_agente_de_ia_que_revienta_no_tumba_al_resto(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    for agente in (manager.refactor, manager.reviewer, manager.tests):
+        agente.run = mock.Mock(return_value={"status": "OK"})  # type: ignore[method-assign]
+
+    manager.architect.run = mock.Mock(side_effect=RuntimeError("sin cuota"))  # type: ignore[method-assign]
+    manager.documentation.run = mock.Mock(return_value={"status": "OK"})  # type: ignore[method-assign]
+
+    contexto = manager.execute(str(proyecto))
+
+    assert contexto.data["architect"]["status"] == "error"
+    assert contexto.data["refactor"]["status"] == "OK"
+
+
+def test_los_cinco_leen_la_misma_foto_del_contexto(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    """Si leyeran el contexto vivo, cada uno vería algo distinto según el
+    orden en que terminaran los demás."""
+    vistos: list[int] = []
+
+    def anotar(datos):
+        vistos.append(len(datos))
+        return {"status": "OK"}
+
+    for agente in (
+        manager.architect,
+        manager.refactor,
+        manager.reviewer,
+        manager.tests,
+        manager.documentation,
+    ):
+        agente.run = anotar  # type: ignore[method-assign]
+
+    manager.execute(str(proyecto))
+
+    assert len(set(vistos)) == 1
+
+
+# --- El veredicto -----------------------------------------------------------
+
+
+def test_el_veredicto_resume_la_inspeccion(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    """Una lista de hallazgos no es una conclusión."""
+    veredicto = manager.veredicto(manager.inspect(str(proyecto)))
+
+    assert veredicto["total_agents"] == 11
+    assert veredicto["approved"] is True
+
+
+def test_un_secreto_hace_que_no_se_apruebe(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    (proyecto / "config.py").write_text('password = "x"\n', encoding="utf-8")
+
+    veredicto = manager.veredicto(manager.inspect(str(proyecto)))
+
+    assert veredicto["approved"] is False
+    assert "security" in veredicto["agents_with_findings"]
+
+
+def test_un_agente_caido_hace_que_no_se_apruebe(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    manager.git.review = mock.Mock(side_effect=RuntimeError("sin git"))  # type: ignore[method-assign]
+
+    veredicto = manager.veredicto(manager.inspect(str(proyecto)))
+
+    assert veredicto["approved"] is False
+    assert veredicto["failed_agents"] == ["git"]

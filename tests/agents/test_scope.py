@@ -20,6 +20,8 @@ from ai_architect.agents.scope import (
     archivos_py,
     es_binario,
     esta_ignorado,
+    recorrido_compartido,
+    todo,
 )
 
 
@@ -109,3 +111,85 @@ def test_los_py_del_proyecto_no_incluyen_los_del_venv(proyecto: Path) -> None:
 
 def test_un_proyecto_vacio_no_devuelve_nada(tmp_path: Path) -> None:
     assert archivos_py(tmp_path) == []
+
+
+# --- Un solo recorrido para todos -------------------------------------------
+
+
+def test_sin_bloque_cada_llamada_recorre_de_nuevo(proyecto: Path) -> None:
+    """Fuera del bloque no hay caché: los archivos pueden haber cambiado."""
+    primera = archivos_py(proyecto)
+
+    (proyecto / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
+
+    assert len(archivos_py(proyecto)) == len(primera) + 1
+
+
+def test_dentro_del_bloque_se_recorre_una_vez(proyecto: Path) -> None:
+    """Once agentes recorrían el mismo árbol seis veces."""
+    with recorrido_compartido():
+        primera = archivos_py(proyecto)
+
+        (proyecto / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
+
+        assert archivos_py(proyecto) == primera
+
+
+def test_al_salir_del_bloque_el_cache_se_tira(proyecto: Path) -> None:
+    with recorrido_compartido():
+        archivos_py(proyecto)
+
+    (proyecto / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
+
+    assert any(f.name == "nuevo.py" for f in archivos_py(proyecto))
+
+
+def test_una_excepcion_tampoco_deja_el_cache_puesto(proyecto: Path) -> None:
+    """Si se quedara puesto, la siguiente inspección vería datos viejos."""
+    with pytest.raises(RuntimeError):
+        with recorrido_compartido():
+            archivos_py(proyecto)
+            raise RuntimeError("algo")
+
+    (proyecto / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
+
+    assert any(f.name == "nuevo.py" for f in archivos_py(proyecto))
+
+
+def test_los_bloques_se_pueden_anidar(proyecto: Path) -> None:
+    """Solo el de fuera crea y destruye el caché."""
+    with recorrido_compartido():
+        with recorrido_compartido():
+            archivos_py(proyecto)
+
+        # El bloque interior no debe haber tirado el caché del exterior.
+        (proyecto / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
+
+        assert not any(f.name == "nuevo.py" for f in archivos_py(proyecto))
+
+
+def test_cada_patron_tiene_su_propia_entrada(proyecto: Path) -> None:
+    with recorrido_compartido():
+        assert [f.name for f in archivos_py(proyecto)] == ["modulo.py"]
+        assert {f.name for f in archivos(proyecto)} == {"modulo.py", "README.md"}
+
+
+# --- todo(): con carpetas y binarios ----------------------------------------
+
+
+def test_todo_incluye_las_carpetas(proyecto: Path) -> None:
+    """Las métricas cuentan carpetas."""
+    (proyecto / "src").mkdir()
+
+    assert any(entrada.name == "src" for entrada in todo(proyecto))
+
+
+def test_todo_incluye_los_binarios_del_proyecto(proyecto: Path) -> None:
+    """Una imagen ocupa espacio y forma parte del proyecto."""
+    (proyecto / "logo.png").write_bytes(b"\x89PNG")
+
+    assert any(entrada.name == "logo.png" for entrada in todo(proyecto))
+
+
+def test_todo_sigue_sin_mirar_el_venv(proyecto: Path) -> None:
+    assert not any(".venv" in entrada.parts for entrada in todo(proyecto))

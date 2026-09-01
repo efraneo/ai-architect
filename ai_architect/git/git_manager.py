@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ai_architect.git.branch_manager import (
+    BranchManager,
+)
 from ai_architect.git.commit_manager import (
     CommitManager,
 )
@@ -46,6 +49,10 @@ class GitManager:
 
         self.patch = PatchApplier(
             str(self.repository),
+        )
+
+        self.branches = BranchManager(
+            self.repository,
         )
 
     # --------------------------------------------------
@@ -86,6 +93,37 @@ class GitManager:
     ) -> bool:
 
         return self.committer.discard_changes()
+
+    # --------------------------------------------------
+    # Branch
+    # --------------------------------------------------
+
+    def current_branch(
+        self,
+    ) -> str:
+
+        return self.branches.current()
+
+    def create_branch(
+        self,
+        name: str,
+    ) -> bool:
+
+        return self.branches.create(name)
+
+    def branch_exists(
+        self,
+        name: str,
+    ) -> bool:
+
+        return self.branches.exists(name)
+
+    def merge_branch(
+        self,
+        branch: str,
+    ) -> bool:
+
+        return self.branches.merge(branch)
 
     # --------------------------------------------------
     # Diff

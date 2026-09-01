@@ -13,6 +13,7 @@ import sys
 from ai_architect.commands import (
     agents,
     analyze,
+    auto,
     doctor,
     execute,
     improve,
@@ -36,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
             "execute",
             "doctor",
             "agents",
+            "auto",
         ],
     )
 
@@ -68,6 +70,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--instruction",
         default="Improve code quality",
         help="Instruction for improve command",
+    )
+
+    parser.add_argument(
+        "--instructions",
+        nargs="+",
+        default=None,
+        help="For auto: several instructions, most important first",
     )
 
     parser.add_argument(
@@ -160,6 +169,19 @@ def main():
         result = agents.run(
             args.project,
             ai=args.ai,
+        )
+
+    # =====================================================
+    # Auto
+    # =====================================================
+
+    elif args.command == "auto":
+        if not args.instructions:
+            parser.error("auto requires --instructions <one> <two> ...")
+
+        result = auto.run(
+            args.project,
+            instructions=args.instructions,
         )
 
     # =====================================================
