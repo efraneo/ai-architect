@@ -135,6 +135,17 @@ $ architect pide . --frase cómo está el proyecto --decir
 | **OpenAI** | Ya funciona si tienes la clave. Suena masculino pero **neutro, no latino**, y cuesta por uso |
 | **Windows** | Gratis y ya instalado, pero necesita que instales Raúl o Pablo: por defecto solo trae voces femeninas en español |
 
+Escúchalas y quédate con una:
+
+```bash
+architect voz --probar --motor windows    # la gratis
+architect voz --probar --motor openai     # la masculina
+architect voz --usar openai               # y me quedo con esta
+```
+
+Lo que elijas manda sobre el orden por defecto: si mañana instalas otra, la
+tuya sigue siendo la que suena.
+
 Si no hay ninguna voz, el comando sigue funcionando igual: la respuesta ya
 está en pantalla.
 

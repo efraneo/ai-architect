@@ -28,7 +28,9 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
+import wave
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +50,9 @@ VOCES_PIPER = (
 # Las voces de OpenAI que suenan masculinas. No están etiquetadas por acento:
 # suenan neutras, no latinas, y conviene decirlo.
 VOZ_OPENAI = "onyx"
+
+# El PCM que devuelve OpenAI: 24 kHz, 16 bits, mono.
+HERCIOS_OPENAI = 24000
 
 
 def motores() -> dict[str, Any]:
@@ -92,6 +97,15 @@ def elegir(preferido: str = "") -> str:
 
     if preferido and disponibles.get(preferido, {}).get("disponible"):
         return preferido
+
+    # Lo que eligió el usuario manda sobre el orden por defecto: escuchó las
+    # dos y se quedó con una, y eso no lo cambia que mañana aparezca otra.
+    from ai_architect.core.perfil import voz_preferida
+
+    suya = voz_preferida()
+
+    if suya and disponibles.get(suya, {}).get("disponible"):
+        return suya
 
     for nombre in ("piper", "openai", "windows"):
         if disponibles[nombre]["disponible"]:
@@ -192,6 +206,13 @@ def _con_piper(texto: str) -> None:
 
 
 def _con_openai(texto: str) -> None:
+    """Pide el audio crudo y le pone la cabecera aquí.
+
+    Pidiendo ``wav`` la respuesta llega en streaming con el tamaño sin
+    rellenar: la cabecera decía que duraba **89.478 segundos** —24 días— y
+    `winsound` sencillamente no sonaba. Con ``pcm`` vienen las muestras a
+    secas y la cabecera la escribimos nosotros, que sí sale bien.
+    """
     from openai import OpenAI
 
     salida = Path(tempfile.gettempdir()) / "arquitecto.wav"
@@ -200,12 +221,24 @@ def _con_openai(texto: str) -> None:
         model="gpt-4o-mini-tts",
         voice=VOZ_OPENAI,
         input=texto,
-        response_format="wav",
+        response_format="pcm",
     )
 
-    salida.write_bytes(respuesta.read())
+    _escribir_wav(salida, respuesta.read())
 
     _reproducir(salida)
+
+
+def _escribir_wav(destino: Path, crudo: bytes) -> None:
+    """Envuelve las muestras en un WAV con la cabecera correcta.
+
+    OpenAI devuelve PCM de 24 kHz, 16 bits, mono.
+    """
+    with wave.open(str(destino), "wb") as archivo:
+        archivo.setnchannels(1)
+        archivo.setsampwidth(2)
+        archivo.setframerate(HERCIOS_OPENAI)
+        archivo.writeframes(crudo)
 
 
 # --- Windows ----------------------------------------------------------------
@@ -286,7 +319,9 @@ def _powershell(orden: str) -> str | None:
 
 def _reproducir(archivo: Path) -> None:
     """Suena el archivo. En Windows sin abrir ninguna ventana."""
-    if os.name == "nt":
+    # `sys.platform` y no `os.name`: mypy entiende el primero como guarda de
+    # plataforma, y en Linux `winsound` no existe.
+    if sys.platform == "win32":
         import winsound
 
         winsound.PlaySound(str(archivo), winsound.SND_FILENAME)

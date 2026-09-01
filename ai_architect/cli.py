@@ -63,7 +63,7 @@ COMANDOS: tuple[Comando, ...] = (
     Comando(
         "voz",
         "Ver qué voces hay y probarlas (--probar)",
-        lambda a: voz.run(probar=a.probar),
+        lambda a: voz.run(probar=a.probar, motor=a.motor, usar=a.usar),
     ),
     Comando(
         "doctor",
@@ -232,6 +232,20 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         help="For pide: what you want, in your own words",
+    )
+
+    parser.add_argument(
+        "--usar",
+        default="",
+        choices=["", "piper", "openai", "windows"],
+        help="For voz: remember this engine as your choice",
+    )
+
+    parser.add_argument(
+        "--motor",
+        default="",
+        choices=["", "piper", "openai", "windows"],
+        help="For voz: which engine to use, to compare how they sound",
     )
 
     parser.add_argument(

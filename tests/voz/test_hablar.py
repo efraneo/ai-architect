@@ -10,11 +10,26 @@ conseguir la voz que se quería.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
+from ai_architect.core import perfil
 from ai_architect.voz import hablar as voz
+
+
+@pytest.fixture(autouse=True)
+def perfil_aislado(tmp_path: Path):
+    """Ninguna prueba puede depender del perfil real de quien la ejecuta.
+
+    `elegir()` consulta la voz que el usuario eligió, así que sin aislar
+    esto una prueba pasaba o fallaba según lo que hubiera en la carpeta
+    personal de cada uno.
+    """
+    with mock.patch.object(perfil, "ARCHIVO", tmp_path / "perfil-aislado.json"):
+        yield
+
 
 # --- Qué se dice en alto ----------------------------------------------------
 
@@ -134,3 +149,73 @@ def test_windows_avisa_si_no_hay_voz_masculina(voces: str | None) -> None:
         nota = voz._nota_windows()
 
     assert "masculina" in nota or "sin voces" in nota
+
+
+# --- La cabecera del audio --------------------------------------------------
+#
+# Pidiendo "wav" a OpenAI, la respuesta llega en streaming con el tamaño sin
+# rellenar. La cabecera decía que el audio duraba **89.478 segundos** —24
+# días— y `winsound` sencillamente no sonaba: no había error, no había ruido,
+# nada. Ahora se pide PCM crudo y la cabecera se escribe aquí.
+
+
+def test_el_wav_sale_con_la_duracion_correcta(tmp_path: Path) -> None:
+    import wave
+
+    destino = tmp_path / "prueba.wav"
+
+    # Un segundo de silencio: 24000 muestras de 16 bits.
+    voz._escribir_wav(destino, b"\x00\x00" * voz.HERCIOS_OPENAI)
+
+    with wave.open(str(destino)) as archivo:
+        duracion = archivo.getnframes() / archivo.getframerate()
+
+    assert 0.9 < duracion < 1.1
+
+
+def test_el_wav_es_mono_de_dieciseis_bits(tmp_path: Path) -> None:
+    """Es lo que devuelve OpenAI; con otra cosa sonaría acelerado o grave."""
+    import wave
+
+    destino = tmp_path / "prueba.wav"
+
+    voz._escribir_wav(destino, b"\x00\x00" * 100)
+
+    with wave.open(str(destino)) as archivo:
+        assert archivo.getnchannels() == 1
+        assert archivo.getsampwidth() == 2
+        assert archivo.getframerate() == voz.HERCIOS_OPENAI
+
+
+def test_un_audio_vacio_no_revienta(tmp_path: Path) -> None:
+    destino = tmp_path / "vacio.wav"
+
+    voz._escribir_wav(destino, b"")
+
+    assert destino.exists()
+
+
+def test_la_voz_elegida_manda_sobre_el_orden(tmp_path: Path) -> None:
+    """La regresión de diseño: el orden por defecto pondría piper primero,
+    pero si el usuario escuchó las dos y eligió, manda la suya."""
+    from ai_architect.core import perfil
+
+    archivo = tmp_path / "perfil.json"
+    perfil.configurar("Eathan", archivo=archivo)
+    perfil.preferir_voz("openai", archivo)
+
+    with mock.patch.object(perfil, "ARCHIVO", archivo):
+        with mock.patch.object(voz, "motores", return_value=_todos(True, True, True)):
+            assert voz.elegir() == "openai"
+
+
+def test_si_la_elegida_no_esta_se_usa_otra(tmp_path: Path) -> None:
+    from ai_architect.core import perfil
+
+    archivo = tmp_path / "perfil.json"
+    perfil.configurar("Eathan", archivo=archivo)
+    perfil.preferir_voz("piper", archivo)
+
+    with mock.patch.object(perfil, "ARCHIVO", archivo):
+        with mock.patch.object(voz, "motores", return_value=_todos(False, True, True)):
+            assert voz.elegir() == "openai"
