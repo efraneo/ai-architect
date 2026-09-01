@@ -7,19 +7,18 @@
   html, body {
     margin: 0;
     height: 100%;
-    background: #02040a;
+    background: #04030c;
     overflow: hidden;
     font-family: "Segoe UI", system-ui, sans-serif;
   }
 
-  /* El halo de fondo hace que la cara parezca flotar delante del panel,
-     no dibujada sobre el. Es la mitad del truco de profundidad. */
   body::before {
     content: "";
     position: fixed;
     inset: 0;
-    background: radial-gradient(circle at 50% 42%,
-                rgba(0, 168, 255, .16), transparent 62%);
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 44%, rgba(90, 60, 190, .22), transparent 70%),
+      radial-gradient(ellipse 40% 30% at 32% 30%, rgba(40, 130, 220, .16), transparent 70%);
     pointer-events: none;
   }
 
@@ -29,23 +28,23 @@
     position: fixed;
     left: 26px;
     bottom: 22px;
-    color: #4fd8ff;
+    color: #9fb8ff;
     font-size: 12px;
     letter-spacing: .22em;
     text-transform: uppercase;
-    text-shadow: 0 0 12px rgba(0, 180, 255, .7);
+    text-shadow: 0 0 14px rgba(110, 90, 255, .8);
     pointer-events: none;
   }
 
-  .hud b { color: #eaf9ff; font-weight: 600; }
+  .hud b { color: #f2eaff; font-weight: 600; }
 
-  .hud .estado { color: #7ce0b0; }
+  .hud .estado { color: #f0a8d8; }
 
   .pie {
     position: fixed;
     right: 26px;
     bottom: 22px;
-    color: rgba(120, 190, 225, .45);
+    color: rgba(150, 150, 210, .45);
     font-size: 11px;
     letter-spacing: .12em;
     pointer-events: none;
@@ -58,32 +57,41 @@
   <b>ARQUITECTO</b> &nbsp;&middot;&nbsp; <span class="estado" id="estado">en reposo</span>
 </div>
 
-<div class="pie">espacio &middot; hablar &nbsp;&nbsp; raton &middot; girar</div>
+<div class="pie" id="pie">espacio &middot; hablar &nbsp;&nbsp; raton</div>
+
+<script>window.DATOS_ARQUITECTO = null; /* __DATOS__ */</script>
 
 <script>
 // =========================================================
-// Un rostro hecho de puntos
+// Una nebulosa que forma un rostro
 //
-// No es un modelo 3D: son ~2.400 puntos colocados con
-// matematicas y proyectados con perspectiva. Lo que hace que
-// parezca salirse de la pantalla no es el dibujo, son tres
-// decisiones:
+// El intento anterior eran puntos sobre una esfera: se leia
+// como una malla, no como una cara. Un rostro humano no se
+// reconoce por el contorno sino por **como le da la luz** —
+// el pomulo encendido, la cuenca en sombra, el lado oscuro
+// de la nariz—. Asi que cada particula calcula su propia
+// normal sobre la superficie de la cara y se ilumina; el
+// volumen sale de ahi, no del dibujo.
 //
-//   1. Distancia de camara corta (1.55). Cuanto mas cerca
-//      esta la camara, mas se abre la perspectiva y mas
-//      diferencia hay entre la nariz y las orejas.
-//   2. El tamano y el brillo de cada punto dependen de su
-//      profundidad. Los de delante son grandes y blancos;
-//      los del fondo, diminutos y azules.
-//   3. La cabeza gira sola y sigue al raton. Sin movimiento
-//      el cerebro lo lee como un dibujo plano.
+// Y para que sea nebulosa y no puntitos: mucha particula
+// grande, blanda y casi transparente por detras, poca y
+// brillante delante, todo sumandose. La niebla la hacen las
+// blandas; la cara, las brillantes.
+//
+// Nada de esto se anima al azar. Cuando habla, la mandibula
+// y los labios siguen las **silabas reales** del texto, que
+// Python le pasa junto con la duracion exacta del audio.
 // =========================================================
 
 const lienzo = document.getElementById("lienzo");
 const ctx = lienzo.getContext("2d", { alpha: false });
+const rotulo = document.getElementById("estado");
+const pie = document.getElementById("pie");
 
-const CAMARA = 1.55;   // distancia del ojo al centro de la cabeza
-const LENTE = 2.4;     // apertura: mas bajo, mas exagerada la perspectiva
+let ultimaFuente = "";
+
+const CAMARA = 1.62;
+const LENTE = 2.3;
 
 let ancho = 0, alto = 0, escala = 0, pixeles = 1;
 
@@ -98,224 +106,405 @@ function medir() {
   lienzo.style.height = alto + "px";
 
   ctx.setTransform(pixeles, 0, 0, pixeles, 0, 0);
-  escala = Math.min(ancho, alto) * 0.42;
+  escala = Math.min(ancho, alto * 0.82) * 0.46;
 }
 
 window.addEventListener("resize", medir);
 medir();
 
-// --- Los puntos de luz --------------------------------------------------
+// --- Paleta -----------------------------------------------------------------
 //
-// `shadowBlur` por punto cuesta demasiado a 2.400 puntos y 60 fps. Se
-// dibuja el halo una sola vez en un lienzo aparte y luego se estampa
-// escalado, que es una operacion que la tarjeta ya sabe hacer rapido.
+// Los halos se pintan una vez y luego se estampan escalados. `shadowBlur`
+// por particula, a seis mil particulas y sesenta fotogramas, no llega.
 
-function halo(r, g, b) {
+function halo(r, g, b, dureza) {
   const hoja = document.createElement("canvas");
-  hoja.width = hoja.height = 64;
+  hoja.width = hoja.height = 96;
 
   const pincel = hoja.getContext("2d");
-  const degradado = pincel.createRadialGradient(32, 32, 0, 32, 32, 32);
+  const grad = pincel.createRadialGradient(48, 48, 0, 48, 48, 48);
 
-  degradado.addColorStop(0, "rgba(" + r + "," + g + "," + b + ",1)");
-  degradado.addColorStop(0.25, "rgba(" + r + "," + g + "," + b + ",.55)");
-  degradado.addColorStop(1, "rgba(" + r + "," + g + "," + b + ",0)");
+  // `dureza` alta => nucleo apretado y brillante (una chispa).
+  // `dureza` baja => se desvanece despacio (gas).
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10;
+    const a = Math.pow(1 - t, dureza);
 
-  pincel.fillStyle = degradado;
-  pincel.fillRect(0, 0, 64, 64);
+    grad.addColorStop(t, "rgba(" + r + "," + g + "," + b + "," + a.toFixed(3) + ")");
+  }
+
+  pincel.fillStyle = grad;
+  pincel.fillRect(0, 0, 96, 96);
 
   return hoja;
 }
 
-const LUCES = {
-  piel: halo(90, 200, 255),
-  borde: halo(150, 235, 255),
-  ojo: halo(120, 245, 255),
-  iris: halo(255, 255, 255),
-  boca: halo(90, 255, 190),
-  anillo: halo(70, 150, 230),
-};
-
-// --- La cabeza ----------------------------------------------------------
-
-const puntos = [];
-
-function agregar(x, y, z, tipo, peso) {
-  puntos.push({ x, y, z, tipo, peso: peso || 1, bx: x, by: y, bz: z });
-}
-
-// Los ojos y la boca se recortan de la piel para que se vean como huecos
-// de verdad, no como manchas pintadas encima.
-const OJOS = [
-  { x: -0.36, y: 0.16 },
-  { x: 0.36, y: 0.16 },
+// De lo mas hondo y frio a lo mas encendido. El indice lo decide la luz
+// que recibe cada particula, asi que la paleta *es* el sombreado.
+const PALETA = [
+  halo(58, 34, 116, 1.5),     // 0  polvo violeta del fondo
+  halo(78, 52, 168, 1.8),     // 1  penumbra
+  halo(70, 96, 214, 2.1),     // 2  azul medio
+  halo(86, 168, 236, 2.5),    // 3  azul claro
+  halo(156, 214, 252, 3.0),   // 4  luz
+  halo(236, 246, 255, 4.0),   // 5  alta luz
+  halo(255, 168, 214, 3.2),   // 6  rosa de nebulosa (rebote calido)
 ];
 
-function esOjo(x, y) {
-  return OJOS.some(function (o) {
-    return Math.pow((x - o.x) / 0.20, 2) + Math.pow((y - o.y) / 0.145, 2) < 1;
-  });
+const POLVO = halo(96, 62, 190, 1.2);
+const ESTRELLA = halo(255, 255, 255, 5.0);
+
+// --- La forma de una cara ---------------------------------------------------
+//
+// `perfil(x, y)` devuelve cuanto sobresale la cara en ese punto. Es la
+// pieza central: de aqui salen la silueta, el relieve y la iluminacion.
+
+function campana(d, s) {
+  return Math.exp(-(d * d) / (2 * s * s));
 }
 
-function esBoca(x, y) {
-  return Math.abs(x) < 0.30 && y > -0.56 && y < -0.30;
+function campana2(dx, dy, sx, sy) {
+  return campana(dx, sx) * campana(dy, sy);
 }
 
-function construirPiel(total) {
-  // Espiral de Fibonacci: reparte los puntos por la esfera sin que se
-  // amontonen en los polos, que es lo que pasa con lat/lon.
-  const oro = Math.PI * (3 - Math.sqrt(5));
+const ANCHO_CARA = 0.70;
+const ALTO_CARA = 1.02;
 
-  for (let i = 0; i < total; i++) {
-    const u = 1 - (i / (total - 1)) * 2;
-    const radio = Math.sqrt(Math.max(0, 1 - u * u));
-    const angulo = i * oro;
+function perfil(x, y) {
+  const t = 1 - (x / ANCHO_CARA) ** 2 - (y / ALTO_CARA) ** 2;
 
-    let x = Math.cos(angulo) * radio;
-    let z = Math.sin(angulo) * radio;
-    let y = u * 1.18;                     // una cabeza es mas alta que ancha
+  if (t <= 0) return null;                      // fuera del ovalo
 
-    if (y < 0) {                          // la mandibula se estrecha
-      const k = 1 + y * 0.34;
-      x *= k;
-      z *= k;
-    }
+  let z = Math.sqrt(t) * 0.60;
 
-    if (z < 0) z *= 0.70;                 // la nuca es plana
+  // La frente es mas plana que una esfera; sin esto parece un globo.
+  z -= campana(y - 0.66, 0.32) * 0.055;
 
-    x *= 0.92;
+  // Arco de las cejas.
+  z += campana(y - 0.31, 0.095) * campana(x, 0.40) * 0.050;
 
-    // Los huecos solo se recortan por delante: por detras la nuca sigue
-    // entera y se ve a traves de la cara, que es lo que da el volumen.
-    if (z > 0.15 && (esOjo(x, y) || esBoca(x, y))) continue;
+  // Cuencas. Hundidas, que es lo que crea la sombra que lee el ojo.
+  z -= (campana2(x - 0.295, y - 0.145, 0.185, 0.125) +
+        campana2(x + 0.295, y - 0.145, 0.185, 0.125)) * 0.115;
 
-    agregar(x, y, z, z > 0.55 ? "borde" : "piel", z > 0.2 ? 1 : 0.62);
+  // Caballete de la nariz, de la ceja a la punta.
+  z += campana(x, 0.070) * campana(y + 0.055, 0.30) * 0.185;
+
+  // Punta y aletas.
+  z += campana2(x, y + 0.285, 0.090, 0.070) * 0.115;
+  z += (campana2(x - 0.105, y + 0.295, 0.050, 0.055) +
+        campana2(x + 0.105, y + 0.295, 0.050, 0.055)) * 0.050;
+
+  // Pomulos: lo que mas define una cara despues de la nariz.
+  z += (campana2(x - 0.415, y + 0.015, 0.185, 0.215) +
+        campana2(x + 0.415, y + 0.015, 0.185, 0.215)) * 0.048;
+
+  // Surco entre nariz y labio.
+  z -= campana2(x, y + 0.415, 0.075, 0.045) * 0.022;
+
+  // Labios.
+  z += campana2(x, y + 0.520, 0.225, 0.070) * 0.072;
+
+  // Hueco bajo el labio inferior, y barbilla.
+  z -= campana2(x, y + 0.665, 0.150, 0.048) * 0.032;
+  z += campana2(x, y + 0.800, 0.180, 0.120) * 0.052;
+
+  return z;
+}
+
+// La normal, por diferencias finitas. Es aproximada y da igual: lo unico
+// que tiene que hacer es decidir si un punto mira hacia la luz o no.
+const PASO = 0.02;
+
+const LUZ = (function () {
+  const v = [-0.42, 0.52, 0.78];
+  const n = Math.hypot(v[0], v[1], v[2]);
+
+  return [v[0] / n, v[1] / n, v[2] / n];
+})();
+
+function iluminacion(x, y, z) {
+  const zx = perfil(x + PASO, y);
+  const zy = perfil(x, y + PASO);
+
+  if (zx === null || zy === null) return 0.30;
+
+  const nx = -(zx - z) / PASO;
+  const ny = -(zy - z) / PASO;
+  const largo = Math.hypot(nx, ny, 1);
+
+  const lum = (nx * LUZ[0] + ny * LUZ[1] + LUZ[2]) / largo;
+
+  return Math.max(0, lum);
+}
+
+// --- Sembrar la nebulosa ----------------------------------------------------
+
+const particulas = [];
+
+// Donde la nebulosa se condensa. Un gas uniforme no forma una cara: hace
+// falta que se apelotone justo en los rasgos.
+function densidad(x, y) {
+  let d = 0.34;
+
+  d += campana(x, 0.075) * campana(y + 0.06, 0.30) * 0.55;          // nariz
+  d += campana2(x, y + 0.285, 0.10, 0.085) * 0.60;                  // punta
+  d += campana2(x, y + 0.520, 0.235, 0.070) * 0.85;                 // labios
+  d += (campana2(x - 0.295, y - 0.145, 0.175, 0.105) +
+        campana2(x + 0.295, y - 0.145, 0.175, 0.105)) * 0.75;       // ojos
+  d += campana(y - 0.31, 0.075) * campana(x, 0.38) * 0.55;          // cejas
+  d += campana2(x, y + 0.800, 0.185, 0.115) * 0.35;                 // barbilla
+
+  // El borde del ovalo se difumina: asi la cara se deshace en gas por los
+  // lados en vez de tener un recorte limpio.
+  const r = Math.hypot(x / ANCHO_CARA, y / ALTO_CARA);
+
+  d *= 1 - Math.pow(Math.min(1, r), 5) * 0.75;
+
+  return d;
+}
+
+function sembrarRostro(cuantas) {
+  let intentos = 0;
+
+  while (particulas.length < cuantas && intentos < cuantas * 40) {
+    intentos++;
+
+    const x = (Math.random() * 2 - 1) * ANCHO_CARA;
+    const y = (Math.random() * 2 - 1) * ALTO_CARA;
+
+    const z = perfil(x, y);
+
+    if (z === null) continue;
+    if (Math.random() > densidad(x, y)) continue;
+
+    const lum = iluminacion(x, y, z);
+
+    // Un poco de grosor: la cara no es una cascara de papel.
+    const grosor = (Math.random() - 0.5) * 0.055;
+
+    particulas.push(nueva(x, y, z + grosor, lum, "cara"));
   }
 }
 
-function construirOjos() {
-  for (const o of OJOS) {
-    // Tres anillos concentricos: la cuenca.
-    for (let anillo = 0; anillo < 3; anillo++) {
-      const rx = 0.205 - anillo * 0.045;
-      const ry = 0.150 - anillo * 0.033;
-      const cuantos = 30 - anillo * 6;
+function nueva(x, y, z, lum, clase) {
+  // El brillo no es lineal: se exagera el contraste para que la sombra de
+  // la cuenca y la luz del pomulo se separen de verdad.
+  const brillo = Math.pow(lum, 1.45);
 
-      for (let i = 0; i < cuantos; i++) {
-        const t = (i / cuantos) * Math.PI * 2;
+  // La mayoria son chispas pequenas; unas pocas, gas grande y blando.
+  const gas = Math.random() < 0.20;
 
-        agregar(
-          o.x + Math.cos(t) * rx,
-          o.y + Math.sin(t) * ry,
-          0.62 + anillo * 0.05,
-          "ojo",
-          1 - anillo * 0.12
-        );
-      }
-    }
+  let indice = Math.min(5, Math.floor(brillo * 6.2));
 
-    // El iris. Se mueve, asi que se marca aparte.
-    for (let i = 0; i < 14; i++) {
-      const t = (i / 14) * Math.PI * 2;
+  // Un rebote calido en lo mas iluminado. Es lo que le quita el aire de
+  // holograma azul y lo acerca a piel.
+  if (brillo > 0.80 && Math.random() < 0.35) indice = 6;
 
-      const p = {
-        x: o.x + Math.cos(t) * 0.055,
-        y: o.y + Math.sin(t) * 0.055,
-        z: 0.80,
-        tipo: "iris",
-        peso: 1.35,
-        iris: true,
-      };
-
-      p.bx = p.x; p.by = p.y; p.bz = p.z;
-      puntos.push(p);
-    }
-  }
+  return {
+    bx: x, by: y, bz: z,
+    x: x, y: y, z: z,
+    clase: clase,
+    brillo: 0.16 + brillo * 0.92,
+    indice: indice,
+    gas: gas,
+    tam: gas ? 2.4 + Math.random() * 2.6 : 0.55 + Math.random() * 0.95,
+    fase: Math.random() * Math.PI * 2,
+    vel: 0.25 + Math.random() * 0.55,
+    vaiven: gas ? 0.055 : 0.014,
+  };
 }
 
-function construirNariz() {
-  // Lo que mas se acerca al espectador. Con la lente corta, estos puntos
-  // se dibujan casi al doble de tamano que la nuca.
-  for (let i = 0; i <= 16; i++) {
-    const t = i / 16;
-    const y = 0.10 - t * 0.34;
-    const z = 0.72 + t * 0.46;
-    const abre = t * t * 0.13;
+function sembrarCraneo(cuantas) {
+  // La nuca. Apenas se ve, pero sin ella la cara flota como una mascara.
+  for (let i = 0; i < cuantas; i++) {
+    const u = Math.random() * 2 - 1;
+    const r = Math.sqrt(Math.max(0, 1 - u * u));
+    const a = Math.random() * Math.PI * 2;
 
-    agregar(0, y, z, "borde", 1.25);
+    const z = -Math.abs(Math.sin(a) * r) * 0.52 - 0.05;
 
-    if (abre > 0.02) {
-      agregar(-abre, y, z - 0.05, "borde", 1.05);
-      agregar(abre, y, z - 0.05, "borde", 1.05);
-    }
-  }
-}
-
-// La boca es una rejilla que se abre cuando habla. Se guarda aparte
-// porque es la unica parte que se anima de verdad.
-const boca = [];
-
-function construirBoca() {
-  const columnas = 26;
-
-  for (let c = 0; c < columnas; c++) {
-    const t = c / (columnas - 1);
-    const x = (t - 0.5) * 0.58;
-
-    // Las comisuras caen: una linea recta parece una ranura, no una boca.
-    const caida = -Math.cos(t * Math.PI) * 0.028;
-
-    for (let fila = -1; fila <= 1; fila++) {
-      const p = {
-        x: x,
-        y: -0.42 + caida + fila * 0.020,
-        z: 0.60 - Math.abs(x) * 0.35,
-        tipo: "boca",
-        peso: 1.1 - Math.abs(fila) * 0.25,
-        fila: fila,
-        columna: t,
-      };
-
-      p.bx = p.x; p.by = p.y; p.bz = p.z;
-      puntos.push(p);
-      boca.push(p);
-    }
-  }
-}
-
-function construirAnillo() {
-  // Un halo orbital. No es parte de la cara: esta para que el ojo tenga
-  // una referencia de que aquello gira en un espacio, no en un plano.
-  for (let i = 0; i < 150; i++) {
-    const t = (i / 150) * Math.PI * 2;
-
-    agregar(
-      Math.cos(t) * 1.42,
-      -0.05 + Math.sin(t * 3) * 0.05,
-      Math.sin(t) * 1.42,
-      "anillo",
-      0.5
+    const p = nueva(
+      Math.cos(a) * r * 0.66,
+      u * 0.98,
+      z,
+      0.16 + Math.random() * 0.14,
+      "craneo"
     );
+
+    p.gas = true;
+    p.tam = 2.0 + Math.random() * 2.8;
+    p.indice = Math.random() < 0.6 ? 0 : 1;
+
+    particulas.push(p);
   }
 }
 
-construirPiel(1700);
-construirOjos();
-construirNariz();
-construirBoca();
-construirAnillo();
+function sembrarBruma(cuantas) {
+  // El gas que envuelve. Vive fuera de la cara y se mueve mas.
+  for (let i = 0; i < cuantas; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = 0.75 + Math.pow(Math.random(), 0.6) * 1.25;
 
-// --- Estado -------------------------------------------------------------
+    const p = nueva(
+      Math.cos(a) * r * 0.95,
+      Math.sin(a) * r * 0.80 + 0.05,
+      (Math.random() - 0.5) * 0.9,
+      0.10 + Math.random() * 0.20,
+      "bruma"
+    );
+
+    p.gas = true;
+    p.tam = 3.0 + Math.random() * 4.5;
+    p.vaiven = 0.10;
+    p.vel = 0.10 + Math.random() * 0.25;
+    p.brillo *= 0.55;
+
+    particulas.push(p);
+  }
+}
+
+function sembrarEstrellas(cuantas) {
+  for (let i = 0; i < cuantas; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = 1.0 + Math.random() * 1.8;
+
+    const p = nueva(
+      Math.cos(a) * r,
+      Math.sin(a) * r * 0.8,
+      (Math.random() - 0.5) * 1.6,
+      1,
+      "estrella"
+    );
+
+    p.tam = 0.35 + Math.random() * 0.45;
+    p.gas = false;
+    p.brillo = 0.25 + Math.random() * 0.55;
+
+    particulas.push(p);
+  }
+}
+
+sembrarRostro(4600);
+sembrarCraneo(750);
+sembrarBruma(820);
+sembrarEstrellas(170);
+
+// Marcas por zona, para poder moverlas al hablar. Se calculan una vez.
+for (const p of particulas) {
+  if (p.clase !== "cara") continue;
+
+  // Cuanto baja con la mandibula: nada en los pomulos, todo en la barbilla.
+  p.mandibula = Math.max(0, Math.min(1, (-0.34 - p.by) / 0.70));
+
+  p.labioAlto = campana2(p.bx, p.by + 0.470, 0.230, 0.055);
+  p.labioBajo = campana2(p.bx, p.by + 0.585, 0.230, 0.065);
+
+  // Lo que hay entre los labios: se apaga al abrir la boca, y ese hueco
+  // negro es lo que se lee como boca abierta.
+  p.interior = campana2(p.bx, p.by + 0.528, 0.170, 0.030);
+
+  p.ceja = campana(p.by - 0.315, 0.075) * campana(p.bx, 0.36);
+
+  p.ojo = campana2(p.bx - 0.295, p.by - 0.150, 0.170, 0.100) +
+          campana2(p.bx + 0.295, p.by - 0.150, 0.170, 0.100);
+}
+
+// --- El guion: como se mueve la boca con lo que dice -------------------------
+//
+// Una boca que se abre y cierra al azar se nota falsa enseguida. Esta
+// sigue las silabas del texto: la "a" abre mucho, la "i" poco, la "o"
+// redondea, y una "m" o una "p" cierran del todo antes de sonar.
+
+const ABERTURA = { a: 1.00, á: 1.00, e: 0.66, é: 0.66, o: 0.74, ó: 0.74,
+                   i: 0.34, í: 0.34, u: 0.36, ú: 0.36, ü: 0.36 };
+
+const REDONDEO = { o: 0.75, ó: 0.75, u: 1.00, ú: 1.00, ü: 1.00 };
+
+const VOCALES = "aeiouáéíóúü";
+
+function silabar(texto) {
+  const trozos = [];
+  const bajo = texto.toLowerCase();
+
+  let consonante = "";
+
+  for (let i = 0; i < bajo.length; i++) {
+    const c = bajo[i];
+
+    if (VOCALES.includes(c)) {
+      let nucleo = "";
+
+      while (i < bajo.length && VOCALES.includes(bajo[i])) nucleo += bajo[i++];
+
+      i--;
+
+      // De un diptongo manda la vocal mas abierta: en "cuan" se oye la a.
+      let abre = 0, redondo = 0;
+
+      for (const v of nucleo) {
+        abre = Math.max(abre, ABERTURA[v] || 0.5);
+        redondo = Math.max(redondo, REDONDEO[v] || 0);
+      }
+
+      trozos.push({
+        abre: abre,
+        redondo: redondo,
+        cierra: "mbp".includes(consonante) ? 1 : "fvw".includes(consonante) ? 0.55 : 0.15,
+        peso: 1,
+      });
+
+      consonante = "";
+
+    } else if (/[a-zñáéíóúü]/.test(c)) {
+      consonante = c;
+
+    } else if (",;:".includes(c)) {
+      trozos.push({ abre: 0, redondo: 0, cierra: 0, peso: 0.85, pausa: true });
+      consonante = "";
+
+    } else if (".!?".includes(c)) {
+      trozos.push({ abre: 0, redondo: 0, cierra: 0, peso: 1.7, pausa: true });
+      consonante = "";
+    }
+  }
+
+  return trozos;
+}
+
+function guion(texto, ms) {
+  const trozos = silabar(texto || "");
+
+  if (!trozos.length) return [];
+
+  const total = trozos.reduce((s, t) => s + t.peso, 0);
+
+  let reloj = 0;
+
+  for (const t of trozos) {
+    t.desde = reloj;
+    t.dura = (t.peso / total) * ms;
+    reloj += t.dura;
+  }
+
+  return trozos;
+}
+
+// --- Estado ------------------------------------------------------------------
 
 const estado = {
-  modo: "reposo",          // reposo | escuchando | hablando
-  amplitud: 0,             // cuanto se abre la boca ahora mismo
-  objetivo: 0,
-  hastaCuando: 0,          // cuando deja de hablar (ms del reloj)
-  giro: 0,
-  inclina: 0,
-  ratonX: 0,
-  ratonY: 0,
+  modo: "reposo",
+  apertura: 0, objetivoApertura: 0,
+  redondeo: 0, objetivoRedondeo: 0,
+  cejas: 0, objetivoCejas: 0,
+  parpadeo: 0,
+  proximoParpadeo: 2000,
+  cabeceo: 0,
+  giro: 0, inclina: 0,
+  ratonX: 0, ratonY: 0,
+  guion: [],
+  empezo: 0,
+  hasta: 0,
 };
 
 window.addEventListener("pointermove", function (e) {
@@ -323,13 +512,15 @@ window.addEventListener("pointermove", function (e) {
   estado.ratonY = (e.clientY / window.innerHeight - 0.5) * 2;
 });
 
-const rotulo = document.getElementById("estado");
-
 const arquitecto = {
-  /** Mueve la boca durante `ms` milisegundos. */
-  hablar: function (ms) {
+  hablar: function (ms, texto) {
+    const duracion = ms || 2500;
+
     estado.modo = "hablando";
-    estado.hastaCuando = performance.now() + (ms || 2500);
+    estado.empezo = performance.now();
+    estado.hasta = estado.empezo + duracion;
+    estado.guion = guion(texto || "", duracion);
+
     rotulo.textContent = "hablando";
   },
 
@@ -340,7 +531,7 @@ const arquitecto = {
 
   reposo: function () {
     estado.modo = "reposo";
-    estado.hastaCuando = 0;
+    estado.guion = [];
     rotulo.textContent = "en reposo";
   },
 };
@@ -348,87 +539,323 @@ const arquitecto = {
 window.arquitecto = arquitecto;
 
 addEventListener("keydown", function (e) {
-  if (e.code === "Space") {
-    e.preventDefault();
-    arquitecto.hablar(3000);
-  }
+  if (e.code !== "Space") return;
+
+  e.preventDefault();
+
+  arquitecto.hablar(
+    4200,
+    "Buenas tardes. Soy el arquitecto, y esta es mi voz."
+  );
 });
 
-// Si lo abre el propio `architect`, viene con la duracion exacta del
-// audio: la boca se mueve justo mientras suena.
-const parametros = new URLSearchParams(location.search);
+// Python inyecta los datos en el HTML antes de abrirlo. Por la URL no se
+// puede: en Windows `webbrowser` acaba en `os.startfile`, el shell resuelve
+// el file: como una ruta y ahi el '?' no es un caracter valido, asi que la
+// query se perdia entera y la cara nunca se enteraba de que tenia que
+// hablar. Se abria, giraba, y nada mas.
+if (window.DATOS_ARQUITECTO && window.DATOS_ARQUITECTO.ms) {
+  const datos = window.DATOS_ARQUITECTO;
 
-if (parametros.get("ms")) {
   setTimeout(function () {
-    arquitecto.hablar(Number(parametros.get("ms")));
-  }, 350);
+    arquitecto.hablar(datos.ms, datos.texto || "");
+  }, datos.retraso || 250);
 }
 
-// --- El bucle -----------------------------------------------------------
+// --- La camara: que te siga a ti, no al raton ---------------------------------
+//
+// `getUserMedia` exige contexto seguro. `file://` no lo es y `localhost`
+// si, que es la razon de que esto se sirva por HTTP en vez de abrirse como
+// archivo. Sin servidor, esta parte entera no existe y se sigue el raton.
+//
+// No se carga ninguna libreria de vision. Con noventa y seis por setenta y
+// dos pixeles bastan dos senales:
+//
+//   - **Movimiento**: la diferencia con el cuadro anterior. Una mano que
+//     saluda la enciende entera, asi que si hay movimiento fuerte se
+//     asume que es un gesto deliberado y manda sobre lo demas.
+//   - **Piel**: el clasico umbral en RGB. Cuando estas quieto no hay
+//     movimiento que seguir, pero tu cara sigue ahi.
+//
+// No es reconocimiento facial y no conviene llamarlo asi: es una mancha de
+// color. Basta para que la cabeza te siga; para leer expresiones haria
+// falta un modelo de verdad.
+
+const camara = { activa: false, que: "raton", x: 0, y: 0 };
+
+const MUESTRA_ANCHO = 96;
+const MUESTRA_ALTO = 72;
+
+// Cuanta diferencia acumulada cuenta como "alguien esta moviendo algo".
+const UMBRAL_MOVIMIENTO = 26000;
+
+const MINIMO_PIEL = 55;
+
+async function encenderCamara() {
+  if (!window.isSecureContext || !navigator.mediaDevices) return;
+
+  let flujo;
+
+  try {
+    flujo = await navigator.mediaDevices.getUserMedia({
+      video: { width: 320, height: 240, facingMode: "user" },
+      audio: false,
+    });
+
+  } catch (e) {
+    return;                       // sin permiso se sigue con el raton
+  }
+
+  const video = document.createElement("video");
+
+  video.srcObject = flujo;
+  video.muted = true;
+  video.playsInline = true;
+
+  await video.play();
+
+  const hoja = document.createElement("canvas");
+
+  hoja.width = MUESTRA_ANCHO;
+  hoja.height = MUESTRA_ALTO;
+
+  const pincel = hoja.getContext("2d", { willReadFrequently: true });
+
+  let anteriorCuadro = null;
+
+  camara.activa = true;
+
+  setInterval(function () {
+    pincel.drawImage(video, 0, 0, MUESTRA_ANCHO, MUESTRA_ALTO);
+
+    const cuadro = pincel.getImageData(0, 0, MUESTRA_ANCHO, MUESTRA_ALTO).data;
+
+    mirar(cuadro, anteriorCuadro);
+
+    anteriorCuadro = cuadro;
+  }, 70);
+}
+
+function mirar(ahora, antes) {
+  let mx = 0, my = 0, peso = 0;
+  let px = 0, py = 0, piel = 0;
+
+  for (let i = 0, n = 0; i < ahora.length; i += 4, n++) {
+    const r = ahora[i], g = ahora[i + 1], b = ahora[i + 2];
+
+    const x = n % MUESTRA_ANCHO;
+    const y = (n / MUESTRA_ANCHO) | 0;
+
+    if (antes) {
+      const d = Math.abs(r - antes[i]) +
+                Math.abs(g - antes[i + 1]) +
+                Math.abs(b - antes[i + 2]);
+
+      if (d > 58) { mx += x * d; my += y * d; peso += d; }
+    }
+
+    const mayor = Math.max(r, g, b);
+    const menor = Math.min(r, g, b);
+
+    if (r > 95 && g > 40 && b > 20 && mayor - menor > 15 && r - g > 15 && r > b) {
+      px += x; py += y; piel++;
+    }
+  }
+
+  let cx, cy, que;
+
+  if (peso > UMBRAL_MOVIMIENTO) {
+    cx = mx / peso; cy = my / peso; que = "tu mano";
+
+  } else if (piel > MINIMO_PIEL) {
+    cx = px / piel; cy = py / piel; que = "tu cara";
+
+  } else {
+    camara.que = "buscandote";
+
+    return;
+  }
+
+  // Espejo en horizontal: si te mueves a tu derecha, la cara mira hacia
+  // alli. Sin invertir se siente al reves y desconcierta.
+  const destinoX = -((cx / MUESTRA_ANCHO) - 0.5) * 2;
+  const destinoY = ((cy / MUESTRA_ALTO) - 0.5) * 2;
+
+  // Suavizado fuerte: la senal de una camara es ruidosa y una cabeza que
+  // tirita no parece que te mire, parece que le pasa algo.
+  camara.x += (destinoX - camara.x) * 0.16;
+  camara.y += (destinoY - camara.y) * 0.16;
+  camara.que = que;
+}
+
+encenderCamara();
+
+// --- El bucle ----------------------------------------------------------------
+
+let anterior = 0;
 
 function fotograma(ahora) {
   const reloj = ahora / 1000;
+  const paso = Math.min(0.05, (ahora - anterior) / 1000) || 0.016;
 
-  if (estado.modo === "hablando" && ahora > estado.hastaCuando) {
-    arquitecto.reposo();
+  anterior = ahora;
+
+  gesticular(ahora);
+  parpadear(ahora, paso);
+
+  // Suavizado: los musculos no saltan, llegan.
+  estado.apertura += (estado.objetivoApertura - estado.apertura) * 0.28;
+  estado.redondeo += (estado.objetivoRedondeo - estado.redondeo) * 0.18;
+  estado.cejas += (estado.objetivoCejas - estado.cejas) * 0.10;
+
+  // La camara manda sobre el raton cuando hay algo que seguir.
+  const sigueCamara = camara.activa && camara.que !== "buscandote";
+
+  const miraX = sigueCamara ? camara.x : estado.ratonX;
+  const miraY = sigueCamara ? camara.y : estado.ratonY;
+
+  estado.giro += (miraX * 0.50 - estado.giro) * 0.045;
+  estado.giro += sigueCamara ? 0 : 0.0011;      // sin nadie delante, deriva sola
+  estado.inclina += (miraY * 0.26 - estado.inclina) * 0.045;
+
+  const fuente = camara.activa ? "siguiendo " + camara.que : "raton";
+
+  if (fuente !== ultimaFuente) {
+    ultimaFuente = fuente;
+    pie.textContent = "espacio · hablar     " + fuente;
   }
 
-  // Tres senos con periodos que no encajan entre si: el resultado no se
-  // repite de forma perceptible, que es lo que delata una animacion.
-  estado.objetivo = estado.modo === "hablando"
-    ? 0.5 + 0.5 * Math.abs(
-        Math.sin(reloj * 11.3) * 0.55 +
-        Math.sin(reloj * 7.1) * 0.30 +
-        Math.sin(reloj * 17.7) * 0.15
-      )
-    : estado.modo === "escuchando" ? 0.12 : 0;
-
-  estado.amplitud += (estado.objetivo - estado.amplitud) * 0.35;
-
-  // La respiracion: sin esto la cara parece congelada entre frases.
-  const respira = Math.sin(reloj * 0.9) * 0.012;
-
-  estado.giro += (estado.ratonX * 0.55 - estado.giro) * 0.05;
-  estado.giro += 0.0016;
-  estado.inclina += (estado.ratonY * 0.28 - estado.inclina) * 0.05;
-
-  animarBoca();
-  dibujar(respira);
+  dibujar(reloj);
 
   requestAnimationFrame(fotograma);
 }
 
-function animarBoca() {
-  for (const p of boca) {
-    // Las columnas del centro se abren mas que las comisuras.
-    const centro = Math.sin(p.columna * Math.PI);
+function gesticular(ahora) {
+  if (estado.modo !== "hablando") {
+    estado.objetivoApertura = estado.modo === "escuchando" ? 0.05 : 0;
+    estado.objetivoRedondeo = 0;
+    estado.objetivoCejas = estado.modo === "escuchando" ? 0.35 : 0;
+    estado.cabeceo *= 0.94;
 
-    p.y = p.by + p.fila * estado.amplitud * 0.085 * centro;
-    p.z = p.bz + estado.amplitud * 0.05 * centro;
+    return;
   }
+
+  if (ahora > estado.hasta) {
+    arquitecto.reposo();
+
+    return;
+  }
+
+  const t = ahora - estado.empezo;
+
+  const silaba = estado.guion.find(s => t >= s.desde && t < s.desde + s.dura);
+
+  if (!silaba) {
+    // Sin texto solo se sabe cuanto dura, asi que se finge un ritmo. Se
+    // nota menos que dejar la boca quieta, y se dice que es asi.
+    const r = ahora / 1000;
+
+    estado.objetivoApertura = 0.30 + 0.30 * Math.abs(
+      Math.sin(r * 10.7) * 0.6 + Math.sin(r * 6.3) * 0.4
+    );
+    estado.objetivoRedondeo = 0.2;
+
+    return;
+  }
+
+  const avance = (t - silaba.desde) / silaba.dura;
+
+  // Dentro de cada silaba: cierre, ataque, sostenimiento y caida. Sin la
+  // fase de cierre las palabras se funden y parece que masca.
+  let sobre;
+
+  if (avance < 0.14) sobre = (1 - silaba.cierra) * (avance / 0.14);
+  else if (avance < 0.42) sobre = (avance - 0.14) / 0.28;
+  else if (avance < 0.72) sobre = 1;
+  else sobre = 1 - (avance - 0.72) / 0.28;
+
+  estado.objetivoApertura = silaba.abre * Math.max(0, Math.min(1, sobre)) * 0.92;
+  estado.objetivoRedondeo = silaba.redondo;
+
+  // Las cejas acompanan lo abierto de la vocal: no es adorno, es lo que
+  // separa hablar de mover la mandibula.
+  estado.objetivoCejas = silaba.abre * 0.55;
+
+  // Y la cabeza asiente con el ritmo.
+  estado.cabeceo = estado.cabeceo * 0.86 + silaba.abre * 0.020 * Math.sin(avance * Math.PI);
 }
 
-function dibujar(respira) {
-  ctx.fillStyle = "#02040a";
+function parpadear(ahora, paso) {
+  estado.proximoParpadeo -= paso * 1000;
+
+  if (estado.proximoParpadeo <= 0) {
+    estado.parpadeo = 1;
+    estado.proximoParpadeo = 2200 + Math.random() * 4200;
+  }
+
+  estado.parpadeo = Math.max(0, estado.parpadeo - paso * 7.5);
+}
+
+// --- Dibujar -----------------------------------------------------------------
+
+const visibles = [];
+
+function dibujar(reloj) {
+  ctx.fillStyle = "#04030c";
   ctx.fillRect(0, 0, ancho, alto);
   ctx.globalCompositeOperation = "lighter";
 
+  const inclina = estado.inclina + estado.cabeceo;
+
   const cosY = Math.cos(estado.giro), senY = Math.sin(estado.giro);
-  const cosX = Math.cos(estado.inclina), senX = Math.sin(estado.inclina);
+  const cosX = Math.cos(inclina), senX = Math.sin(inclina);
 
   const cx = ancho / 2;
-  const cy = alto / 2 + alto * 0.03;
+  const cy = alto / 2 + alto * 0.02;
 
-  const visibles = [];
+  const respira = Math.sin(reloj * 0.75) * 0.010;
 
-  for (const p of puntos) {
-    let x = p.x, y = p.y + respira, z = p.z;
+  visibles.length = 0;
 
-    if (p.iris) {
-      // La mirada sigue al raton, pero poco: un iris que se va hasta el
-      // borde parece un muneco, no una cara.
-      x += estado.ratonX * 0.035;
-      y -= estado.ratonY * 0.028;
+  for (const p of particulas) {
+    // La deriva: cada particula flota a su ritmo alrededor de su sitio.
+    // Es lo unico que separa una nebulosa de una constelacion.
+    const d = reloj * p.vel + p.fase;
+
+    let x = p.bx + Math.sin(d) * p.vaiven;
+    let y = p.by + Math.cos(d * 0.83) * p.vaiven + respira;
+    let z = p.bz + Math.sin(d * 0.61) * p.vaiven * 0.7;
+
+    let alfa = p.brillo;
+
+    if (p.clase === "cara") {
+      // La mandibula baja, y con ella todo lo que cuelga de ella.
+      y -= estado.apertura * 0.175 * p.mandibula;
+      z += estado.apertura * 0.030 * p.mandibula;
+
+      // Los labios: el de arriba apenas se mueve, el de abajo va con la
+      // mandibula y ademas se separa.
+      y += estado.apertura * 0.022 * p.labioAlto;
+      y -= estado.apertura * 0.055 * p.labioBajo;
+
+      // Redondear acerca las comisuras y adelanta los labios.
+      const labio = p.labioAlto + p.labioBajo;
+
+      x -= x * estado.redondeo * 0.22 * labio;
+      z += estado.redondeo * 0.075 * labio;
+
+      // El hueco de la boca. Apagar estas particulas es lo que se ve como
+      // boca abierta: sobre negro, la ausencia de luz *es* la sombra.
+      alfa *= 1 - p.interior * Math.min(1, estado.apertura * 2.3);
+
+      // Cejas.
+      y += estado.cejas * 0.030 * p.ceja;
+
+      // Parpado: los ojos se cierran hacia su propia linea.
+      if (p.ojo > 0.02 && estado.parpadeo > 0) {
+        y += (-0.148 - p.by) * estado.parpadeo * p.ojo * 0.9;
+        alfa *= 1 - estado.parpadeo * p.ojo * 0.55;
+      }
     }
 
     const rx = x * cosY + z * senY;
@@ -436,46 +863,48 @@ function dibujar(respira) {
     const ry = y * cosX - rz * senX;
     const rz2 = rz * cosX + y * senX;
 
-    const profundidad = rz2 + CAMARA;
+    const hondo = rz2 + CAMARA;
 
-    if (profundidad < 0.25) continue;      // detras de la camara
+    if (hondo < 0.30 || alfa < 0.012) continue;
 
-    const k = LENTE / profundidad;
+    const k = LENTE / hondo;
 
     visibles.push({
       px: cx + rx * k * escala,
       py: cy - ry * k * escala,
-      r: k * p.peso * 1.55,
+      r: k * p.tam * 1.5,
       z: rz2,
-      tipo: p.tipo,
+      alfa: alfa,
+      indice: p.indice,
+      clase: p.clase,
+      gas: p.gas,
     });
   }
 
-  // De atras hacia delante: lo cercano tapa —y suma brillo sobre— lo lejano.
   visibles.sort(function (a, b) { return a.z - b.z; });
 
   for (const v of visibles) {
-    // De -1 (nuca) a +1 (nariz), llevado a 0..1.
-    const frente = Math.min(1, Math.max(0, (v.z + 1) / 2));
+    const frente = Math.min(1, Math.max(0, (v.z + 0.9) / 1.9));
 
-    // La niebla de profundidad. El exponente hace que el fondo se apague
-    // deprisa en vez de degradarse suave, y asi la cara se despega.
-    const alfa = 0.10 + Math.pow(frente, 2.1) * 0.95;
+    // Niebla de profundidad: lo de atras se apaga deprisa y la cara se
+    // despega del fondo en vez de fundirse con el.
+    let alfa = v.alfa * (0.14 + Math.pow(frente, 1.7) * 0.95);
 
-    const radio = v.r * (0.55 + frente * 1.5) *
-                  (v.tipo === "boca" ? 1 + estado.amplitud * 0.5 : 1);
+    if (v.gas) alfa *= 0.30;                     // el gas suma poco, muchas veces
 
-    if (radio < 0.15) continue;
+    if (alfa < 0.008) continue;
+
+    const radio = v.r * (0.55 + frente * 1.25);
+
+    if (radio < 0.12) continue;
 
     ctx.globalAlpha = Math.min(1, alfa);
 
-    ctx.drawImage(
-      LUCES[v.tipo],
-      v.px - radio * 3,
-      v.py - radio * 3,
-      radio * 6,
-      radio * 6
-    );
+    const luz = v.clase === "estrella" ? ESTRELLA
+              : v.clase === "bruma" ? POLVO
+              : PALETA[v.indice];
+
+    ctx.drawImage(luz, v.px - radio * 2.2, v.py - radio * 2.2, radio * 4.4, radio * 4.4);
   }
 
   ctx.globalAlpha = 1;
