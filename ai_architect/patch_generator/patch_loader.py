@@ -6,11 +6,17 @@ Loads Patch objects from disk.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from pathlib import Path
 
 from .models import Patch, PatchFile
+from .patch_format import (
+    extraer_diff,
+    leer_aprobado,
+    leer_archivo,
+    leer_cabecera,
+    valor_de,
+)
 
 
 class PatchLoader:
@@ -71,108 +77,7 @@ class PatchLoader:
         text: str,
     ) -> Patch:
 
-        metadata: dict[str, str] = {}
-
-        files: list[PatchFile] = []
-
-        lines = text.splitlines()
-
-        reading_files = False
-
-        # ====================================================
-        # Metadata / FILES
-        # ====================================================
-
-        for line in lines:
-
-            # ------------------------------------------------
-            # Stop metadata/file parsing once Git diff starts.
-            # ------------------------------------------------
-
-            if line.startswith(
-                "diff --git ",
-            ):
-                break
-
-            # ------------------------------------------------
-            # Metadata
-            # ------------------------------------------------
-
-            if line.startswith(
-                "ID:",
-            ):
-                metadata["id"] = self._metadata_value(
-                    line,
-                )
-                continue
-
-            if line.startswith(
-                "TITLE:",
-            ):
-                metadata["title"] = self._metadata_value(
-                    line,
-                )
-                continue
-
-            if line.startswith(
-                "DESCRIPTION:",
-            ):
-                metadata["description"] = self._metadata_value(
-                    line,
-                )
-                continue
-
-            if line.startswith(
-                "CREATED:",
-            ):
-                metadata["created"] = self._metadata_value(
-                    line,
-                )
-                continue
-
-            if line.startswith(
-                "APPROVED:",
-            ):
-                metadata["approved"] = self._metadata_value(
-                    line,
-                )
-                continue
-
-            # ------------------------------------------------
-            # Files section
-            # ------------------------------------------------
-
-            if line.strip() == "FILES":
-                reading_files = True
-                continue
-
-            # ------------------------------------------------
-            # Files separator
-            # ------------------------------------------------
-
-            if reading_files and line.strip() and set(line.strip()) == {"-"}:
-                continue
-
-            # ------------------------------------------------
-            # File entries
-            # ------------------------------------------------
-
-            if reading_files:
-
-                if not line.strip():
-                    reading_files = False
-                    continue
-
-                patch_file = self._parse_file_entry(
-                    line,
-                )
-
-                if patch_file is not None:
-                    files.append(
-                        patch_file,
-                    )
-
-                continue
+        metadata, files = leer_cabecera(text)
 
         # ====================================================
         # Validate metadata
@@ -191,19 +96,13 @@ class PatchLoader:
         # Extract exact Git diff
         # ====================================================
 
-        diff = self._extract_diff(
-            text,
-        )
+        diff = extraer_diff(text)
 
         # ====================================================
         # Build Patch
         # ====================================================
 
-        approved = self._parse_approved(
-            metadata.get(
-                "approved",
-            ),
-        )
+        approved = leer_aprobado(metadata.get("approved"))
 
         patch = Patch(
             id=metadata.get(
@@ -233,177 +132,32 @@ class PatchLoader:
         return patch
 
     # ========================================================
-    # File Parser
+    # Format (delegado a patch_format)
     # ========================================================
 
     @staticmethod
     def _parse_file_entry(
         line: str,
     ) -> PatchFile | None:
-        """
-        Parse a persisted PatchFile entry.
-
-        Current format:
-
-            MODIFY path/to/file.py 7 3
-
-        Where:
-
-            action
-            path
-            additions
-            deletions
-
-        Legacy entries containing only:
-
-            MODIFY path/to/file.py
-
-        remain supported and default additions/deletions
-        to zero.
-        """
-
-        parts = line.split()
-
-        if len(parts) < 2:
-            return None
-
-        action = parts[0]
-
-        # ----------------------------------------------------
-        # Legacy format:
-        #
-        # ACTION path
-        # ----------------------------------------------------
-
-        if len(parts) == 2:
-            return PatchFile(
-                path=parts[1],
-                action=action,
-            )
-
-        # ----------------------------------------------------
-        # Current format:
-        #
-        # ACTION path additions deletions
-        #
-        # The path itself may contain spaces, therefore parse
-        # the final two tokens as numeric counters.
-        # ----------------------------------------------------
-
-        try:
-            additions = int(
-                parts[-2],
-            )
-
-            deletions = int(
-                parts[-1],
-            )
-
-        except ValueError:
-            #
-            # If the final two fields are not counters, treat
-            # the complete remainder as the path for backward
-            # compatibility.
-            #
-            return PatchFile(
-                path=" ".join(
-                    parts[1:],
-                ),
-                action=action,
-            )
-
-        path = " ".join(
-            parts[1:-2],
-        )
-
-        if not path:
-            return None
-
-        return PatchFile(
-            path=path,
-            action=action,
-            additions=additions,
-            deletions=deletions,
-        )
-
-    # ========================================================
-    # Diff Extraction
-    # ========================================================
+        return leer_archivo(line)
 
     @staticmethod
     def _extract_diff(
         text: str,
     ) -> str:
-        """
-        Extract the Git diff without reconstructing it.
-
-        This deliberately avoids splitlines() + join() because
-        that process destroys exact trailing newline semantics.
-
-        Therefore:
-
-            diff == original persisted diff
-
-        including:
-
-            diff ending in \\n
-            diff ending in \\n\\n
-            diff ending in multiple newlines
-        """
-
-        match = re.search(
-            r"(?m)^diff --git ",
-            text,
-        )
-
-        if match is None:
-            return ""
-
-        return text[match.start() :]
-
-    # ========================================================
-    # Metadata Utilities
-    # ========================================================
+        return extraer_diff(text)
 
     @staticmethod
     def _metadata_value(
         line: str,
     ) -> str:
-        """
-        Extract the value after the first ':'.
-        """
-
-        if ":" not in line:
-            return ""
-
-        return line.split(
-            ":",
-            1,
-        )[1].strip()
+        return valor_de(line)
 
     @staticmethod
     def _parse_approved(
         value: str | None,
     ) -> bool:
-        """
-        Convert persisted approval metadata into a boolean.
-
-        Missing approval metadata is treated as False so that
-        legacy patch files cannot become executable merely by
-        being loaded.
-        """
-
-        if value is None:
-            return False
-
-        normalized = value.strip().lower()
-
-        return normalized in {
-            "true",
-            "1",
-            "yes",
-            "approved",
-        }
+        return leer_aprobado(value)
 
     # ========================================================
     # Utilities
