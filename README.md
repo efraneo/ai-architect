@@ -157,6 +157,25 @@ architect improve . --instruction "Extrae la lógica de validación a su propio 
 architect improve . --file ai_architect/planner/planner.py
 ```
 
+Por defecto **no toca tus archivos**: genera el parche, lo guarda y te dice
+qué opina. Con `--apply` cierra el ciclo:
+
+```bash
+architect improve . --instruction "..." --apply
+```
+
+1. ejecuta tus pruebas y anota cómo estaban
+2. aplica el parche
+3. **vuelve a ejecutarlas**
+4. si el cambio empeora las pruebas, **lo deshace solo**
+
+Sin `--apply`, lo que el motor de decisión sabía de las pruebas era que el
+repositorio estaba en verde *antes* del cambio — no que el cambio fuera
+bueno. Con `--apply`, juzga el código que va a quedar.
+
+Un repositorio que ya venía en rojo no condena al parche: lo que lo condena
+es romper algo que funcionaba o aumentar el número de fallos.
+
 ### Varias mejoras de una vez
 
 Cada instrucción es una tarea: se ordenan por prioridad —la primera es la más
