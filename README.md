@@ -170,6 +170,17 @@ architect execute . --patch cambios.patch --dry-run
 architect execute . --patch cambios.patch
 ```
 
+### Avisar al terminar *(opcional)*
+
+Con `NOTIFY=true` y las variables de Telegram puestas, `improve` manda un
+resumen al terminar. Apagado por defecto: es una llamada de red a un servicio
+externo. Si el aviso falla, la mejora sigue en pie — el parche ya está en
+disco.
+
+```bash
+NOTIFY=true TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... architect improve .
+```
+
 ### Salida en JSON
 
 Cualquier comando acepta `--json`, para encadenarlo con otras herramientas:
@@ -192,6 +203,8 @@ Motores independientes que se coordinan entre sí:
 | Pruebas | `test_runner/` | Ejecuta la suite del proyecto y alimenta la decisión |
 | Agentes | `agents/` | Revisión estática (gratis) y análisis con IA (opcional) |
 | Autónomo | `autonomous/` | Cola, orden, ejecución y puerta de aprobación |
+| Git | `git/` | Ramas, commits, diffs, parches, estado y etiquetas |
+| Avisos | `notifier/` | Resumen por Telegram al terminar (opcional) |
 | Generador de parches | `patch_generator/` | Construye y valida el diff |
 | Ejecución | `execution/` | Aplica el parche de forma atómica y lanza las pruebas |
 | Revisor | `reviewer/` | Puntúa el resultado y decide la aprobación |

@@ -19,8 +19,17 @@ from ai_architect.git.commit_manager import (
 from ai_architect.git.diff_manager import (
     DiffManager,
 )
+from ai_architect.git.git_models import (
+    GitStatus,
+)
 from ai_architect.git.patch_applier import (
     PatchApplier,
+)
+from ai_architect.git.status_manager import (
+    StatusManager,
+)
+from ai_architect.git.tag_manager import (
+    TagManager,
 )
 
 
@@ -52,6 +61,14 @@ class GitManager:
         )
 
         self.branches = BranchManager(
+            self.repository,
+        )
+
+        self.status_reader = StatusManager(
+            self.repository,
+        )
+
+        self.tags = TagManager(
             self.repository,
         )
 
@@ -93,6 +110,46 @@ class GitManager:
     ) -> bool:
 
         return self.committer.discard_changes()
+
+    # --------------------------------------------------
+    # Status
+    # --------------------------------------------------
+
+    def status(
+        self,
+    ) -> GitStatus:
+
+        return self.status_reader.status()
+
+    def is_clean(
+        self,
+    ) -> bool:
+
+        return self.status_reader.is_clean()
+
+    # --------------------------------------------------
+    # Tags
+    # --------------------------------------------------
+
+    def tags_list(
+        self,
+    ) -> list[str]:
+
+        return self.tags.list()
+
+    def create_tag(
+        self,
+        tag: str,
+        message: str | None = None,
+    ) -> bool:
+
+        return self.tags.create(tag, message)
+
+    def latest_tag(
+        self,
+    ) -> str:
+
+        return self.tags.latest()
 
     # --------------------------------------------------
     # Branch
