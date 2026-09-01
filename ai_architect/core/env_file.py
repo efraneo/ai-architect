@@ -6,11 +6,17 @@ Leer un ``.env`` sin depender de nada.
 =========================================================
 
 ``notifier/`` importaba ``python-dotenv``, que **no está declarado en
-``pyproject.toml`` ni instalado**. Es decir: este paquete llevaba tiempo
+``pyproject.toml`` ni instalado**. Es decir: aquel paquete llevaba tiempo
 siendo *inimportable*, y nadie se enteró porque tampoco lo importaba nadie.
 
 Añadir una dependencia entera para leer pares ``CLAVE=valor`` es peor que
-no tenerla. Esto son veinte líneas y ningún paquete nuevo.
+no tenerla. Esto son treinta líneas y ningún paquete nuevo.
+
+Vive en ``core/`` porque no es cosa del notificador: **el arquitecto entero
+no leía ningún ``.env``**. Se podía poner la clave del proveedor en el
+archivo que el propio ``.env.example`` sugiere y ``doctor`` seguía diciendo
+``not_configured``, porque los proveedores solo miraban ``os.getenv``. Había
+que exportarla a mano en cada sesión.
 """
 
 from __future__ import annotations
@@ -74,3 +80,26 @@ def valor(
         return del_entorno
 
     return leer(env_file).get(clave)
+
+
+def cargar(env_file: str | Path = ".env") -> list[str]:
+    """Mete en el entorno lo que declare el archivo, **sin pisar nada**.
+
+    Lo que ya esté exportado manda: quien escribe
+    ``OPENAI_API_KEY=... architect improve`` está diciendo a propósito que
+    quiere esa y no la del archivo.
+
+    Devuelve los nombres de lo que cargó, para poder decirlo si hace falta.
+    Nunca los valores.
+    """
+    cargadas: list[str] = []
+
+    for clave, valor in leer(env_file).items():
+        if os.getenv(clave):
+            continue
+
+        os.environ[clave] = valor
+
+        cargadas.append(clave)
+
+    return cargadas

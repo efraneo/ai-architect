@@ -34,6 +34,7 @@ from ai_architect.commands import (
     improve,
     review,
 )
+from ai_architect.core.env_file import cargar
 
 
 @dataclass(frozen=True)
@@ -239,6 +240,12 @@ def print_result(
 
 
 def main():
+
+    # Antes de nada, el `.env` del directorio desde el que se ejecuta. Sin
+    # esto había que exportar la clave del proveedor a mano en cada sesión,
+    # aunque estuviera escrita en el archivo que el propio `.env.example`
+    # sugiere. Lo ya exportado manda.
+    cargar()
 
     parser = build_parser()
 
