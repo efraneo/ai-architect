@@ -53,6 +53,29 @@ def limpiar(diff: str | None) -> str:
     return "\n".join(lineas).strip()
 
 
+# El formato que emiten por defecto los modelos nuevos de OpenAI para editar
+# ficheros. Es correcto para su propia herramienta y **no** es un diff
+# unificado: `git apply` no lo entiende.
+OTRO_FORMATO = "*** Begin Patch"
+
+
+def formato_ajeno(diff: str) -> str:
+    """Si el modelo devolvió un formato de parche que no es un diff, cuál.
+
+    Sin esto, un parche perfectamente intencionado se rechazaba con "Git
+    rejected the patch", que hace pensar en un parche corrupto en vez de en
+    un malentendido de formato. Con un modelo que emite el suyo por defecto,
+    eso es la diferencia entre saber qué arreglar y no saberlo.
+    """
+    if OTRO_FORMATO in diff:
+        return (
+            "el modelo devolvió el formato *** Begin Patch de OpenAI "
+            "en vez de un diff unificado"
+        )
+
+    return ""
+
+
 def archivos(diff: str) -> list[dict[str, Any]]:
     """Los archivos del parche, con su acción y sus líneas movidas.
 
@@ -142,3 +165,75 @@ def _destino(destino: str, actual: dict[str, Any]) -> None:
 
     elif not actual["path"]:
         actual["path"] = destino
+
+
+# --- Recalcular las cabeceras de los hunks ----------------------------------
+#
+# Sobre este mismo repositorio, dos llamadas seguidas al mismo modelo con la
+# misma instrucción devolvieron el mismo código y dos cabeceras distintas:
+#
+#     @@ -65,6 +65,11 @@     <- correcta, git la acepta
+#     @@ -65,6 +65,12 @@     <- una de más, git la rechaza
+#
+# El contenido era bueno en las dos. Lo que falla es la aritmética, y esa la
+# podemos hacer nosotros: contar las líneas de un hunk es exacto, no es una
+# opinión. Solo se tocan los números; ni una línea del código cambia.
+
+CABECERA_HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$")
+
+
+def normalizar(diff: str) -> str:
+    """Corrige los contadores de cada ``@@`` según lo que hay debajo."""
+    if not diff.strip():
+        return diff
+
+    lineas = diff.splitlines()
+
+    salida: list[str] = []
+
+    for indice, linea in enumerate(lineas):
+        coincidencia = CABECERA_HUNK.match(linea)
+
+        if coincidencia is None:
+            salida.append(linea)
+            continue
+
+        viejas, nuevas = _contar(lineas, indice + 1)
+
+        inicio_viejo = coincidencia.group(1)
+        inicio_nuevo = coincidencia.group(3)
+        cola = coincidencia.group(5)
+
+        salida.append(f"@@ -{inicio_viejo},{viejas} +{inicio_nuevo},{nuevas} @@{cola}")
+
+    final = chr(10).join(salida)
+
+    return final + chr(10) if diff.endswith(chr(10)) else final
+
+
+def _contar(lineas: list[str], desde: int) -> tuple[int, int]:
+    """Cuántas líneas del original y del resultado abarca este hunk."""
+    viejas = 0
+    nuevas = 0
+
+    for linea in lineas[desde:]:
+        if linea.startswith("@@") or linea.startswith(("--- ", "+++ ", "diff --git")):
+            break
+
+        if linea.startswith("+"):
+            nuevas += 1
+
+        elif linea.startswith("-"):
+            viejas += 1
+
+        elif linea.startswith("\\"):
+            # "\ No newline at end of file": no cuenta como línea.
+            continue
+
+        else:
+            # Contexto: cuenta en los dos lados. Una línea vacía del todo
+            # también es contexto -- el modelo se come el espacio inicial.
+            viejas += 1
+            nuevas += 1
+
+    return viejas, nuevas

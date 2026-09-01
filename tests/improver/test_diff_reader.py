@@ -166,3 +166,130 @@ def test_un_diff_vacio_no_devuelve_nada() -> None:
 @pytest.mark.parametrize("basura", ["hola qué tal", "@@ -1 +1 @@", "   "])
 def test_texto_que_no_es_un_diff(basura: str) -> None:
     assert archivos(basura) == []
+
+
+# --- El formato que no es un diff -------------------------------------------
+
+
+def test_reconoce_el_formato_de_openai() -> None:
+    """Los modelos gpt-5.x emiten esto por defecto para editar ficheros. Es
+    correcto para su herramienta y `git apply` no lo entiende."""
+    from ai_architect.improver.diff_reader import formato_ajeno
+
+    ajeno = formato_ajeno("*** Begin Patch\n*** Update File: x.py\n@@\n+algo\n")
+
+    assert "*** Begin Patch" in ajeno
+    assert "diff unificado" in ajeno
+
+
+def test_un_diff_normal_no_es_formato_ajeno() -> None:
+    from ai_architect.improver.diff_reader import formato_ajeno
+
+    assert formato_ajeno(GIT) == ""
+
+
+# --- Recalcular las cabeceras de los hunks ----------------------------------
+#
+# Dos llamadas seguidas al mismo modelo con la misma instrucción devolvieron
+# el mismo código y dos cabeceras distintas:
+#
+#     @@ -65,6 +65,11 @@     <- git la acepta
+#     @@ -65,6 +65,12 @@     <- git rechaza el parche entero
+#
+# El contenido era bueno en las dos. Lo que falla es la aritmética.
+
+
+def test_corrige_un_contador_de_mas() -> None:
+    from ai_architect.improver.diff_reader import normalizar
+
+    malo = (
+        "--- a/m.py\n"
+        "+++ b/m.py\n"
+        "@@ -65,6 +65,12 @@ def leer():\n"
+        "     return valores\n"
+        " \n"
+        " \n"
+        "+def claves():\n"
+        '+    """Los nombres, nunca los valores."""\n'
+        "+    return []\n"
+        "+\n"
+        "+\n"
+        " def valor(\n"
+        "     clave,\n"
+        "     archivo,\n"
+    )
+
+    arreglado = normalizar(malo)
+
+    assert "@@ -65,6 +65,11 @@" in arreglado
+
+
+def test_no_toca_una_cabecera_correcta() -> None:
+    from ai_architect.improver.diff_reader import normalizar
+
+    assert "@@ -1,3 +1,4 @@" in normalizar(
+        "--- a/m.py\n+++ b/m.py\n@@ -1,3 +1,4 @@\n uno\n-dos\n+DOS\n+tres\n cuatro\n"
+    )
+
+
+def test_no_cambia_ni_una_linea_del_codigo() -> None:
+    """Solo se tocan los números. El contenido es del modelo."""
+    from ai_architect.improver.diff_reader import normalizar
+
+    original = "--- a/m.py\n+++ b/m.py\n@@ -1,1 +1,9 @@\n-viejo\n+nuevo\n"
+
+    arreglado = normalizar(original)
+
+    assert "+nuevo" in arreglado
+    assert "-viejo" in arreglado
+
+
+def test_cuenta_bien_las_lineas_borradas() -> None:
+    from ai_architect.improver.diff_reader import normalizar
+
+    arreglado = normalizar(
+        "--- a/m.py\n+++ b/m.py\n@@ -10,99 +10,99 @@\n uno\n-dos\n-tres\n+DOS\n"
+    )
+
+    assert "@@ -10,3 +10,2 @@" in arreglado
+
+
+def test_varios_hunks_cada_uno_con_su_cuenta() -> None:
+    from ai_architect.improver.diff_reader import normalizar
+
+    arreglado = normalizar(
+        "--- a/m.py\n"
+        "+++ b/m.py\n"
+        "@@ -1,9 +1,9 @@\n"
+        " uno\n"
+        "+dos\n"
+        "@@ -50,9 +50,9 @@\n"
+        " diez\n"
+        "-once\n"
+    )
+
+    assert "@@ -1,1 +1,2 @@" in arreglado
+    assert "@@ -50,2 +50,1 @@" in arreglado
+
+
+def test_la_marca_de_sin_salto_final_no_cuenta() -> None:
+    from ai_architect.improver.diff_reader import normalizar
+
+    arreglado = normalizar(
+        "--- a/m.py\n+++ b/m.py\n@@ -1,9 +1,9 @@\n-viejo\n+nuevo\n"
+        "\ No newline at end of file\n"
+    )
+
+    assert "@@ -1,1 +1,1 @@" in arreglado
+
+
+def test_un_diff_vacio_no_revienta() -> None:
+    from ai_architect.improver.diff_reader import normalizar
+
+    assert normalizar("") == ""
+
+
+def test_un_texto_sin_hunks_se_queda_igual() -> None:
+    from ai_architect.improver.diff_reader import normalizar
+
+    assert normalizar("hola qué tal\n") == "hola qué tal\n"
