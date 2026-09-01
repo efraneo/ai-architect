@@ -71,9 +71,14 @@ class AgentError(
     """
 
 
-class MemoryError(
+class MemorySubsystemError(
     AIArchitectError,
 ):
     """
     Memory subsystem error.
+
+    Se llamaba ``MemoryError``, que es el nombre de una excepción **interna
+    de Python**. Cualquiera que la importara aquí y luego escribiera
+    ``except MemoryError`` estaría capturando la equivocada: un
+    agotamiento de memoria real pasaría de largo.
     """
