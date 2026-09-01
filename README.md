@@ -25,6 +25,7 @@ ahí trabaja solo:
 5. **Ejecuta** las pruebas.
 6. **Decide** con una puntuación de confianza y riesgo si el cambio se acepta.
 7. **Recuerda** lo aprendido para la siguiente ejecución.
+8. **Commitea**, solo si se lo permites (ver *Commit automático*).
 
 ---
 
@@ -159,7 +160,7 @@ Motores independientes que se coordinan entre sí:
 ## Desarrollo
 
 ```bash
-pytest                      # 211 tests
+pytest                      # 249 tests
 ruff check .                # linter
 black .                     # formato
 mypy ai_architect           # tipos
@@ -178,8 +179,8 @@ pre-commit install
 
 | | |
 |---|---|
-| Tests | 211 |
-| Cobertura | 37 % |
+| Tests | 249 |
+| Cobertura | 44 % |
 | Errores de tipo | 0 |
 
 > La cobertura sigue siendo baja para un proyecto de este tamaño y es el
@@ -191,6 +192,27 @@ pre-commit install
 > la memoria de experiencias. Los siguientes candidatos, todos en 0 %:
 > `memory/knowledge_base.py`, `execution/task_executor.py`, los proveedores
 > de Ollama y OpenRouter, y `test_runner/`.
+
+---
+
+## Commit automático
+
+El arquitecto puede aplicar el parche y commitearlo por su cuenta, pero
+**viene apagado**. Para encenderlo:
+
+```ini
+AUTO_COMMIT=true
+```
+
+Aun encendido, commitea solo si se cumplen **las tres** condiciones:
+
+1. `AUTO_COMMIT=true`
+2. El motor de decisión **aprobó** el parche
+3. El destino **es** un repositorio git
+
+Si alguna falla, el parche queda guardado en disco y el resultado explica por
+qué no se commiteó (`commit_reason`). Un fallo de git nunca tumba la mejora:
+el parche ya está hecho y se puede aplicar a mano.
 
 ---
 
