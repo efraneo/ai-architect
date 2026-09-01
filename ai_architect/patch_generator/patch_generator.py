@@ -366,10 +366,7 @@ class PatchGenerator:
         if patch is None:
             return False
 
-        return (
-            patch.total_files > 0
-            and patch.has_diff
-        )
+        return patch.total_files > 0 and patch.has_diff
 
     # ========================================================
     # Statistics
@@ -457,9 +454,7 @@ class PatchGenerator:
         self,
     ) -> str:
         return (
-            f"{self.__class__.__name__}"
-            "(builder=PatchBuilder, "
-            "writer=PatchWriter)"
+            f"{self.__class__.__name__}" "(builder=PatchBuilder, " "writer=PatchWriter)"
         )
 
     # ========================================================

@@ -13,6 +13,7 @@ from typing import Any
 from ai_architect.core.context import AIContext
 
 from .auto_decision import AutoDecision
+from .decision_report import DecisionReport
 
 
 class DecisionEngine:
@@ -38,7 +39,7 @@ class DecisionEngine:
         report = self.engine.evaluate(context)
         return report.to_dict()
 
-    def evaluate(self, context: AIContext):
+    def evaluate(self, context: AIContext) -> DecisionReport:
         return self.engine.evaluate(context)
 
     def should_commit(self, report) -> bool:

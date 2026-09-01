@@ -12,11 +12,33 @@ from ai_architect.patch_generator.patch_writer import PatchWriter
 
 
 def init_git(repository: Path) -> None:
-    subprocess.run(["git", "init"], cwd=repository, check=True, capture_output=True, text=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repository, check=True, capture_output=True, text=True)
-    subprocess.run(["git", "config", "user.name", "AI Architect Test"], cwd=repository, check=True, capture_output=True, text=True)
-    subprocess.run(["git", "add", "."], cwd=repository, check=True, capture_output=True, text=True)
-    subprocess.run(["git", "commit", "-m", "initial"], cwd=repository, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "init"], cwd=repository, check=True, capture_output=True, text=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "AI Architect Test"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "add", "."], cwd=repository, check=True, capture_output=True, text=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "initial"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def make_patch(*, approved: bool) -> Patch:
@@ -41,7 +63,9 @@ def make_patch(*, approved: bool) -> Patch:
     return patch
 
 
-def test_persisted_approved_patch_dry_run_then_execute_and_rollback(tmp_path: Path) -> None:
+def test_persisted_approved_patch_dry_run_then_execute_and_rollback(
+    tmp_path: Path,
+) -> None:
     repository = tmp_path / "repository"
     repository.mkdir()
     target = repository / "app.txt"

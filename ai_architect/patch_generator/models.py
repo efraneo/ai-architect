@@ -53,19 +53,13 @@ class Patch:
     def total_additions(
         self,
     ) -> int:
-        return sum(
-            item.additions
-            for item in self.files
-        )
+        return sum(item.additions for item in self.files)
 
     @property
     def total_deletions(
         self,
     ) -> int:
-        return sum(
-            item.deletions
-            for item in self.files
-        )
+        return sum(item.deletions for item in self.files)
 
     @property
     def has_diff(

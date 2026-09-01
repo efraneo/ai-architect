@@ -152,8 +152,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         )
 
         lines.extend(
-            f"- {recommendation}"
-            for recommendation in analysis.recommendations
+            f"- {recommendation}" for recommendation in analysis.recommendations
         )
 
         lines.extend(
@@ -164,10 +163,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             ]
         )
 
-        lines.extend(
-            f"- {task.title}"
-            for task in plan.tasks
-        )
+        lines.extend(f"- {task.title}" for task in plan.tasks)
 
         lines.extend(
             [
@@ -320,8 +316,4 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         if current is not None:
             results.append(current)
 
-        return [
-            item
-            for item in results
-            if item["path"]
-        ]
+        return [item for item in results if item["path"]]

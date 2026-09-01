@@ -150,11 +150,7 @@ class PatchLoader:
             # Files separator
             # ------------------------------------------------
 
-            if (
-                reading_files
-                and line.strip()
-                and set(line.strip()) == {"-"}
-            ):
+            if reading_files and line.strip() and set(line.strip()) == {"-"}:
                 continue
 
             # ------------------------------------------------
@@ -363,9 +359,7 @@ class PatchLoader:
         if match is None:
             return ""
 
-        return text[
-            match.start(): 
-        ]
+        return text[match.start() :]
 
     # ========================================================
     # Metadata Utilities

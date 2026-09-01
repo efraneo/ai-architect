@@ -8,7 +8,9 @@ from ai_architect import cli
 
 
 def test_cli_analyze_json_returns_success(tmp_path: Path, monkeypatch, capsys) -> None:
-    (tmp_path / "sample.py").write_text("def hello():\n    return 'world'\n", encoding="utf-8")
+    (tmp_path / "sample.py").write_text(
+        "def hello():\n    return 'world'\n", encoding="utf-8"
+    )
 
     monkeypatch.setattr(
         sys,
@@ -26,7 +28,9 @@ def test_cli_analyze_json_returns_success(tmp_path: Path, monkeypatch, capsys) -
 
 
 def test_cli_review_json_exports_report(tmp_path: Path, monkeypatch, capsys) -> None:
-    (tmp_path / "sample.py").write_text("def hello():\n    return 'world'\n", encoding="utf-8")
+    (tmp_path / "sample.py").write_text(
+        "def hello():\n    return 'world'\n", encoding="utf-8"
+    )
 
     monkeypatch.setattr(
         sys,

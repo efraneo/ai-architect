@@ -4,12 +4,29 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from ai_architect.patch_generator.models import Patch
 
 
 class ExecutionPipelineStateMixin:
-    """Public state, diagnostics, and compatibility API."""
+    """Public state, diagnostics, and compatibility API.
+
+    This mixin is only used through :class:`ExecutionPipeline`, which is what
+    defines the counters and the operations below. Declaring them here, under
+    ``TYPE_CHECKING``, tells the type checker what the mixin may rely on
+    without adding anything at runtime.
+    """
+
+    executed_files: int
+    failed_files: int
+    last_result: dict[str, Any]
+
+    if TYPE_CHECKING:  # pragma: no cover
+
+        def verify(self, repository: str | Path) -> bool: ...
+
+        def execute(self, repository: str | Path, patch: Patch) -> dict: ...
 
     def exists(self, repository: str | Path) -> bool:
         return self.verify(repository)

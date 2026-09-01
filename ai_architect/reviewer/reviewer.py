@@ -109,10 +109,7 @@ class Reviewer:
 
     def ready(self) -> bool:
         """Return whether all reviewer components are ready."""
-        return bool(
-            self.engine.ready()
-            and self.approval.ready()
-        )
+        return bool(self.engine.ready() and self.approval.ready())
 
     def configuration(self) -> dict:
         """Return reviewer configuration."""

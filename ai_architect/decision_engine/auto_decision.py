@@ -11,6 +11,7 @@ from typing import Any
 from ai_architect.core.context import AIContext
 
 from .confidence_engine import ConfidenceEngine
+from .decision_report import DecisionReport
 from .execution_policy import ExecutionPolicy
 from .quality_score import QualityScore
 from .risk_engine import RiskEngine
@@ -54,7 +55,7 @@ class AutoDecision:
     def evaluate(
         self,
         context: AIContext,
-    ):
+    ) -> DecisionReport:
         quality = self.quality.evaluate(
             context,
         )

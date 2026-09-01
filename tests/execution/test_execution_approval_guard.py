@@ -112,9 +112,12 @@ def test_execute_rejects_unapproved_patch(
 
     assert result["success"] is False
     assert result["approved"] is False
-    assert target.read_text(
-        encoding="utf-8",
-    ) == "old\n"
+    assert (
+        target.read_text(
+            encoding="utf-8",
+        )
+        == "old\n"
+    )
 
 
 def test_execute_pipeline_does_not_bypass_approval(
@@ -142,9 +145,12 @@ def test_execute_pipeline_does_not_bypass_approval(
     )
 
     assert result["success"] is False
-    assert target.read_text(
-        encoding="utf-8",
-    ) == "old\n"
+    assert (
+        target.read_text(
+            encoding="utf-8",
+        )
+        == "old\n"
+    )
 
 
 def test_execute_rejects_approved_but_structurally_invalid_patch(

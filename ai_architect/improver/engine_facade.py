@@ -3,13 +3,49 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ai_architect.patch_generator.models import Patch
 
+if TYPE_CHECKING:  # pragma: no cover
+    from ai_architect.analyzer.analysis_engine import AnalysisEngine
+    from ai_architect.core.context_builder import AnalysisContextBuilder
+    from ai_architect.patch_generator.patch_generator import PatchGenerator
+    from ai_architect.patch_generator.patch_validator import PatchValidator
+    from ai_architect.planner.planner import Planner
+    from ai_architect.providers.provider_manager import ProviderManager
+
 
 class ImprovementEngineFacadeMixin:
-    """Public helper API kept separate from the orchestration core."""
+    """Public helper API kept separate from the orchestration core.
+
+    This mixin is only ever used through :class:`ImprovementEngine`, which is
+    what actually creates the collaborators below. Declaring them here, under
+    ``TYPE_CHECKING``, tells the type checker what the mixin may rely on
+    without creating an import cycle or adding anything at runtime.
+    """
+
+    if TYPE_CHECKING:  # pragma: no cover
+        analysis: AnalysisEngine
+        context_builder: AnalysisContextBuilder
+        planner: Planner
+        provider: ProviderManager
+        patch_generator: PatchGenerator
+        builder: Any
+        validator: PatchValidator
+        writer: Any
+
+        def improve(
+            self,
+            repository: str | Path,
+            instruction: str | None = ...,
+            file: str | None = ...,
+        ) -> dict[str, Any]: ...
+
+        @staticmethod
+        def _clean_diff(diff: str) -> str: ...
+
+        def _register_patch_files(self, patch: Any, diff: str) -> None: ...
 
     @staticmethod
     def summary(analysis: Any) -> dict[str, Any]:
@@ -64,17 +100,13 @@ class ImprovementEngineFacadeMixin:
         self,
         patch: Patch,
     ) -> bool:
-        return bool(
-            self.validator.approved(patch)
-        )
+        return bool(self.validator.approved(patch))
 
     def validate_structure(
         self,
         patch: Patch,
     ) -> bool:
-        return bool(
-            self.validator.validate_structure(patch)
-        )
+        return bool(self.validator.validate_structure(patch))
 
     def save_patch(
         self,
@@ -102,9 +134,7 @@ class ImprovementEngineFacadeMixin:
         return self.provider.summary()
 
     def provider_available(self) -> bool:
-        return bool(
-            self.provider.available()
-        )
+        return bool(self.provider.available())
 
     def generate(
         self,
@@ -128,9 +158,7 @@ class ImprovementEngineFacadeMixin:
     def has_tasks(
         plan: Any,
     ) -> bool:
-        return bool(
-            plan.total_tasks > 0
-        )
+        return bool(plan.total_tasks > 0)
 
     def health(self) -> dict[str, Any]:
         components = {
@@ -143,10 +171,7 @@ class ImprovementEngineFacadeMixin:
             "writer": self.writer is not None,
         }
 
-        components["healthy"] = all(
-            bool(value)
-            for value in components.values()
-        )
+        components["healthy"] = all(bool(value) for value in components.values())
 
         return components
 
@@ -155,12 +180,8 @@ class ImprovementEngineFacadeMixin:
             "provider": self.provider_summary(),
             "planner": self.planner.__class__.__name__,
             "analysis": self.analysis.__class__.__name__,
-            "context_builder": (
-                self.context_builder.__class__.__name__
-            ),
-            "patch_generator": (
-                self.patch_generator.__class__.__name__
-            ),
+            "context_builder": (self.context_builder.__class__.__name__),
+            "patch_generator": (self.patch_generator.__class__.__name__),
             "builder": self.builder.__class__.__name__,
             "validator": self.validator.__class__.__name__,
             "writer": self.writer.__class__.__name__,
@@ -190,10 +211,7 @@ class ImprovementEngineFacadeMixin:
             "unknown",
         )
 
-        return (
-            f"{self.__class__.__name__}"
-            f"(provider={provider})"
-        )
+        return f"{self.__class__.__name__}" f"(provider={provider})"
 
     def __str__(self) -> str:
         return "QUANT AI Architect Improvement Engine"

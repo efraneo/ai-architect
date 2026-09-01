@@ -10,27 +10,42 @@ from ai_architect.patch_generator.models import Patch, PatchFile
 
 def initialize_git_repository(repository: Path) -> None:
     subprocess.run(
-        ["git", "init"], cwd=repository, check=True,
-        capture_output=True, text=True,
+        ["git", "init"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=repository,
-        check=True, capture_output=True, text=True,
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     subprocess.run(
-        ["git", "config", "user.name", "Test User"], cwd=repository,
-        check=True, capture_output=True, text=True,
+        ["git", "config", "user.name", "Test User"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
 
 def commit_repository(repository: Path) -> None:
     subprocess.run(
-        ["git", "add", "."], cwd=repository, check=True,
-        capture_output=True, text=True,
+        ["git", "add", "."],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     subprocess.run(
-        ["git", "commit", "-m", "Initial commit"], cwd=repository,
-        check=True, capture_output=True, text=True,
+        ["git", "commit", "-m", "Initial commit"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
 

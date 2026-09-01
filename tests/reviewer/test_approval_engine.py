@@ -47,10 +47,13 @@ def test_approval_engine_approves_clean_report() -> None:
 
     report = build_approved_report()
 
-    assert engine.evaluate(
-        report,
-        "patch-001",
-    ) is True
+    assert (
+        engine.evaluate(
+            report,
+            "patch-001",
+        )
+        is True
+    )
 
     assert engine.approved() is True
     assert engine.has_decision() is True
@@ -66,10 +69,13 @@ def test_approval_engine_rejects_report_with_errors() -> None:
 
     report = build_rejected_report()
 
-    assert engine.evaluate(
-        report,
-        "patch-002",
-    ) is False
+    assert (
+        engine.evaluate(
+            report,
+            "patch-002",
+        )
+        is False
+    )
 
     assert engine.approved() is False
     assert engine.has_decision() is True
@@ -83,10 +89,13 @@ def test_approval_engine_rejects_report_with_errors() -> None:
 def test_approval_engine_rejects_missing_report() -> None:
     engine = ApprovalEngine()
 
-    assert engine.evaluate(
-        None,
-        "patch-003",
-    ) is False
+    assert (
+        engine.evaluate(
+            None,
+            "patch-003",
+        )
+        is False
+    )
 
     assert engine.approved() is False
     assert engine.has_decision() is True
@@ -162,9 +171,18 @@ def test_approval_engine_version_is_available() -> None:
 
 
 def test_approval_engine_has_no_datetime_dependency_in_state() -> None:
-    engine = ApprovalEngine()
+    """The state must be serializable: no datetime objects inside.
 
-    assert isinstance(
-        datetime.utcnow(),
-        datetime,
-    )
+    The previous version of this test built the engine, never used it, and
+    only asserted that ``datetime.utcnow()`` is a ``datetime`` -- always true,
+    and unrelated to the engine. It therefore proved nothing about what its
+    name claims.
+    """
+    engine = ApprovalEngine()
+    engine.evaluate(build_approved_report())
+
+    for origen in (engine.summary(), engine.health()):
+        for clave, valor in origen.items():
+            assert not isinstance(
+                valor, datetime
+            ), f"{clave} carries a datetime, which breaks serialization"
