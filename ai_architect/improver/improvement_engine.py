@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Any
 
 from ai_architect.analyzer.analysis_engine import AnalysisEngine
 from ai_architect.core.context_builder import AnalysisContextBuilder
+from ai_architect.decision_engine.decision_engine import DecisionEngine
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
+from ai_architect.memory.memory_engine import MemoryEngine
+from ai_architect.memory.models import ExperienceOutcome, ExperienceType
 from ai_architect.patch_generator.patch_generator import PatchGenerator
 from ai_architect.patch_generator.patch_validator import PatchValidator
 from ai_architect.planner.planner import Planner
@@ -18,13 +22,21 @@ from ai_architect.providers.provider_manager import ProviderManager
 class ImprovementEngine(ImprovementEngineFacadeMixin):
     """High-level improvement orchestrator."""
 
-    def __init__(self) -> None:
+    def __init__(self, memory: MemoryEngine | None = None) -> None:
         self.analysis = AnalysisEngine()
         self.context_builder = AnalysisContextBuilder()
         self.planner = Planner()
         self.provider = ProviderManager()
 
         self.patch_generator = PatchGenerator()
+
+        # Memory of previous runs. Injectable so the tests can point it at a
+        # temporary directory instead of writing into the real repository.
+        self.memory = memory or MemoryEngine()
+
+        # Turns "the patch is structurally valid" into "the patch is
+        # acceptable", which are not the same thing.
+        self.decision = DecisionEngine()
 
         # Compatibility aliases for the existing public API.
         self.builder = self.patch_generator.builder
@@ -54,6 +66,8 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             }
 
         instruction = instruction or "Improve code quality"
+
+        comenzado = time.monotonic()
 
         analysis = self.analysis.analyze(repository)
 
@@ -85,12 +99,39 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
 
         structurally_valid = self.validate_structure(patch)
 
-        # Structural validation is not approval.
-        patch.approved = False
+        # Structural validation is not approval: a well-formed patch can still
+        # be a bad idea. The decision engine weighs the analysis metrics, the
+        # findings and the size of the change, and it is what decides.
+        decision = self.decision.decide(
+            metrics=self.metrics(analysis),
+            findings=self.recommendations(analysis),
+            task={
+                "instruction": instruction,
+                "files": patch.total_files,
+                "tasks": plan.total_tasks,
+            },
+            tests_ok=bool(structurally_valid),
+            repository=str(repository),
+        )
+
+        patch.approved = bool(decision.get("approved", False))
 
         output = self.save_patch(
             patch,
             repository,
+        )
+
+        duracion = round(time.monotonic() - comenzado, 3)
+
+        experiencia = self._recordar(
+            repository=repository,
+            file=file,
+            instruction=instruction,
+            structurally_valid=bool(structurally_valid),
+            patch=patch,
+            plan_tasks=plan.total_tasks,
+            duracion=duracion,
+            decision=decision,
         )
 
         return {
@@ -104,7 +145,55 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             "instruction": instruction,
             "target_file": file,
             "analysis": self.summary(analysis),
+            "duration": duracion,
+            "experience_id": experiencia,
+            "decision": decision,
         }
+
+    def _recordar(
+        self,
+        *,
+        repository: Path,
+        file: str | None,
+        instruction: str,
+        structurally_valid: bool,
+        patch: Any,
+        plan_tasks: int,
+        duracion: float,
+        decision: dict[str, Any],
+    ) -> str | None:
+        """Record the run in memory so future ones can learn from it.
+
+        Recording must never break the improvement: if memory fails, the patch
+        is already generated and saved, and losing one entry is not worth
+        aborting for. The failure is reported in the result, not raised.
+        """
+        try:
+            experiencia = self.memory.record(
+                repository=str(repository),
+                filename=file or "",
+                instruction=instruction,
+                provider=self.provider.name,
+                outcome=(
+                    ExperienceOutcome.SUCCESS
+                    if structurally_valid
+                    else ExperienceOutcome.FAILURE
+                ),
+                confidence=float(decision.get("confidence", 0.0)),
+                experience_type=ExperienceType.EXECUTION,
+                metadata={
+                    "patch_id": patch.id,
+                    "files": patch.total_files,
+                    "tasks": plan_tasks,
+                    "duration": duracion,
+                    "decision": decision.get("decision"),
+                    "approved": patch.approved,
+                },
+            )
+        except Exception:  # noqa: BLE001 - la mejora ya esta hecha
+            return None
+
+        return str(experiencia.id)
 
     def _prompt(
         self,
