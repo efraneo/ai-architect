@@ -3,6 +3,17 @@
 > Estado: Auditoría Arquitectónica
 > Versión: 1.0
 
+> **Lo que quedó en pie:** la cadena conectada es
+> `ExecutionEngine` -> `ExecutionPipeline` -> `pipeline_state`, que es
+> por donde pasa `architect execute`. Se podó la mitad huérfana
+> (`ExecutionOrchestrator`, `TaskExecutor`, `ExecutionResult`,
+> `ExecutionTask`, `ExecutionContext`, `RepositoryMetrics` y un
+> `__main__` que duplicaba el comando): el orquestador esperaba tareas
+> con `metadata["file"]` apuntando a un parche, y el `Planner` no
+> produce eso — al correrlo con un plan real moría con
+> `Permission denied: '.'` en la primera tarea.
+> Para ejecutar varias mejoras en orden está `architect auto`.
+
 ---
 
 # Objetivo

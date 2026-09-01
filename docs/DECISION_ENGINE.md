@@ -3,6 +3,11 @@
 > Estado: Diseño Institucional
 > Versión: 1.0
 
+> **Lo que quedó en pie:** `DecisionEngine` -> `AutoDecision` encadena
+> calidad, riesgo, confianza, puntuación y política, sobre un
+> `AIContext` de `core/`. Se podó `decision_context.py`, que duplicaba
+> ese `AIContext` sin que nadie lo usara.
+
 ---
 
 # Objetivo
