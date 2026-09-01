@@ -20,7 +20,7 @@ from ai_architect.improver.diff_reader import (
 )
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
 from ai_architect.improver.prompt_builder import construir as construir_prompt
-from ai_architect.improver.verification import verificar
+from ai_architect.improver.verification import estado_del_arbol, verificar
 from ai_architect.memory.memory_engine import MemoryEngine
 from ai_architect.memory.models import ExperienceOutcome, ExperienceType
 from ai_architect.notifier.improvement_notice import avisar
@@ -206,6 +206,12 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             patch=patch,
             diff=improvement,
             instruction=instruction,
+            ya_aplicado=bool(
+                verificacion
+                and verificacion["applied"]
+                and not verificacion["reverted"]
+            ),
+            deshecho=bool(verificacion and verificacion["reverted"]),
         )
 
         duracion = round(time.monotonic() - comenzado, 3)
@@ -240,6 +246,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             "commit_reason": commit["reason"],
             "tests": pruebas,
             "verification": verificacion,
+            "working_tree": estado_del_arbol(verificacion),
             "agents": inspeccion,
         }
 
@@ -305,6 +312,8 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         patch: Any,
         diff: str,
         instruction: str,
+        ya_aplicado: bool = False,
+        deshecho: bool = False,
     ) -> dict[str, Any]:
         """Apply and commit the patch, only when all three conditions hold.
 
@@ -324,13 +333,29 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         if not patch.approved:
             return {"committed": False, "reason": "el parche no fue aprobado"}
 
+        # Si la verificación lo deshizo, el árbol de trabajo ya no lo tiene:
+        # intentar commitearlo lo volvería a aplicar. Antes se llegaba aquí y
+        # el fallo se reportaba como "el parche no se pudo aplicar", que hace
+        # pensar en un parche mal formado en vez de en uno que rompía las
+        # pruebas.
+        if deshecho:
+            return {
+                "committed": False,
+                "reason": "el cambio se deshizo porque rompía las pruebas",
+            }
+
         git = self.git or GitManager(repository)
 
         if not git.is_repository():
             return {"committed": False, "reason": "el destino no es un repositorio git"}
 
         try:
-            if not git.apply_patch(diff):
+            # Con `--apply` el parche ya está en el árbol de trabajo, y
+            # verificado. Aplicarlo otra vez falla, y el motivo que se
+            # devolvía —"el parche no se pudo aplicar"— hacía creer que el
+            # cambio era malo cuando era exactamente al revés: un parche
+            # bueno, con las pruebas en verde, no llegaba a commitearse.
+            if not ya_aplicado and not git.apply_patch(diff):
                 return {"committed": False, "reason": "el parche no se pudo aplicar"}
 
             mensaje = f"AI Architect: {instruction}".strip()

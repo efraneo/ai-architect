@@ -112,6 +112,31 @@ def verificar(
     }
 
 
+def estado_del_arbol(verificacion: dict[str, Any] | None) -> str:
+    """En qué quedaron los archivos del usuario. Es lo primero que quiere
+    saber quien ejecuta esto sobre su propio repositorio.
+
+    - ``untouched``: no se aplicó nada, el repositorio está como estaba.
+    - ``restored``: se aplicó, rompía las pruebas y se deshizo.
+    - ``modified``: se aplicó y **sigue puesto**. Hay que revisarlo.
+    - ``dirty``: se aplicó, había que deshacerlo y no se pudo. Lo peor, y
+      por eso tiene nombre propio en vez de confundirse con `modified`.
+    """
+    if verificacion is None or not verificacion["applied"]:
+        return "untouched"
+
+    if verificacion["reverted"]:
+        return "restored"
+
+    # Si hubo que deshacerlo y no se pudo, el árbol quedó tocado con un
+    # cambio que rompe las pruebas: eso no es lo mismo que un cambio bueno
+    # esperando revisión.
+    if "rompe" in str(verificacion.get("reason", "")):
+        return "dirty"
+
+    return "modified"
+
+
 def _sin_aplicar(antes: dict[str, Any], motivo: str) -> dict[str, Any]:
     """No se llegó a tocar nada: las pruebas siguen siendo las de antes."""
     return {
