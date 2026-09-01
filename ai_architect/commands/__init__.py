@@ -6,9 +6,10 @@ Public API.
 
 from __future__ import annotations
 
-from . import analyze, doctor, execute, improve, review
+from . import agents, analyze, doctor, execute, improve, review
 
 __all__ = [
+    "agents",
     "analyze",
     "review",
     "improve",

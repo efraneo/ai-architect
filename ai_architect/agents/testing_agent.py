@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_agent import BaseAgent
+from .scope import archivos_py
 
 
 class TestingAgent(BaseAgent):
@@ -15,29 +16,13 @@ class TestingAgent(BaseAgent):
     ) -> dict[str, Any]:
         project_path = Path(project)
 
-        test_files = list(
-            project_path.rglob(
-                "test_*.py",
-            )
-        )
+        source_files = archivos_py(project_path)
 
-        pytest_files = list(
-            project_path.rglob(
-                "*pytest*.py",
-            )
-        )
+        test_files = [f for f in source_files if f.name.startswith("test_")]
 
-        unittest_files = list(
-            project_path.rglob(
-                "*unittest*.py",
-            )
-        )
+        pytest_files = [f for f in source_files if "pytest" in f.name]
 
-        source_files = list(
-            project_path.rglob(
-                "*.py",
-            )
-        )
+        unittest_files = [f for f in source_files if "unittest" in f.name]
 
         production = [file for file in source_files if "test" not in file.name.lower()]
 

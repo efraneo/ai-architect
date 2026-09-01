@@ -11,6 +11,7 @@ import json
 import sys
 
 from ai_architect.commands import (
+    agents,
     analyze,
     doctor,
     execute,
@@ -34,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
             "improve",
             "execute",
             "doctor",
+            "agents",
         ],
     )
 
@@ -66,6 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--instruction",
         default="Improve code quality",
         help="Instruction for improve command",
+    )
+
+    parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="For agents: also run the AI agents (five provider calls)",
     )
 
     parser.add_argument(
@@ -142,6 +150,16 @@ def main():
             args.project,
             file=args.file,
             instruction=args.instruction,
+        )
+
+    # =====================================================
+    # Agents
+    # =====================================================
+
+    elif args.command == "agents":
+        result = agents.run(
+            args.project,
+            ai=args.ai,
         )
 
     # =====================================================
