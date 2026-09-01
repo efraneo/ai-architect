@@ -50,7 +50,6 @@ ai_architect/
 ├── swarm
 ├── testing
 ├── test_runner
-├── workflows
 └── workspace
 ```
 
@@ -405,7 +404,6 @@ Ejecución de pruebas.
 
 ---
 
-# workflows
 
 ## Objetivo
 
@@ -448,7 +446,6 @@ Gestión del espacio de trabajo.
 | swarm | Experimental |
 | testing | Estable |
 | test_runner | Estable |
-| workflows | Auditoría |
 | workspace | Estable |
 
 ---
