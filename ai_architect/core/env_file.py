@@ -103,3 +103,51 @@ def cargar(env_file: str | Path = ".env") -> list[str]:
         cargadas.append(clave)
 
     return cargadas
+
+
+def raiz_del_paquete() -> Path:
+    """La carpeta del proyecto instalado, subiendo desde este archivo.
+
+    Con ``pip install -e .`` es el propio repositorio, que es donde vive el
+    ``.env`` de verdad.
+    """
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def cargar_todo(project: str | Path | None = None) -> list[str]:
+    """El ``.env`` de la sesión, el del proyecto analizado y el del paquete.
+
+    Buscarlo solo en el directorio actual hace que la clave dependa de
+    **desde dónde** se llame. Lanzando el arquitecto con un acceso directo,
+    o con un ``.cmd`` desde otra carpeta, el ``.env`` del repositorio queda
+    fuera de alcance y el proveedor contesta ``not_configured`` teniendo la
+    clave escrita a dos carpetas de distancia.
+
+    El orden es el de la prioridad, y ninguno pisa al anterior: lo que ya
+    está exportado manda sobre los tres.
+    """
+    sitios: list[Path] = [Path.cwd()]
+
+    if project:
+        sitios.append(Path(project))
+
+    sitios.append(raiz_del_paquete())
+
+    cargadas: list[str] = []
+    vistos: set[Path] = set()
+
+    for sitio in sitios:
+        try:
+            carpeta = sitio.resolve()
+
+        except OSError:
+            continue
+
+        if carpeta in vistos:
+            continue
+
+        vistos.add(carpeta)
+
+        cargadas.extend(cargar(carpeta / ".env"))
+
+    return cargadas

@@ -37,7 +37,7 @@ from ai_architect.commands import (
     review,
     voz,
 )
-from ai_architect.core.env_file import cargar
+from ai_architect.core.env_file import cargar_todo
 
 
 @dataclass(frozen=True)
@@ -334,15 +334,16 @@ def print_result(
 
 def main():
 
-    # Antes de nada, el `.env` del directorio desde el que se ejecuta. Sin
-    # esto había que exportar la clave del proveedor a mano en cada sesión,
-    # aunque estuviera escrita en el archivo que el propio `.env.example`
-    # sugiere. Lo ya exportado manda.
-    cargar()
-
     parser = build_parser()
 
     args = parser.parse_args()
+
+    # El `.env`: el de la sesión, el del proyecto que se analiza y el del
+    # propio paquete. Mirar solo el directorio actual hacía que la clave
+    # dependiera de desde dónde se llame — un acceso directo o un `.cmd`
+    # desde otra carpeta y el proveedor contestaba `not_configured`
+    # teniendo la clave a dos carpetas. Lo ya exportado manda sobre todo.
+    cargar_todo(getattr(args, "project", None))
 
     comando = PIDE if args.command == PIDE.nombre else POR_NOMBRE.get(args.command)
 

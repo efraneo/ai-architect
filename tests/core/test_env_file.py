@@ -20,6 +20,7 @@ from unittest import mock
 
 import pytest
 
+from ai_architect.core import env_file
 from ai_architect.core.env_file import cargar, leer, valor
 
 
@@ -99,3 +100,72 @@ def test_el_entorno_manda_sobre_el_archivo(tmp_path: Path) -> None:
 
     with mock.patch.dict(os.environ, {"A": "del-entorno"}):
         assert valor("A", archivo) == "del-entorno"
+
+
+# --- Que la clave no dependa de desde dónde llames --------------------------
+#
+# Lanzando el arquitecto con un `.cmd` desde otra carpeta, el `.env` del
+# repositorio quedaba fuera de alcance y el proveedor contestaba
+# `not_configured` teniendo la clave escrita a dos carpetas de distancia.
+
+
+def test_carga_el_env_del_proyecto_aunque_no_sea_el_directorio_actual(
+    tmp_path, monkeypatch
+) -> None:
+    proyecto = tmp_path / "proyecto"
+    proyecto.mkdir()
+    (proyecto / ".env").write_text("CLAVE_DEL_PROYECTO=si\n", encoding="utf-8")
+
+    otra = tmp_path / "otra"
+    otra.mkdir()
+    monkeypatch.chdir(otra)
+    monkeypatch.delenv("CLAVE_DEL_PROYECTO", raising=False)
+
+    env_file.cargar_todo(proyecto)
+
+    assert os.environ["CLAVE_DEL_PROYECTO"] == "si"
+
+
+def test_el_del_directorio_actual_manda_sobre_el_del_proyecto(
+    tmp_path, monkeypatch
+) -> None:
+    """Estar dentro de una carpeta es decir que esa es la de esta sesión."""
+    proyecto = tmp_path / "proyecto"
+    proyecto.mkdir()
+    (proyecto / ".env").write_text("QUIEN=proyecto\n", encoding="utf-8")
+
+    aqui = tmp_path / "aqui"
+    aqui.mkdir()
+    (aqui / ".env").write_text("QUIEN=sesion\n", encoding="utf-8")
+
+    monkeypatch.chdir(aqui)
+    monkeypatch.delenv("QUIEN", raising=False)
+
+    env_file.cargar_todo(proyecto)
+
+    assert os.environ["QUIEN"] == "sesion"
+
+
+def test_lo_exportado_a_mano_manda_sobre_los_tres(tmp_path, monkeypatch) -> None:
+    (tmp_path / ".env").write_text("QUIEN=archivo\n", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("QUIEN", "a-mano")
+
+    env_file.cargar_todo()
+
+    assert os.environ["QUIEN"] == "a-mano"
+
+
+def test_una_carpeta_que_no_existe_no_revienta(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    assert env_file.cargar_todo(tmp_path / "no-existe") == []
+
+
+def test_la_raiz_del_paquete_es_la_del_repositorio() -> None:
+    """De ahí sale el `.env` cuando se llama desde cualquier otro sitio."""
+    raiz = env_file.raiz_del_paquete()
+
+    assert (raiz / "ai_architect").is_dir()
+    assert (raiz / "pyproject.toml").is_file()

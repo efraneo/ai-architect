@@ -120,9 +120,9 @@ def _asegurar_entorno() -> None:
     if os.getenv("OPENAI_API_KEY"):
         return
 
-    from ai_architect.core.env_file import cargar
+    from ai_architect.core.env_file import cargar_todo
 
-    cargar()
+    cargar_todo()
 
 
 def elegir(preferido: str = "") -> str:
