@@ -92,12 +92,17 @@ COMANDOS: tuple[Comando, ...] = (
             a.project,
             file=a.file,
             instruction=a.instruction,
+            apply=a.apply,
         ),
     ),
     Comando(
         "auto",
         "Varias mejoras en orden de prioridad",
-        lambda a: auto.run(a.project, instructions=a.instructions),
+        lambda a: auto.run(
+            a.project,
+            instructions=a.instructions,
+            apply=a.apply,
+        ),
         requiere=(("instructions", "auto requires --instructions <one> <two> ..."),),
     ),
     Comando(
@@ -188,6 +193,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--ai",
         action="store_true",
         help="For agents: also run the AI agents (five provider calls)",
+    )
+
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help=(
+            "For improve/auto: apply the patch, re-run the tests, and undo it "
+            "if they get worse. Off by default: it modifies your files"
+        ),
     )
 
     parser.add_argument(

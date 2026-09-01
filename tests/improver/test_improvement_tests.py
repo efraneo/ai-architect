@@ -189,3 +189,65 @@ def test_un_fallo_al_ejecutar_no_cuenta_como_exito(repo: Path, tmp_path: Path) -
         motor.improve(repo, instruction="algo")
 
     assert espia.call_args.kwargs["tests_ok"] is False
+
+
+# --- Modificar y volver a ejecutar ------------------------------------------
+
+
+def test_sin_apply_las_pruebas_siguen_siendo_las_de_antes(
+    repo: Path, tmp_path: Path
+) -> None:
+    """El comportamiento de siempre: no se toca el árbol de trabajo."""
+    motor = motor_con(tmp_path, runner_falso(exito=True))
+
+    with mock.patch.dict(os.environ, {"RUN_TESTS": "true"}):
+        resultado = motor.improve(repo, instruction="algo")
+
+    assert resultado["verification"] is None
+    assert (repo / "modulo.py").read_text(encoding="utf-8") == "valor = 1\n"
+
+
+def test_con_apply_se_verifica(repo: Path, tmp_path: Path) -> None:
+    motor = motor_con(tmp_path, runner_falso(exito=True))
+    espia = mock.Mock(
+        return_value={
+            "applied": True,
+            "reverted": False,
+            "reason": "ok",
+            "tests_before": {"success": True},
+            "tests": {"executed": True, "success": True, "failed": 0},
+        }
+    )
+
+    with mock.patch(
+        "ai_architect.improver.improvement_engine.verificar",
+        espia,
+    ):
+        with mock.patch.dict(os.environ, {"RUN_TESTS": "true"}):
+            resultado = motor.improve(repo, instruction="algo", apply=True)
+
+    espia.assert_called_once()
+    assert resultado["verification"]["applied"] is True
+
+
+def test_la_decision_recibe_las_pruebas_de_despues(repo: Path, tmp_path: Path) -> None:
+    """El fallo que esto arregla: `tests_ok` decía que el repositorio estaba
+    en verde ANTES del cambio, no que el cambio fuera bueno."""
+    motor = motor_con(tmp_path, runner_falso(exito=True))
+    decision = mock.Mock(return_value={"approved": False, "confidence": 0.1})
+    motor.decision.decide = decision  # type: ignore[method-assign]
+
+    with mock.patch(
+        "ai_architect.improver.improvement_engine.verificar",
+        return_value={
+            "applied": True,
+            "reverted": True,
+            "reason": "rompe las pruebas",
+            "tests_before": {"executed": True, "success": True},
+            "tests": {"executed": True, "success": False, "failed": 3},
+        },
+    ):
+        with mock.patch.dict(os.environ, {"RUN_TESTS": "true"}):
+            motor.improve(repo, instruction="algo", apply=True)
+
+    assert decision.call_args.kwargs["tests_ok"] is False

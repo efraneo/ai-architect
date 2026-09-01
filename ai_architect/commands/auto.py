@@ -28,6 +28,7 @@ def run(
     project: str,
     instructions: list[str],
     engine: ImprovementEngine | None = None,
+    apply: bool = False,
 ) -> dict:
     """Ejecuta varias instrucciones sobre el mismo repositorio.
 
@@ -74,7 +75,7 @@ def run(
             "name": instruccion,
             "priority": total - posicion,
             "risk": 0,
-            "callback": _tarea(mejorador, repository, instruccion),
+            "callback": _tarea(mejorador, repository, instruccion, apply),
         }
         for posicion, instruccion in enumerate(instructions)
     ]
@@ -98,12 +99,17 @@ def _tarea(
     mejorador: ImprovementEngine,
     repository: Path,
     instruccion: str,
+    apply: bool = False,
 ):
     """Cierra sobre la instrucción: sin esto, todas las tareas correrían la
     última (el fallo clásico de capturar la variable del bucle)."""
 
     def ejecutar() -> dict[str, Any]:
-        return mejorador.improve(repository, instruction=instruccion)
+        return mejorador.improve(
+            repository,
+            instruction=instruccion,
+            apply=apply,
+        )
 
     return ejecutar
 

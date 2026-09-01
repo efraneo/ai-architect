@@ -17,6 +17,7 @@ def run(
     project: str,
     file: str | None = None,
     instruction: str | None = None,
+    apply: bool = False,
 ) -> dict:
     """
     Run the improvement command against a repository.
@@ -45,6 +46,7 @@ def run(
             str(repository),
             instruction=instruction,
             file=file,
+            apply=apply,
         )
 
     except Exception as exc:

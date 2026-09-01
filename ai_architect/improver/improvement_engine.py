@@ -20,6 +20,7 @@ from ai_architect.improver.diff_reader import (
 )
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
 from ai_architect.improver.prompt_builder import construir as construir_prompt
+from ai_architect.improver.verification import verificar
 from ai_architect.memory.memory_engine import MemoryEngine
 from ai_architect.memory.models import ExperienceOutcome, ExperienceType
 from ai_architect.notifier.improvement_notice import avisar
@@ -102,6 +103,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         repository: str | Path,
         instruction: str | None = None,
         file: str | None = None,
+        apply: bool = False,
     ) -> dict[str, Any]:
         repository = Path(repository).resolve()
 
@@ -154,6 +156,19 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         structurally_valid = self.validate_structure(patch)
 
         pruebas = self._ejecutar_pruebas(repository)
+
+        # Con `apply`, el parche se aplica y las pruebas se vuelven a
+        # ejecutar: `pruebas` pasa a decir cómo quedó el repositorio DESPUÉS
+        # del cambio, no antes. Sin él, `tests_ok` solo dice que el
+        # repositorio estaba en verde, que es lo que hacía siempre.
+        verificacion = (
+            verificar(repository, improvement, pruebas, self._ejecutar_pruebas)
+            if apply
+            else None
+        )
+
+        if verificacion is not None:
+            pruebas = verificacion["tests"]
 
         inspeccion = self._inspeccionar(repository)
 
@@ -224,6 +239,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             "committed": commit["committed"],
             "commit_reason": commit["reason"],
             "tests": pruebas,
+            "verification": verificacion,
             "agents": inspeccion,
         }
 
