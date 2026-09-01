@@ -32,6 +32,20 @@ DIFF = """--- a/modulo.py
 """
 
 
+def runner_falso(exito: bool = True):
+    """A TestRunner that does not spawn a real pytest inside this one."""
+    runner = mock.Mock()
+    runner.run = mock.Mock(
+        return_value=mock.Mock(
+            success=exito,
+            passed=10 if exito else 7,
+            failed=0 if exito else 3,
+            duration=0.1,
+        )
+    )
+    return runner
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     (tmp_path / "modulo.py").write_text("valor = 1\n", encoding="utf-8")
@@ -50,6 +64,7 @@ def motor_con(tmp_path: Path, git=None, aprueba: bool = True) -> ImprovementEngi
     motor = ImprovementEngine(
         memory=MemoryEngine(storage=tmp_path / "memoria.json"),
         git=git or git_falso(),
+        tests=runner_falso(),
     )
     motor.provider.generate = mock.Mock(return_value=DIFF)  # type: ignore[method-assign]
     motor.decision.decide = mock.Mock(  # type: ignore[method-assign]

@@ -1,10 +1,13 @@
 """
 Compatibility Architect Agent.
 
-This module is the AgentManager-facing adapter for the LLM architecture
-capability.  The canonical LLM implementation lives under ``ai_architect.llm``;
-this adapter preserves the common ``BaseAgent.run(context)`` contract used by
-AgentManager.
+This module is the AgentManager-facing adapter for the architecture
+capability.  It talks to the provider through ``ProviderManager`` and keeps
+the common ``BaseAgent.run(context)`` contract used by AgentManager.
+
+It used to point at ``ai_architect.llm``, which held an earlier and simpler
+version of the providers. That package was removed; the code had already
+migrated to ``ai_architect.providers``.
 """
 
 from __future__ import annotations
