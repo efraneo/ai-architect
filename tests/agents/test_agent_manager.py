@@ -1,6 +1,6 @@
 """``agents/`` was orphaned: nobody built an ``AgentManager``.
 
-``execute()`` runs the seven static agents **and** the five AI ones, which
+``execute()`` runs the eleven static agents **and** the five AI ones, which
 means five provider calls -- too expensive to hang off every improvement.
 ``inspect()`` is the free half, and ``findings_de()`` turns it into the
 findings list the decision engine reads.
@@ -20,9 +20,17 @@ from ai_architect.agents.agent_manager import AgentManager
 
 @pytest.fixture
 def proyecto(tmp_path: Path) -> Path:
+    """A small but complete project: nothing here should raise a finding."""
     (tmp_path / "modulo.py").write_text("valor = 1\n", encoding="utf-8")
     (tmp_path / "test_modulo.py").write_text("def test_x(): pass\n", encoding="utf-8")
     (tmp_path / "requirements.txt").write_text("httpx\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text("# 1.0\n", encoding="utf-8")
+
+    flujos = tmp_path / ".github" / "workflows"
+    flujos.mkdir(parents=True)
+    (flujos / "ci.yml").write_text("on: push\n", encoding="utf-8")
+
     return tmp_path
 
 
@@ -34,7 +42,7 @@ def manager() -> AgentManager:
 # --- La inspección gratuita -------------------------------------------------
 
 
-def test_estan_los_siete_agentes_estaticos(
+def test_estan_los_once_agentes_estaticos(
     manager: AgentManager, proyecto: Path
 ) -> None:
     inspeccion = manager.inspect(str(proyecto))
@@ -47,6 +55,10 @@ def test_estan_los_siete_agentes_estaticos(
         "dependencies",
         "licenses",
         "git",
+        "bugs",
+        "performance",
+        "devops",
+        "release",
     }
 
 
@@ -125,6 +137,31 @@ def test_el_hallazgo_dice_de_que_agente_viene(
     assert all(h.startswith("security:") for h in hallazgos)
 
 
+def test_el_hallazgo_dice_en_que_archivo_esta(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    """ "security: Password Assignment" a secas no sirve para nada."""
+    (proyecto / "config.py").write_text('password = "x"\n', encoding="utf-8")
+
+    hallazgos = manager.findings_de(manager.inspect(str(proyecto)))
+
+    assert any("config.py" in h for h in hallazgos)
+
+
+def test_cuando_hay_linea_tambien_se_dice(
+    manager: AgentManager, proyecto: Path
+) -> None:
+    """A bug hunter that does not say where is not much of a hunter."""
+    (proyecto / "roto.py").write_text(
+        "try:\n    pass\nexcept Exception:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    hallazgos = manager.findings_de(manager.inspect(str(proyecto)))
+
+    assert any("roto.py:3" in h for h in hallazgos)
+
+
 def test_un_agente_en_error_es_un_hallazgo(manager: AgentManager) -> None:
     hallazgos = manager.findings_de({"git": {"status": "error", "error": "x"}})
 
@@ -174,4 +211,6 @@ def test_el_escaner_no_se_delata_a_si_mismo(
     """Its own pattern table matches its own patterns."""
     inspeccion = manager.inspect(str(Path("ai_architect/agents").resolve()))
 
-    assert manager.findings_de(inspeccion) == []
+    hallazgos = manager.findings_de(inspeccion)
+
+    assert [h for h in hallazgos if h.startswith("security:")] == []

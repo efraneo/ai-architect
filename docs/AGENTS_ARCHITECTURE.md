@@ -1,399 +1,141 @@
-# QUANT AI Architect — Agents Architecture
+# QUANT AI Architect — Arquitectura de agentes
 
-> Estado: Diseño Institucional
-> Versión: 1.0
-
----
-
-# Objetivo
-
-El subsistema de agentes divide las responsabilidades del framework en componentes especializados.
-
-Cada agente posee una única responsabilidad y coopera con otros agentes para resolver tareas complejas.
-
-La arquitectura sigue el principio:
-
-> Un agente = una especialidad.
+> Estado: **lo que hay en el código**, no lo que se planeó.
+> Actualizado al podar los agentes huérfanos.
 
 ---
 
-# Filosofía
+## Cómo leer este documento
 
-Ningún agente debe intentar resolver todo.
+La versión anterior describía treinta y cuatro agentes organizados bajo un
+`MasterAgent`. Esa arquitectura nunca llegó a funcionar: doce de esos agentes
+**no se podían ni instanciar** —heredaban de `BaseAgent`, que declara `run`
+abstracto, y ninguno lo implementaba—, y al `MasterAgent` no lo construía
+nadie.
 
-Cada uno conoce únicamente su dominio.
-
-La coordinación se realiza mediante los motores superiores.
-
----
-
-# Arquitectura General
-
-```
-                    Master Agent
-                         │
- ┌───────────────────────┼────────────────────────┐
- │                       │                        │
- ▼                       ▼                        ▼
-Architecture        Development            Infrastructure
-     │                    │                      │
-     ▼                    ▼                      ▼
-Security           Testing               DevOps
-Database           Documentation         Git
-Performance        Quality               Dependencies
-ML                 Release               Trading
-```
+Aquí solo está lo que existe y se ejecuta hoy.
 
 ---
 
-# Clasificación
+## El orquestador
 
-Los agentes se organizan por dominios.
+`AgentManager` (`agents/agent_manager.py`) es el único orquestador. Tiene dos
+mitades, y **la diferencia entre ellas es dinero**:
 
----
+| | Qué corre | Coste |
+|---|---|---|
+| `inspect(repositorio)` | Los once agentes estáticos | Cero: no toca ningún proveedor |
+| `execute(repositorio)` | Los once estáticos **más** los cinco de IA | Cinco llamadas al proveedor |
 
-# Arquitectura
+`ImprovementEngine.improve()` llama a `inspect()`, nunca a `execute()`:
+colgar los cinco agentes de IA de cada mejora multiplicaría por cinco el
+coste de cada ejecución. `execute()` se pide a propósito, con
+`architect agents --ai`.
 
-## ArchitectureAgent
-
-Responsabilidad
-
-Diseñar la estructura del proyecto.
-
-Analiza:
-
-- capas
-- módulos
-- dependencias
-- arquitectura
+`findings_de(inspeccion)` aplana el informe a la lista de hallazgos que lee
+el motor de decisión, con archivo y línea cuando el agente los da.
 
 ---
 
-## TradingArchitectAgent
+## Los once agentes estáticos
 
-Especialización para sistemas financieros.
+No usan IA. Leen el repositorio y devuelven un diccionario con `status` y,
+los que encuentran algo, una lista `findings`.
 
-Evalúa:
+| Agente | Qué mira |
+|---|---|
+| `ProjectMetricsAgent` | Archivos, líneas, lenguajes, tamaño, los mayores |
+| `ArchitectureAgent` | Módulos sobredimensionados, anidamiento, archivos vacíos |
+| `TestingAgent` | Archivos de prueba frente a archivos de producción |
+| `SecurityAgent` | Secretos por expresión regular: claves AWS, tokens, claves privadas |
+| `DependencyAgent` | `requirements.txt`, `pyproject.toml`, Poetry, Pipenv |
+| `LicenseAgent` | Licencia declarada y de qué tipo |
+| `GitAgent` | Estado del repositorio, ramas, historial |
+| `BugHunterAgent` | `except:` pelado, `except` que solo hace `pass`, TODO/FIXME, argumentos mutables por defecto |
+| `PerformanceAgent` | `iterrows`, `range(len(...))`, concatenar cadenas en bucle |
+| `DevOpsAgent` | Dockerfile, flujos de CI, empaquetado |
+| `ReleaseAgent` | CHANGELOG y versión declarada |
 
-- motores
-- estrategias
-- separación de capas
+### Qué no miran
 
----
+Todos comparten el filtro de `agents/scope.py`, construido sobre la lista de
+exclusión del propio proyecto (`filesystem/constants.py`): fuera `.venv`,
+`node_modules`, las cachés y los binarios.
 
-# Desarrollo
+No es un detalle. Sin ese filtro, sobre este mismo repositorio el
+`SecurityAgent` reportaba quince secretos filtrados —los quince dentro de
+`.venv`, incluido `ruff.exe`, donde la expresión regular casaba con bytes
+crudos— y `ProjectMetricsAgent` contaba 18.309 archivos y 1,9 M de líneas
+que no son del proyecto.
 
-## BackendAgent
-
-Responsabilidad
-
-Generar y modificar código backend.
-
----
-
-## RefactorAgent
-
-Responsabilidad
-
-Refactorizaciones estructurales.
-
----
-
-## DocumentationWriterAgent
-
-Responsabilidad
-
-Generación automática de documentación.
+Un agente que reporta las dependencias de otro no ayuda: mete ruido en la
+decisión.
 
 ---
 
-## APIAgent
+## Los cinco agentes de IA
 
-Responsabilidad
+Reciben el contexto que dejaron los estáticos (`context.data`) y llaman al
+proveedor. Solo corren con `execute()`.
 
-Análisis de APIs.
-
-Incluye:
-
-- endpoints
-- contratos
-- integración
-
----
-
-# Calidad
-
-## CodeReviewerAgent
-
-Revisión de código.
+| Agente | Qué produce |
+|---|---|
+| `ArchitectAgent` | Lectura arquitectónica del proyecto |
+| `RefactorAgent` | Refactorizaciones propuestas |
+| `CodeReviewerAgent` | Revisión de código |
+| `TestAgent` | Pruebas que faltan |
+| `DocumentationAgent` | Análisis documental |
 
 ---
 
-## CodeQualityAgent
+## El contrato
 
-Calidad general.
+`BaseAgent` (`agents/base_agent.py`):
 
----
+- `run(context)` — **abstracto**. Todo agente lo implementa; los estáticos
+  delegan en `review()`.
+- `review(project)` — inspección estática. Los agentes de IA no la usan.
+- `health()`, `capabilities()`, `metadata()` — introspección.
 
-## DuplicateCodeAgent
-
-Duplicación.
-
----
-
-## PerformanceAgent
-
-Rendimiento.
+Un agente que no implementa `run` no se puede construir. Eso fue exactamente
+lo que dejó doce agentes inservibles sin que nadie se enterara: como nadie
+los construía, el `TypeError` nunca llegaba a saltar.
 
 ---
 
-## PerformanceOptimizerAgent
+## Qué se podó y por qué
 
-Optimización.
+Quince agentes se borraron. En todos los casos el módulo conectado hacía lo
+mismo mejor, o el huérfano no hacía nada:
 
----
+| Podado | Por qué |
+|---|---|
+| `SecurityAuditorAgent` | Buscaba las subcadenas "secret", "token" y "password" en minúsculas sobre todo el archivo. `SecurityAgent` usa expresiones regulares de la forma real de un secreto |
+| `PerformanceOptimizerAgent` | Gemelo de `PerformanceAgent` con `.append(` como regla: saltaba en casi todos los archivos |
+| `RefactoringAgent`, `CodeQualityAgent` | Tercera y cuarta implementación de "archivos grandes"; `ArchitectureAgent` ya lo reporta |
+| `BackendAgent` | Contaba archivos `.py`; `ProjectMetricsAgent` ya lo hace |
+| `DocumentationWriterAgent` | Devolvía `documentation_ready: True` fijo y una lista estática |
+| `DuplicateCodeAgent` | El analizador ya reporta `duplicate_groups` |
+| `ProjectManagerAgent` | Analizador + contexto + planificador: es lo que hace `ImprovementEngine` |
+| `MasterAgent` | Orquestador paralelo superado por `AgentManager` |
+| `AgentRegistry` | Registro genérico que nadie usaba |
+| `APIAgent`, `DatabaseAgent`, `MLAgent`, `TradingAgent`, `TradingArchitectAgent` | Restos de QUANT TITAN: casaban subcadenas de dominio sobre el código en minúsculas |
 
-## BugHunterAgent
-
-Detección de errores.
-
----
-
-# Seguridad
-
-## SecurityAgent
-
-Análisis general.
-
----
-
-## SecurityAuditorAgent
-
-Auditoría profunda.
-
----
-
-## LicenseAgent
-
-Compatibilidad de licencias.
+Con ellos se fueron dos cadenas que solo colgaban de ahí:
+`development_loop/` (un ciclo autónomo paralelo, superado por
+`improver/improvement_engine.py`) y `self_improvement/` (cuyo único usuario
+era `CodeQualityAgent`; el aprendizaje real vive en `memory/` y
+`decision_engine/`).
 
 ---
 
-# Datos
-
-## DatabaseAgent
-
-Modelado.
-
-Migraciones.
-
-Optimización.
-
----
-
-# Testing
-
-## TestingAgent
-
-Generación y revisión de pruebas.
-
----
-
-# DevOps
-
-## DevOpsAgent
-
-CI/CD
-
-Docker
-
-Deployment
-
----
-
-# Git
-
-## GitAgent
-
-Commits
-
-Branches
-
-Diff
-
-Merge
-
----
-
-# Dependencias
-
-## DependencyAgent
-
-Analiza:
-
-- imports
-- paquetes
-- versiones
-- conflictos
-
----
-
-# Machine Learning
-
-## MLAgent
-
-Especialización para proyectos IA.
-
----
-
-# Gestión
-
-## ProjectManagerAgent
-
-Planificación.
-
----
-
-## ProjectMetricsAgent
-
-Métricas.
-
----
-
-## ReleaseAgent
-
-Versionado.
-
----
-
-# Documentación
-
-## DocumentationAgent
-
-Análisis documental.
-
----
-
-## DocumentationWriterAgent
-
-Generación automática.
-
----
-
-# Trading
-
-## TradingAgent
-
-Especialización para trading algorítmico.
-
----
-
-# Relaciones
-
-```
-Master
-
-↓
-
-Architecture
-
-↓
-
-Development
-
-↓
-
-Review
-
-↓
-
-Testing
-
-↓
-
-Security
-
-↓
-
-Decision
-
-↓
-
-Repository
+## Cómo se usa
+
+```bash
+architect agents .          # los once estáticos, gratis
+architect agents . --ai     # + los cinco de IA, cinco llamadas al proveedor
+architect agents . --json   # para encadenar con otras herramientas
 ```
 
----
-
-# Ciclo de Vida
-
-Cada agente sigue el mismo ciclo.
-
-```
-Receive Task
-
-↓
-
-Analyze
-
-↓
-
-Generate Result
-
-↓
-
-Validate
-
-↓
-
-Report
-```
-
----
-
-# Principios
-
-Todos los agentes deben ser:
-
-- independientes;
-- reutilizables;
-- especializados;
-- desacoplados;
-- auditables.
-
----
-
-# Evolución
-
-## Fase 1
-
-Agentes independientes.
-
----
-
-## Fase 2
-
-Comunicación entre agentes.
-
----
-
-## Fase 3
-
-Asignación automática de tareas.
-
----
-
-## Fase 4
-
-Especialización dinámica.
-
----
-
-## Fase 5
-
-Agentes autoevolutivos.
-
----
-
-# Estado
-
-En evolución continua.
+Lo que encuentran los estáticos entra también en la decisión de
+`architect improve`: un secreto filtrado pesa en si el parche se aprueba.

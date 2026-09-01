@@ -118,7 +118,6 @@ Actualmente no utiliza directamente el sistema basado en LLM.
 ## Archivo
 
 ```
-llm/llm_engine.py
 ```
 
 ## Estado
@@ -244,7 +243,6 @@ Automatizar ciclos completos de ejecución.
 ## Archivo
 
 ```
-development_loop/development_engine.py
 ```
 
 ## Estado

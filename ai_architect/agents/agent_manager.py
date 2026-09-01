@@ -11,13 +11,17 @@ from typing import Any
 from ai_architect.agents.agent_context import AgentContext
 from ai_architect.agents.architect_agent import ArchitectAgent
 from ai_architect.agents.architecture_agent import ArchitectureAgent
+from ai_architect.agents.bug_hunter_agent import BugHunterAgent
 from ai_architect.agents.code_reviewer_agent import CodeReviewerAgent
 from ai_architect.agents.dependency_agent import DependencyAgent
+from ai_architect.agents.devops_agent import DevOpsAgent
 from ai_architect.agents.documentation_agent import DocumentationAgent
 from ai_architect.agents.git_agent import GitAgent
 from ai_architect.agents.license_agent import LicenseAgent
+from ai_architect.agents.performance_agent import PerformanceAgent
 from ai_architect.agents.project_metrics_agent import ProjectMetricsAgent
 from ai_architect.agents.refactor_agent import RefactorAgent
+from ai_architect.agents.release_agent import ReleaseAgent
 from ai_architect.agents.security_agent import SecurityAgent
 from ai_architect.agents.test_agent import TestAgent
 from ai_architect.agents.testing_agent import TestingAgent
@@ -46,6 +50,10 @@ class AgentManager:
         self.dependencies = DependencyAgent()
         self.licenses = LicenseAgent()
         self.git = GitAgent()
+        self.bugs = BugHunterAgent()
+        self.performance = PerformanceAgent()
+        self.devops = DevOpsAgent()
+        self.release = ReleaseAgent()
 
         # AI agents
         self.architect = ArchitectAgent()
@@ -76,6 +84,10 @@ class AgentManager:
             "dependencies": self.dependencies,
             "licenses": self.licenses,
             "git": self.git,
+            "bugs": self.bugs,
+            "performance": self.performance,
+            "devops": self.devops,
+            "release": self.release,
         }
 
         salida: dict[str, Any] = {}
@@ -107,13 +119,22 @@ class AgentManager:
                 continue
 
             for hallazgo in datos.get("findings") or []:
-                if isinstance(hallazgo, dict):
-                    detalle = (
-                        hallazgo.get("issue") or hallazgo.get("type") or "hallazgo"
-                    )
-                    encontrados.append(f"{nombre}: {detalle}")
-                else:
+                if not isinstance(hallazgo, dict):
                     encontrados.append(f"{nombre}: {hallazgo}")
+                    continue
+
+                detalle = hallazgo.get("issue") or hallazgo.get("type") or "hallazgo"
+
+                # "security: Password Assignment" on its own is not
+                # actionable: without the file nobody can go and look.
+                donde = hallazgo.get("file")
+
+                if donde and hallazgo.get("line"):
+                    donde = f"{donde}:{hallazgo['line']}"
+
+                encontrados.append(
+                    f"{nombre}: {detalle}" + (f" ({donde})" if donde else "")
+                )
 
         return encontrados
 
@@ -160,6 +181,26 @@ class AgentManager:
         context.set(
             "git",
             self.git.review(repository),
+        )
+
+        context.set(
+            "bugs",
+            self.bugs.review(repository),
+        )
+
+        context.set(
+            "performance",
+            self.performance.review(repository),
+        )
+
+        context.set(
+            "devops",
+            self.devops.review(repository),
+        )
+
+        context.set(
+            "release",
+            self.release.review(repository),
         )
 
         # -------------------------------------------------
@@ -222,6 +263,10 @@ class AgentManager:
             self.dependencies.name,
             self.licenses.name,
             self.git.name,
+            self.bugs.name,
+            self.performance.name,
+            self.devops.name,
+            self.release.name,
             self.architect.name,
             self.refactor.name,
             self.reviewer.name,
