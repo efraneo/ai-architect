@@ -39,17 +39,33 @@ TIEMPO_LIMITE = 60
 # Dónde se buscan las voces de Piper, si están.
 CARPETA_VOCES = Path.home() / ".ai_architect" / "voces"
 
-# Voces masculinas de español latino que Piper publica. La primera que
-# aparezca es la que se usa.
+# Las voces masculinas de español latino que Piper publica de verdad. Se
+# comprobó contra el repositorio: `es_AR/daniel` no existe —la argentina es
+# `daniela`, femenina—, así que las dos opciones son mexicanas. La primera
+# que aparezca es la que se usa, salvo que el perfil diga otra.
 VOCES_PIPER = (
-    "es_MX-ald-medium.onnx",
-    "es_AR-daniel-high.onnx",
     "es_MX-claude-high.onnx",
+    "es_MX-ald-medium.onnx",
 )
 
-# Las voces de OpenAI que suenan masculinas. No están etiquetadas por acento:
-# suenan neutras, no latinas, y conviene decirlo.
+# Donde queda el binario si se instaló con el propio proyecto.
+PIPER_LOCAL = (
+    CARPETA_VOCES / "piper" / ("piper.exe" if sys.platform == "win32" else "piper")
+)
+
+# La voz elegida tras escuchar las cinco masculinas de OpenAI —ash, ballad,
+# echo, verse y onyx— y las cuatro de Piper en español.
 VOZ_OPENAI = "onyx"
+
+# `gpt-4o-mini-tts` acepta instrucciones de interpretación, y ahí está la
+# diferencia: sin ellas la voz suena neutra de informativo. Piper no tiene
+# ninguna voz masculina latina salvo dos mexicanas, así que pedir el acento
+# es lo más cerca que se llega sin pagar otro servicio.
+ACENTO = (
+    "Habla en español latinoamericano neutro, con acento colombiano suave. "
+    "Tono cálido, cercano y seguro, como un compañero de trabajo. "
+    "Ritmo natural, sin sonar a locutor."
+)
 
 # El PCM que devuelve OpenAI: 24 kHz, 16 bits, mono.
 HERCIOS_OPENAI = 24000
@@ -76,7 +92,7 @@ def motores() -> dict[str, Any]:
         "openai": {
             "disponible": bool(os.getenv("OPENAI_API_KEY")),
             "voz": VOZ_OPENAI,
-            "nota": "de pago por uso; suena neutro, no latino",
+            "nota": "de pago por uso; se le pide acento latinoamericano",
         },
         "windows": {
             "disponible": _windows_disponible(),
@@ -166,12 +182,30 @@ def _para_decir(texto: str) -> str:
 # --- Piper ------------------------------------------------------------------
 
 
+def _binario_piper() -> str | None:
+    """El ejecutable de Piper, esté en el PATH o instalado con el proyecto."""
+    if PIPER_LOCAL.is_file():
+        return str(PIPER_LOCAL)
+
+    return shutil.which("piper")
+
+
 def _piper_disponible() -> Path | None:
-    """La voz de Piper que se va a usar, si hay alguna."""
-    if not shutil.which("piper"):
+    """La voz de Piper que se va a usar, si hay alguna.
+
+    Se respeta la que el usuario haya elegido en su perfil; si no eligió,
+    la primera de la lista que esté descargada.
+    """
+    if _binario_piper() is None:
         return None
 
-    for nombre in VOCES_PIPER:
+    from ai_architect.core.perfil import cargar
+
+    suya = str(cargar().get("voz_piper") or "")
+
+    orden = (suya, *VOCES_PIPER) if suya else VOCES_PIPER
+
+    for nombre in orden:
         voz = CARPETA_VOCES / nombre
 
         if voz.is_file():
@@ -188,8 +222,13 @@ def _con_piper(texto: str) -> None:
 
     salida = Path(tempfile.gettempdir()) / "arquitecto.wav"
 
+    binario = _binario_piper()
+
+    if binario is None:
+        raise RuntimeError("no encontré el ejecutable de Piper")
+
     subprocess.run(
-        ["piper", "--model", str(voz), "--output_file", str(salida)],
+        [binario, "--model", str(voz), "--output_file", str(salida)],
         input=texto,
         capture_output=True,
         text=True,
@@ -221,6 +260,7 @@ def _con_openai(texto: str) -> None:
         model="gpt-4o-mini-tts",
         voice=VOZ_OPENAI,
         input=texto,
+        instructions=ACENTO,
         response_format="pcm",
     )
 

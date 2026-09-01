@@ -138,7 +138,7 @@ def test_openai_avisa_de_que_no_suena_latino() -> None:
     nota = voz.motores()["openai"]["nota"]
 
     assert "pago" in nota
-    assert "latino" in nota
+    assert "latinoamericano" in nota
 
 
 @pytest.mark.parametrize("voces", [None, "Sabina (es-MX, Female)"])
