@@ -94,6 +94,7 @@ def run(
     frase: str,
     si: bool = False,
     soy: str = "",
+    decir: bool = False,
     engine: Any = None,
 ) -> dict:
     """Interpreta la frase y ejecuta el comando que corresponda.
@@ -219,7 +220,7 @@ def run(
     except Exception as e:  # noqa: BLE001 - el comando falla, `pide` informa
         return _error(f"{nombre} falló: {e}", command=nombre)
 
-    return {
+    respuesta = {
         "success": True,
         "executed": True,
         "command": nombre,
@@ -227,6 +228,24 @@ def run(
         "explanation": _con_trato(explicar(nombre, resultado)),
         "result": resultado,
     }
+
+    return _decir_si_toca(respuesta, decir)
+
+
+def _decir_si_toca(respuesta: dict[str, Any], decir: bool) -> dict[str, Any]:
+    """Lee la respuesta en alto, si se pidió.
+
+    Que no haya voz no puede impedir que el comando sirva: la respuesta ya
+    está escrita en la pantalla. Por eso el fallo se anota y no se lanza.
+    """
+    if not decir:
+        return respuesta
+
+    from ai_architect.voz.hablar import hablar
+
+    respuesta["spoken"] = hablar(str(respuesta.get("explanation", "")))
+
+    return respuesta
 
 
 def _con_trato(cuerpo: str) -> str:

@@ -277,7 +277,7 @@ def test_la_marca_de_sin_salto_final_no_cuenta() -> None:
 
     arreglado = normalizar(
         "--- a/m.py\n+++ b/m.py\n@@ -1,9 +1,9 @@\n-viejo\n+nuevo\n"
-        "\ No newline at end of file\n"
+        "\\ No newline at end of file\n"
     )
 
     assert "@@ -1,1 +1,1 @@" in arreglado

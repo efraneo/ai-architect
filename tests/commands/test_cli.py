@@ -34,7 +34,7 @@ def test_pide_no_esta_en_la_tabla_que_elige() -> None:
     assert "pide" not in cli.POR_NOMBRE
 
 
-def test_estan_los_ocho_comandos() -> None:
+def test_estan_los_comandos() -> None:
     assert {c.nombre for c in cli.COMANDOS} == {
         "analyze",
         "review",
@@ -44,6 +44,7 @@ def test_estan_los_ocho_comandos() -> None:
         "agents",
         "auto",
         "changelog",
+        "voz",
     }
 
 
