@@ -187,3 +187,40 @@ def test_una_respuesta_que_no_es_un_diff(
     assert resultado["success"] is False
     assert resultado["working_tree"] == "untouched"
     assert (repo / "modulo.py").read_text(encoding="utf-8") == "valor = 1\n"
+
+
+# --- El formato que devuelven los modelos nuevos ----------------------------
+#
+# Probado contra gpt-5.5 en una ejecución real: con el prompt pidiendo
+# "unified diff format" a secas, devolvió su propio formato de edición.
+
+
+OTRO_FORMATO = """*** Begin Patch
+*** Update File: modulo.py
+@@
+ valor = 1
++valor = 2
+*** End Patch"""
+
+
+def test_el_formato_apply_patch_se_reconoce(
+    motor: ImprovementEngine, repo: Path
+) -> None:
+    """Antes se rechazaba con "Git rejected the patch", que hace pensar en un
+    parche corrupto en vez de en un malentendido de formato."""
+    motor.provider.generate = mock.Mock(return_value=OTRO_FORMATO)  # type: ignore[method-assign]
+
+    resultado = motor.improve(repo, instruction="algo")
+
+    assert resultado["success"] is False
+    assert "*** Begin Patch" in resultado["error"]
+    assert "diff unificado" in resultado["error"]
+
+
+def test_no_toca_nada_con_ese_formato(motor: ImprovementEngine, repo: Path) -> None:
+    motor.provider.generate = mock.Mock(return_value=OTRO_FORMATO)  # type: ignore[method-assign]
+
+    resultado = motor.improve(repo, instruction="algo", apply=True)
+
+    assert resultado["working_tree"] == "untouched"
+    assert (repo / "modulo.py").read_text(encoding="utf-8") == "valor = 1\n"

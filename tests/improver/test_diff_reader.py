@@ -166,3 +166,23 @@ def test_un_diff_vacio_no_devuelve_nada() -> None:
 @pytest.mark.parametrize("basura", ["hola qué tal", "@@ -1 +1 @@", "   "])
 def test_texto_que_no_es_un_diff(basura: str) -> None:
     assert archivos(basura) == []
+
+
+# --- El formato que no es un diff -------------------------------------------
+
+
+def test_reconoce_el_formato_de_openai() -> None:
+    """Los modelos gpt-5.x emiten esto por defecto para editar ficheros. Es
+    correcto para su herramienta y `git apply` no lo entiende."""
+    from ai_architect.improver.diff_reader import formato_ajeno
+
+    ajeno = formato_ajeno("*** Begin Patch\n*** Update File: x.py\n@@\n+algo\n")
+
+    assert "*** Begin Patch" in ajeno
+    assert "diff unificado" in ajeno
+
+
+def test_un_diff_normal_no_es_formato_ajeno() -> None:
+    from ai_architect.improver.diff_reader import formato_ajeno
+
+    assert formato_ajeno(GIT) == ""

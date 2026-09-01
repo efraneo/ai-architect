@@ -53,6 +53,29 @@ def limpiar(diff: str | None) -> str:
     return "\n".join(lineas).strip()
 
 
+# El formato que emiten por defecto los modelos nuevos de OpenAI para editar
+# ficheros. Es correcto para su propia herramienta y **no** es un diff
+# unificado: `git apply` no lo entiende.
+OTRO_FORMATO = "*** Begin Patch"
+
+
+def formato_ajeno(diff: str) -> str:
+    """Si el modelo devolvió un formato de parche que no es un diff, cuál.
+
+    Sin esto, un parche perfectamente intencionado se rechazaba con "Git
+    rejected the patch", que hace pensar en un parche corrupto en vez de en
+    un malentendido de formato. Con un modelo que emite el suyo por defecto,
+    eso es la diferencia entre saber qué arreglar y no saberlo.
+    """
+    if OTRO_FORMATO in diff:
+        return (
+            "el modelo devolvió el formato *** Begin Patch de OpenAI "
+            "en vez de un diff unificado"
+        )
+
+    return ""
+
+
 def archivos(diff: str) -> list[dict[str, Any]]:
     """Los archivos del parche, con su acción y sus líneas movidas.
 

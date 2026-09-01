@@ -251,3 +251,109 @@ def test_el_ciclo_lo_reporta(repo: Path) -> None:
     resultado = verificar(repo, ROTO, pruebas(), suite([pruebas(ok=False, fallos=1)]))
 
     assert estado_del_arbol(resultado) == "restored"
+
+
+# --- El prompt manda el archivo que hay que modificar -----------------------
+
+
+def test_el_prompt_lleva_el_contenido_del_archivo(tmp_path: Path) -> None:
+    """El fallo que destapó la primera ejecución real: se le pedía al modelo
+    que parcheara un archivo que **no había visto**, así que devolvía
+    cabeceras imposibles como ``@@ -0,0 +1,26 @@`` sobre un archivo de 105
+    líneas. El código que escribía era correcto; los números no podían serlo.
+    """
+    from unittest import mock
+
+    from ai_architect.improver.prompt_builder import construir
+
+    (tmp_path / "modulo.py").write_text("uno\ndos\ntres\n", encoding="utf-8")
+
+    analisis = mock.Mock()
+    analisis.summary = mock.Mock(
+        total_files=1,
+        python_files=1,
+        total_classes=0,
+        total_functions=0,
+        dependency_modules=0,
+        duplicate_groups=0,
+        average_complexity=1.0,
+    )
+    analisis.recommendations = []
+
+    texto = construir(analisis, mock.Mock(tasks=[]), "algo", "modulo.py", tmp_path)
+
+    assert "    1| uno" in texto
+    assert "    3| tres" in texto
+
+
+def test_sin_archivo_objetivo_no_se_manda_nada(tmp_path: Path) -> None:
+    from unittest import mock
+
+    from ai_architect.improver.prompt_builder import construir
+
+    analisis = mock.Mock()
+    analisis.summary = mock.Mock(
+        total_files=1,
+        python_files=1,
+        total_classes=0,
+        total_functions=0,
+        dependency_modules=0,
+        duplicate_groups=0,
+        average_complexity=1.0,
+    )
+    analisis.recommendations = []
+
+    texto = construir(analisis, mock.Mock(tasks=[]), "algo", None, tmp_path)
+
+    assert "Current content" not in texto
+
+
+def test_un_archivo_enorme_se_recorta(tmp_path: Path) -> None:
+    """Mandar diez mil líneas se lleva el contexto entero y no deja sitio
+    para la respuesta."""
+    from unittest import mock
+
+    from ai_architect.improver.prompt_builder import MAX_LINEAS, construir
+
+    (tmp_path / "grande.py").write_text(
+        "\n".join(f"linea {i}" for i in range(MAX_LINEAS + 200)),
+        encoding="utf-8",
+    )
+
+    analisis = mock.Mock()
+    analisis.summary = mock.Mock(
+        total_files=1,
+        python_files=1,
+        total_classes=0,
+        total_functions=0,
+        dependency_modules=0,
+        duplicate_groups=0,
+        average_complexity=1.0,
+    )
+    analisis.recommendations = []
+
+    texto = construir(analisis, mock.Mock(tasks=[]), "algo", "grande.py", tmp_path)
+
+    assert "líneas más, no mostradas" in texto
+
+
+def test_un_archivo_que_no_existe_no_revienta(tmp_path: Path) -> None:
+    from unittest import mock
+
+    from ai_architect.improver.prompt_builder import construir
+
+    analisis = mock.Mock()
+    analisis.summary = mock.Mock(
+        total_files=1,
+        python_files=1,
+        total_classes=0,
+        total_functions=0,
+        dependency_modules=0,
+        duplicate_groups=0,
+        average_complexity=1.0,
+    )
+    analisis.recommendations = []
+
+    texto = construir(analisis, mock.Mock(tasks=[]), "algo", "no-existe.py", tmp_path)
+
+    assert "Current content" not in texto

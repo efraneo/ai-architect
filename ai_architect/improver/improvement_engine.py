@@ -16,6 +16,9 @@ from ai_architect.improver.diff_reader import (
     archivos as archivos_del_diff,
 )
 from ai_architect.improver.diff_reader import (
+    formato_ajeno,
+)
+from ai_architect.improver.diff_reader import (
     limpiar as limpiar_diff,
 )
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
@@ -93,6 +96,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         # no tiene sentido cuando nadie va a avisar de nada.
         self._notifier = notifier
 
+        # La raíz de la mejora en curso, para que el prompt pueda leer el
+        # archivo objetivo.
+        self._repositorio: Path | None = None
+
         # Compatibility aliases for the existing public API.
         self.builder = self.patch_generator.builder
         self.validator = PatchValidator()
@@ -137,6 +144,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
 
         plan = self.planner.build_plan(context)
 
+        # El constructor del prompt necesita la raíz para poder leer el
+        # archivo objetivo; `_prompt` conserva su firma pública.
+        self._repositorio = repository
+
         prompt = self._prompt(
             analysis=analysis,
             plan=plan,
@@ -174,6 +185,20 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         # Un parche con cabeceras pero sin una sola línea añadida ni borrada
         # pasa la validación estructural y no cambia nada. Reportarlo como
         # una mejora con éxito haría creer al ciclo autónomo que hizo algo.
+        # Un formato de parche que no es un diff se rechazaba con "Git
+        # rejected the patch", que hace pensar en un parche corrupto en vez
+        # de en un malentendido de formato.
+        ajeno = formato_ajeno(improvement)
+
+        if ajeno:
+            return self._fracaso(
+                repository=repository,
+                instruction=instruction,
+                file=file,
+                error=ajeno,
+                comenzado=comenzado,
+            )
+
         if structurally_valid and not self._cambia_algo(patch):
             return self._fracaso(
                 repository=repository,
@@ -512,7 +537,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         instruction: str,
         file: str | None = None,
     ) -> str:
-        return construir_prompt(analysis, plan, instruction, file)
+        return construir_prompt(analysis, plan, instruction, file, self._repositorio)
 
     @staticmethod
     def _clean_diff(diff: str) -> str:
