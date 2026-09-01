@@ -75,9 +75,42 @@ OLLAMA_HOST=http://localhost:11434
 ## Uso
 
 ```
-architect {analyze,review,improve,execute,agents,auto,changelog,doctor} [proyecto]
-          [opciones]
+architect pide . --frase "lo que quieras"          # una frase, y él elige
+architect {analyze,review,improve,execute,agents,auto,changelog,doctor}
+          [proyecto] [opciones]
 ```
+
+### Pedirle las cosas hablando
+
+No hace falta saberse los comandos. Le dices lo que quieres y él elige:
+
+```console
+$ architect pide --soy "Eathan"
+Buenas tardes, Eathan. Encantado.
+A partir de ahora te llamo Eathan.
+
+$ architect pide . --frase cómo está el proyecto
+Buenas tardes, Eathan.
+
+11 agentes revisaron el proyecto. 10 hallazgos, en: security, bugs, performance.
+
+Buena tarde, Eathan.
+```
+
+Saluda según la hora y te llama como le dijiste. Lo pregunta **una sola vez**
+y lo recuerda en `~/.ai_architect/perfil.json` — ahí no hay ninguna clave,
+solo un nombre.
+
+**Lo que toca tus archivos pide permiso**, por muy clara que suene la frase:
+
+```console
+$ architect pide . --frase arregla los except que se tragan errores
+Entendí que quieres: architect improve . --instruction "..." --apply
+No lo ejecuto porque toca tus archivos. Añade --si si es eso.
+```
+
+Y el modelo **solo puede elegir de la lista de comandos**. Si se inventa uno,
+se para y te lo dice.
 
 ### Configurar la clave
 

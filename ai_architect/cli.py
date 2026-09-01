@@ -32,6 +32,7 @@ from ai_architect.commands import (
     doctor,
     execute,
     improve,
+    pide,
     review,
 )
 from ai_architect.core.env_file import cargar
@@ -55,6 +56,8 @@ class Comando:
     requiere: tuple[tuple[str, str], ...] = field(default=())
 
 
+# `pide` va aparte de la tabla: es quien la usa, no uno de sus miembros.
+# Meterlo dentro le dejaría elegirse a sí mismo.
 COMANDOS: tuple[Comando, ...] = (
     Comando(
         "doctor",
@@ -120,6 +123,18 @@ COMANDOS: tuple[Comando, ...] = (
 
 POR_NOMBRE = {comando.nombre: comando for comando in COMANDOS}
 
+# El despachador: recibe una frase y elige de la tabla de arriba.
+PIDE = Comando(
+    "pide",
+    "Decir en una frase qué quieres y que elija el comando",
+    lambda a: pide.run(
+        a.project,
+        frase=" ".join(a.frase or []),
+        si=a.si,
+        soy=a.soy,
+    ),
+)
+
 
 def build_parser() -> argparse.ArgumentParser:
 
@@ -130,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "command",
-        choices=[comando.nombre for comando in COMANDOS],
+        choices=[comando.nombre for comando in COMANDOS] + [PIDE.nombre],
         help="; ".join(f"{c.nombre}: {c.ayuda}" for c in COMANDOS),
     )
 
@@ -206,6 +221,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--frase",
+        nargs="+",
+        default=None,
+        help="For pide: what you want, in your own words",
+    )
+
+    parser.add_argument(
+        "--soy",
+        default="",
+        help="For pide: how you want to be addressed (asked once, remembered)",
+    )
+
+    parser.add_argument(
+        "--si",
+        action="store_true",
+        help="For pide: authorise the commands that modify your files",
+    )
+
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Print result as JSON",
@@ -231,6 +265,13 @@ def print_result(
         return
 
     if isinstance(result, dict):
+        # Una respuesta conversacional se lee entera; volcarle encima el
+        # diccionario crudo la entierra. Con --json sale todo.
+        if result.get("explanation"):
+            print(result["explanation"])
+
+            return
+
         for key, value in result.items():
             print(f"{key}: {value}")
 
@@ -251,7 +292,7 @@ def main():
 
     args = parser.parse_args()
 
-    comando = POR_NOMBRE.get(args.command)
+    comando = PIDE if args.command == PIDE.nombre else POR_NOMBRE.get(args.command)
 
     if comando is None:  # argparse ya lo impide; queda por si cambian las choices
         parser.error("Unknown command.")

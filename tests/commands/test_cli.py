@@ -22,9 +22,16 @@ from ai_architect import cli
 
 
 def test_las_choices_salen_de_la_tabla() -> None:
+    """`pide` va aparte: es quien usa la tabla, no uno de sus miembros.
+    Meterlo dentro le dejaría elegirse a sí mismo."""
     accion = next(a for a in cli.build_parser()._actions if a.dest == "command")
 
-    assert set(accion.choices) == {c.nombre for c in cli.COMANDOS}
+    assert set(accion.choices) == {c.nombre for c in cli.COMANDOS} | {"pide"}
+
+
+def test_pide_no_esta_en_la_tabla_que_elige() -> None:
+    assert "pide" not in {c.nombre for c in cli.COMANDOS}
+    assert "pide" not in cli.POR_NOMBRE
 
 
 def test_estan_los_ocho_comandos() -> None:
