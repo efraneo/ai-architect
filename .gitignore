@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Pytest
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Build
+build/
+dist/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime
+memory/db/
+workspace/
+knowledge/cache/
+repository/cache/
+
+# AI Architect
+*.patch
+*.diff
+*.bak
+
+# Secretos: NUNCA subir. La plantilla es .env.example
+.env
+.env.*
+*.env
+!.env.example
+ai_architect.env
+telegram_*.env
+
+# Empaquetados y respaldos: no van al repositorio
+*.zip
+*.tar.gz
+
+# Salida generada por la propia herramienta
+.ai_architect/

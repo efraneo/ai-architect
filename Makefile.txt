@@ -1,0 +1,41 @@
+# ==========================================================
+# AI Architect Makefile
+# ==========================================================
+
+.PHONY: install
+install:
+	pip install -e .
+
+.PHONY: dev
+dev:
+	pip install -r requirements-dev.txt
+
+.PHONY: format
+format:
+	black .
+	isort .
+
+.PHONY: lint
+lint:
+	ruff check .
+
+.PHONY: types
+types:
+	mypy ai_architect
+
+.PHONY: test
+test:
+	pytest
+
+.PHONY: coverage
+coverage:
+	pytest --cov=ai_architect
+
+.PHONY: clean
+clean:
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+
+.PHONY: architect
+architect:
+	python architect.py analyze .

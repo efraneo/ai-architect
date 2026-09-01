@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+from .base_agent import BaseAgent
+
+
+class ProjectMetricsAgent(BaseAgent):
+    name = "Project Metrics Agent"
+
+    SOURCE_EXTENSIONS = {
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".java",
+        ".kt",
+        ".go",
+        ".rs",
+        ".cpp",
+        ".c",
+        ".h",
+        ".hpp",
+        ".cs",
+        ".php",
+        ".rb",
+    }
+
+    def run(
+        self,
+        context,
+    ):
+        return self.review(
+            context,
+        )
+
+    def review(
+        self,
+        project: str,
+    ) -> dict[str, Any]:
+        project_path = Path(project)
+
+        files = list(
+            project_path.rglob("*"),
+        )
+
+        total_files = 0
+        total_dirs = 0
+        total_lines = 0
+        total_size = 0
+
+        languages: Counter[str] = Counter()
+
+        python_files = 0
+
+        for item in files:
+            if item.is_dir():
+                total_dirs += 1
+                continue
+
+            total_files += 1
+
+            try:
+                total_size += item.stat().st_size
+            except Exception:
+                pass
+
+            suffix = item.suffix.lower()
+
+            if suffix in self.SOURCE_EXTENSIONS:
+                languages[suffix] += 1
+
+            if suffix == ".py":
+                python_files += 1
+
+                try:
+                    with item.open(
+                        encoding="utf-8",
+                        errors="ignore",
+                    ) as file:
+                        total_lines += sum(1 for _ in file)
+
+                except Exception:
+                    pass
+
+        average = total_lines / python_files if python_files else 0
+
+        largest = self._largest_files(
+            project_path,
+        )
+
+        return {
+            "agent": self.name,
+            "files": total_files,
+            "directories": total_dirs,
+            "python_files": python_files,
+            "lines_of_code": total_lines,
+            "average_python_file": round(
+                average,
+                2,
+            ),
+            "repository_size_mb": round(
+                total_size / (1024 * 1024),
+                2,
+            ),
+            "languages": dict(languages),
+            "largest_files": largest,
+            "status": "OK",
+        }
+
+    def _largest_files(
+        self,
+        project: Path,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        files: list[dict[str, Any]] = []
+
+        for item in project.rglob("*"):
+            if not item.is_file():
+                continue
+
+            try:
+                files.append(
+                    {
+                        "file": str(item.relative_to(project)),
+                        "size": item.stat().st_size,
+                    }
+                )
+
+            except Exception:
+                continue
+
+        files.sort(
+            key=lambda item: int(item["size"]),
+            reverse=True,
+        )
+
+        return files[:limit]
+
+    def capabilities(
+        self,
+    ) -> list[str]:
+        return [
+            "Repository Metrics",
+            "Language Distribution",
+            "Repository Size",
+            "Lines of Code",
+            "Largest Files",
+            "Project Statistics",
+        ]

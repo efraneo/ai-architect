@@ -1,0 +1,19 @@
+site_name: AI Architect
+
+theme:
+
+  name: material
+
+nav:
+
+  - Home: index.md
+
+  - Architecture: architecture.md
+
+  - Planner: planner.md
+
+  - Execution: execution.md
+
+  - Memory: memory.md
+
+  - Decision Engine: decision.md

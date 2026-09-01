@@ -1,0 +1,43 @@
+python:
+
+  version: "3.12"
+
+imports:
+
+  absolute_imports: true
+
+  relative_imports: false
+
+typing:
+
+  enabled: true
+
+  strict: false
+
+models:
+
+  dataclass: true
+
+  pydantic: false
+
+logging:
+
+  standard_logging: true
+
+comments:
+
+  explain_business_logic: true
+
+  explain_complex_algorithms: true
+
+naming:
+
+  classes: PascalCase
+
+  functions: snake_case
+
+  variables: snake_case
+
+files:
+
+  max_lines: 600

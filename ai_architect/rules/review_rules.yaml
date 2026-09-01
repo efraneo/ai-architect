@@ -1,0 +1,47 @@
+review:
+
+  duplicate_detection: true
+
+  architecture_validation: true
+
+  dead_code_detection: true
+
+  unused_imports: true
+
+  unused_functions: true
+
+  duplicated_models: true
+
+  duplicated_services: true
+
+  oversized_files: true
+
+  missing_docstrings: true
+
+  missing_type_hints: true
+
+severity:
+
+  critical:
+
+    - circular_import
+
+    - duplicated_model
+
+    - duplicated_service
+
+    - syntax_error
+
+  warning:
+
+    - missing_docstring
+
+    - long_function
+
+    - magic_number
+
+  info:
+
+    - formatting
+
+    - import_order

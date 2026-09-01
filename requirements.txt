@@ -1,0 +1,39 @@
+# =========================================================
+# AI Architect Runtime Dependencies
+# =========================================================
+
+# LLM Providers
+openai>=1.40.0
+anthropic>=0.34.0
+google-generativeai>=0.8.0
+ollama>=0.3.3
+
+# Git
+GitPython>=3.1.43
+
+# Configuration
+python-dotenv>=1.0.1
+PyYAML>=6.0.2
+
+# Data
+numpy>=2.0.1
+networkx>=3.3
+
+# Validation
+pydantic>=2.8.2
+
+# CLI
+typer>=0.12.3
+rich>=13.7.1
+colorama>=0.4.6
+
+# HTTP
+requests>=2.32.3
+httpx>=0.27.0
+
+# Async
+anyio>=4.4.0
+
+# Utilities
+tqdm>=4.66.5
+packaging>=24.1

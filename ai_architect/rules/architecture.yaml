@@ -1,0 +1,76 @@
+# ==========================================================
+# QUANT TITAN AI ARCHITECT
+# ARQUITECTURA GLOBAL
+# ==========================================================
+
+project:
+
+  name: QUANT_TITAN_PRO
+
+  version: 1.0.0
+
+  language: python
+
+  architecture: institutional
+
+# ==========================================================
+# REGLAS GENERALES
+# ==========================================================
+
+rules:
+
+  max_file_lines: 600
+
+  require_type_hints: true
+
+  require_docstrings: true
+
+  require_dataclasses: true
+
+  forbid_duplicate_models: true
+
+  forbid_duplicate_services: true
+
+  forbid_circular_imports: true
+
+  forbid_dead_code: true
+
+  run_tests_before_commit: true
+
+  create_branch_before_changes: true
+
+  update_changelog: true
+
+# ==========================================================
+# MÓDULOS CRÍTICOS
+# ==========================================================
+
+critical_modules:
+
+  - strategies
+
+  - scanner
+
+  - smart_money
+
+  - execution
+
+  - risk
+
+  - analytics
+
+  - ai_architect
+
+# ==========================================================
+# CALIDAD
+# ==========================================================
+
+quality:
+
+  minimum_test_coverage: 90
+
+  max_complexity: 12
+
+  enforce_pep8: true
+
+  typing_required: true
