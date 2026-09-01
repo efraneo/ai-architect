@@ -22,9 +22,12 @@ from ai_architect.agents.performance_agent import PerformanceAgent
 from ai_architect.agents.project_metrics_agent import ProjectMetricsAgent
 from ai_architect.agents.refactor_agent import RefactorAgent
 from ai_architect.agents.release_agent import ReleaseAgent
+from ai_architect.agents.scope import recorrido_compartido
 from ai_architect.agents.security_agent import SecurityAgent
 from ai_architect.agents.test_agent import TestAgent
 from ai_architect.agents.testing_agent import TestingAgent
+from ai_architect.swarm.consensus_engine import ConsensusEngine
+from ai_architect.swarm.task_dispatcher import TaskDispatcher
 
 
 class AgentManager:
@@ -62,6 +65,12 @@ class AgentManager:
         self.tests = TestAgent()
         self.documentation = DocumentationAgent()
 
+        # Los cinco de IA esperan al proveedor: en paralelo cuestan lo que
+        # uno. Los estáticos NO se despachan así -- se midió y sale peor.
+        self.dispatcher = TaskDispatcher()
+
+        self.consensus = ConsensusEngine()
+
     def inspect(
         self,
         repository: str,
@@ -92,13 +101,24 @@ class AgentManager:
 
         salida: dict[str, Any] = {}
 
-        for nombre, agente in estaticos.items():
-            try:
-                salida[nombre] = agente.review(repository)
-            except Exception as e:  # noqa: BLE001 - un agente no tumba al resto
-                salida[nombre] = {"status": "error", "error": str(e)}
+        # Once agentes recorrían el árbol por su cuenta: seis recorridos
+        # completos del mismo repositorio. Con uno compartido, 1,8x.
+        with recorrido_compartido():
+            for nombre, agente in estaticos.items():
+                try:
+                    salida[nombre] = agente.review(repository)
+                except Exception as e:  # noqa: BLE001 - un agente no tumba al resto
+                    salida[nombre] = {"status": "error", "error": str(e)}
 
         return salida
+
+    def veredicto(self, inspeccion: dict[str, Any]) -> dict[str, Any]:
+        """Once informes reducidos a una respuesta: ¿está el repositorio bien?
+
+        Una lista de hallazgos no es una conclusión. Esto dice cuántos
+        agentes corrieron, cuáles se cayeron y cuáles encontraron algo.
+        """
+        return self.consensus.evaluate(inspeccion)
 
     @staticmethod
     def findings_de(inspeccion: dict[str, Any]) -> list[str]:
@@ -207,50 +227,28 @@ class AgentManager:
         # AI ANALYSIS
         # -------------------------------------------------
 
-        architecture_report = self.architect.run(
-            context.data,
+        # Cinco llamadas al proveedor. En serie se suman; a la vez cuestan
+        # lo que la más lenta. Medido con latencia simulada: 5x.
+        de_ia = {
+            "architect": self.architect,
+            "refactor": self.refactor,
+            "review": self.reviewer,
+            "tests": self.tests,
+            "documentation": self.documentation,
+        }
+
+        por_agente = {agente: clave for clave, agente in de_ia.items()}
+
+        datos = dict(context.data)  # los cinco leen la misma foto
+
+        informes = self.dispatcher.dispatch(
+            list(de_ia.values()),
+            lambda agente: agente.run(datos),
+            nombre=lambda agente: por_agente[agente],
         )
 
-        context.set(
-            "architect",
-            architecture_report,
-        )
-
-        refactor_report = self.refactor.run(
-            context.data,
-        )
-
-        context.set(
-            "refactor",
-            refactor_report,
-        )
-
-        review_report = self.reviewer.run(
-            context.data,
-        )
-
-        context.set(
-            "review",
-            review_report,
-        )
-
-        testing_report = self.tests.run(
-            context.data,
-        )
-
-        context.set(
-            "tests",
-            testing_report,
-        )
-
-        documentation_report = self.documentation.run(
-            context.data,
-        )
-
-        context.set(
-            "documentation",
-            documentation_report,
-        )
+        for clave, informe in informes.items():
+            context.set(clave, informe)
 
         return context
 

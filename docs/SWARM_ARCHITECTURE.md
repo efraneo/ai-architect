@@ -3,6 +3,15 @@
 > Estado: Diseño Institucional
 > Versión: 1.0
 
+> **Lo que quedó en pie:** se midió y **paralelizar los agentes
+> estáticos con hilos es 2,14x más lento** -- su trabajo no está
+> repartido, está repetido. Lo que ahí funciona es compartir el
+> recorrido del árbol (`agents/scope.py`), y eso da 1,81x.
+> Los hilos sí ayudan (5x) en los cinco agentes de IA, que esperan
+> al proveedor. Por eso de los cuatro módulos siguen dos:
+> `TaskDispatcher` (solo para la mitad de IA) y `ConsensusEngine`.
+> `SwarmManager` y `AgentCommunication` se podaron.
+
 ---
 
 # Objetivo

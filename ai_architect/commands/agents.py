@@ -82,6 +82,7 @@ def run(
         "repository": str(repository),
         "ai": ai,
         "agents": sorted(data.keys()),
+        "verdict": manager.veredicto(data),
         "total_findings": len(findings),
         "findings": findings,
         "data": data,

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_agent import BaseAgent
-from .scope import esta_ignorado
+from .scope import todo
 
 
 class ProjectMetricsAgent(BaseAgent):
@@ -46,11 +46,7 @@ class ProjectMetricsAgent(BaseAgent):
         # Binaries are not excluded here: an image is part of the project
         # and counts towards its size. What is excluded is what does not
         # belong to it -- ``.venv``, ``node_modules``, caches.
-        files = [
-            item
-            for item in project_path.rglob("*")
-            if not esta_ignorado(item, project_path)
-        ]
+        files = todo(project_path)
 
         total_files = 0
         total_dirs = 0
@@ -123,8 +119,8 @@ class ProjectMetricsAgent(BaseAgent):
     ) -> list[dict[str, Any]]:
         files: list[dict[str, Any]] = []
 
-        for item in project.rglob("*"):
-            if not item.is_file() or esta_ignorado(item, project):
+        for item in todo(project):
+            if not item.is_file():
                 continue
 
             try:

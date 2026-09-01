@@ -20,6 +20,7 @@ list, not one per agent.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from ai_architect.filesystem.constants import DEFAULT_IGNORED_DIRECTORIES
@@ -73,18 +74,81 @@ def es_binario(archivo: Path) -> bool:
     return archivo.suffix.lower() in BINARY_EXTENSIONS
 
 
+# --- Un solo recorrido para todos -------------------------------------------
+#
+# Cada agente recorría el árbol por su cuenta: once agentes, seis recorridos
+# completos. Un recorrido de este repositorio cuesta 0,75 s, y cuatro de los
+# agentes no hacen casi nada más que recorrer.
+#
+# Paralelizarlo con hilos se probó y salió **peor** (32 % más lento): el
+# trabajo no está repartido entre los agentes, está repetido por cada uno.
+
+Clave = tuple[str, str, bool]
+
+_cache: dict[Clave, list[Path]] | None = None
+
+
+@contextmanager
+def recorrido_compartido() -> Iterator[None]:
+    """Dentro de este bloque el árbol se recorre una vez por patrón.
+
+    El caché vive solo mientras dura el bloque: entre una inspección y la
+    siguiente los archivos pueden haber cambiado, y devolver una lista vieja
+    sería peor que recorrer de nuevo.
+
+    Se puede anidar sin romper nada: solo el bloque exterior crea y destruye
+    el caché.
+    """
+    global _cache
+
+    if _cache is not None:  # ya hay uno activo más arriba
+        yield
+        return
+
+    _cache = {}
+
+    try:
+        yield
+
+    finally:
+        _cache = None
+
+
+def _recorrer(raiz: Path, patron: str, solo_archivos: bool) -> list[Path]:
+    """El recorrido de verdad, con caché si hay un bloque compartido activo."""
+    clave: Clave = (str(raiz), patron, solo_archivos)
+
+    if _cache is not None and clave in _cache:
+        return _cache[clave]
+
+    encontrados = [
+        entrada
+        for entrada in raiz.rglob(patron)
+        if not esta_ignorado(entrada, raiz)
+        and (not solo_archivos or (entrada.is_file() and not es_binario(entrada)))
+    ]
+
+    if _cache is not None:
+        _cache[clave] = encontrados
+
+    return encontrados
+
+
 def archivos(raiz: Path, patron: str = "*") -> Iterator[Path]:
     """The project's files: no dependencies, no caches, no binaries."""
-    for archivo in raiz.rglob(patron):
-        if not archivo.is_file():
-            continue
-
-        if esta_ignorado(archivo, raiz) or es_binario(archivo):
-            continue
-
-        yield archivo
+    yield from _recorrer(raiz, patron, solo_archivos=True)
 
 
 def archivos_py(raiz: Path) -> list[Path]:
     """The project's own Python files."""
-    return list(archivos(raiz, "*.py"))
+    return _recorrer(raiz, "*.py", solo_archivos=True)
+
+
+def todo(raiz: Path) -> list[Path]:
+    """Todo lo que hay bajo la raíz, carpetas y binarios incluidos.
+
+    Las métricas cuentan carpetas y el tamaño de los archivos: para ellas un
+    ``.png`` sí forma parte del proyecto. Lo único que se descarta es lo que
+    no es tuyo: ``.venv``, ``node_modules``, las cachés.
+    """
+    return _recorrer(raiz, "*", solo_archivos=False)

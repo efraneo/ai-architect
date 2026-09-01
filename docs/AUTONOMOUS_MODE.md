@@ -3,6 +3,15 @@
 > Estado: Diseño Institucional
 > Versión: 1.0
 
+> **Lo que existe hoy:** `architect auto --instructions A B C` ejecuta
+> varias mejoras en orden de prioridad y pasa cada resultado por
+> `ApprovalEngine`, que antes se construía y no se llamaba nunca.
+> Los gestores de rama, fusión y rollback que había aquí llamaban a
+> git **sin `cwd`** -- sobre el directorio del proceso, no sobre el
+> repositorio analizado. Las ramas se movieron a
+> `git/branch_manager.py`; el rollback se podó porque
+> `git/commit_manager.py` ya lo hace apuntando bien.
+
 ---
 
 # Objetivo
