@@ -80,15 +80,24 @@ architect {analyze,review,improve,execute,agents,auto,doctor} [proyecto] [opcion
 
 ### Comprobar la instalación
 
-No usa IA ni gasta tokens. Es lo primero que conviene ejecutar:
+No usa IA ni gasta tokens: ninguna comprobación llama a un proveedor ni sale
+a la red. Es lo primero que conviene ejecutar, y **ahora sí puede dar mal**.
 
 ```console
-$ architect doctor .
+$ architect doctor
 success: True
 python: 3.12.0
 platform: Windows-11
-status: healthy
+healthy: False
+status: degraded
+components: {'provider': {'provider': 'OpenAIProvider', 'status': 'not_configured', ...},
+             'agents': {'agents': 16, ...},
+             'git': {'status': 'OK', 'detail': 'git version 2.51.1'}}
 ```
+
+Comprueba el proveedor por defecto (si tiene clave), que los agentes se
+puedan construir y que git esté instalado. Antes respondía `healthy` fijo,
+sin mirar nada.
 
 ### Analizar un repositorio
 
