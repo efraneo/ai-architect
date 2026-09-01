@@ -144,7 +144,23 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             file=file,
         )
 
-        improvement = self.generate(prompt)
+        # Un proveedor caído es lo más común que puede pasar en una
+        # ejecución real —sin cuota, sin red, clave revocada— y la excepción
+        # se escapaba sin registrar nada: el arquitecto no se enteraba de que
+        # sus ejecuciones estaban fallando. Todos los demás fallos de este
+        # método devuelven un resultado; este también.
+        try:
+            improvement = self.generate(prompt)
+
+        except Exception as e:  # noqa: BLE001 - cualquier proveedor, cualquier fallo
+            return self._fracaso(
+                repository=repository,
+                instruction=instruction,
+                file=file,
+                error=f"el proveedor falló: {e}",
+                comenzado=comenzado,
+            )
+
         improvement = self._clean_diff(improvement)
 
         patch = self.build_patch(
@@ -154,6 +170,18 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         )
 
         structurally_valid = self.validate_structure(patch)
+
+        # Un parche con cabeceras pero sin una sola línea añadida ni borrada
+        # pasa la validación estructural y no cambia nada. Reportarlo como
+        # una mejora con éxito haría creer al ciclo autónomo que hizo algo.
+        if structurally_valid and not self._cambia_algo(patch):
+            return self._fracaso(
+                repository=repository,
+                instruction=instruction,
+                file=file,
+                error="el parche no cambia ni una línea",
+                comenzado=comenzado,
+            )
 
         pruebas = self._ejecutar_pruebas(repository)
 
@@ -253,6 +281,68 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         avisar(resultado, self._notifier)
 
         return resultado
+
+    @staticmethod
+    def _cambia_algo(patch: Any) -> bool:
+        """¿El parche mueve alguna línea?
+
+        Un modelo puede devolver las cabeceras de un diff y nada más. Es
+        sintácticamente correcto y no sirve para nada.
+        """
+        return any(
+            int(getattr(archivo, "additions", 0) or 0)
+            + int(getattr(archivo, "deletions", 0) or 0)
+            > 0
+            for archivo in getattr(patch, "files", [])
+        )
+
+    def _fracaso(
+        self,
+        *,
+        repository: Path,
+        instruction: str,
+        file: str | None,
+        error: str,
+        comenzado: float,
+    ) -> dict[str, Any]:
+        """Un intento que no llegó a producir parche, pero que sí ocurrió.
+
+        Se registra en memoria: si el proveedor lleva cinco ejecuciones
+        fallando, eso es exactamente lo que el arquitecto tiene que saber la
+        próxima vez. Antes la excepción se escapaba y no quedaba rastro.
+        """
+        duracion = round(time.monotonic() - comenzado, 3)
+
+        experiencia = None
+
+        try:
+            experiencia = self.memory.record(
+                repository=str(repository),
+                filename=file or "",
+                instruction=instruction,
+                provider=self.provider.name,
+                experience_type=ExperienceType.EXECUTION,
+                outcome=ExperienceOutcome.FAILURE,
+                confidence=0.0,
+                score=0.0,
+                risk=0.0,
+                metadata={"error": error, "duration": duracion},
+            )
+
+        except Exception:  # noqa: BLE001 - registrar es secundario
+            # Si ni siquiera se puede anotar el fallo, lo que importa sigue
+            # siendo devolver el fallo.
+            pass
+
+        return {
+            "success": False,
+            "repository": str(repository),
+            "instruction": instruction,
+            "error": error,
+            "duration": duracion,
+            "experience_id": getattr(experiencia, "id", None),
+            "working_tree": "untouched",
+        }
 
     def _inspeccionar(self, repository: Path) -> dict[str, Any]:
         """Static inspection by the agents: security, dependencies, licences...
