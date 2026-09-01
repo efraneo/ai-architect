@@ -18,6 +18,9 @@ from .models import (
     Severity,
 )
 
+# Archivos cuya existencia vacía significa algo: no son código que falte.
+MARCADORES_DE_PAQUETE = {"__init__.py", "py.typed"}
+
 
 class CodeReviewer:
     def __init__(self):
@@ -59,7 +62,11 @@ class CodeReviewer:
                 )
             )
 
-        if not lines:
+        # Un ``__init__.py`` vacío es la forma estándar de declarar un
+        # paquete, no un descuido. Sobre este repositorio, **los 32
+        # "archivos vacíos" que reportaba eran los 32 __init__.py**: el 53 %
+        # del informe era ruido, y el ruido esconde lo que sí importa.
+        if not lines and path.name not in MARCADORES_DE_PAQUETE:
             report.add(
                 ReviewIssue(
                     file=str(path),
