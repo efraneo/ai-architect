@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_architect.knowledge.dependency_index import (
+from ai_architect.analyzer.dependency_index import (
     DependencyIndex,
 )
 

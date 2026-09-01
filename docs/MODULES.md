@@ -37,7 +37,6 @@ ai_architect/
 ├── execution
 ├── filesystem
 ├── git
-├── knowledge
 ├── logger
 ├── memory
 ├── notifier
@@ -219,7 +218,6 @@ Abstracción de Git.
 
 ---
 
-# knowledge
 
 ## Objetivo
 
@@ -437,7 +435,6 @@ Gestión del espacio de trabajo.
 | execution | Auditoría |
 | filesystem | Estable |
 | git | Estable |
-| knowledge | Muy importante |
 | logger | Estable |
 | memory | Muy importante |
 | notifier | Estable |

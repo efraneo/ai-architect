@@ -1,7 +1,16 @@
 """
 =========================================================
 Dependency Index
+
+Qué importa a qué, y quién importa a quién.
 =========================================================
+
+Vivía en ``knowledge/``, un paquete que por lo demás no usaba nadie. Era el
+único módulo vivo de allí: ``analyzer/dependency_analyzer.py`` lo importa, y
+el analizador **sí** está conectado.
+
+Se mudó aquí, junto a su único consumidor, para que el código conectado no
+tenga que entrar en un paquete muerto.
 """
 
 from __future__ import annotations

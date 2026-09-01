@@ -3,6 +3,16 @@
 > Estado: Diseño Institucional
 > Versión: 1.0
 
+> **Dónde vive esto hoy:** el paquete `knowledge/` se podó. Sus
+> constructores de grafos recorrían el árbol con `rglob` pelado —
+> mirando dentro del `.venv` — y `DependencyGraph` reventaba con un
+> solo archivo que no compilara; la "búsqueda semántica" era un
+> `in` de subcadenas y los "embeddings", hashes.
+> Lo cubren `analyzer/` (dependencias, estructura, complejidad) y
+> `memory/knowledge_graph.py` (nodos y relaciones), ambos conectados.
+> `dependency_index.py`, que era el único módulo vivo de allí, se
+> mudó a `analyzer/`, junto a su consumidor.
+
 ---
 
 # Objetivo
