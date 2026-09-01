@@ -23,7 +23,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from ai_architect.filesystem.constants import DEFAULT_IGNORED_DIRECTORIES
+from ai_architect.filesystem.ignore_manager import IgnoreManager
 
 # Read as text by an agent, these are bytes: a regex matches anything there.
 BINARY_EXTENSIONS = {
@@ -55,18 +55,54 @@ BINARY_EXTENSIONS = {
 }
 
 
-def esta_ignorado(archivo: Path, raiz: Path) -> bool:
-    """Is the file inside an ignored directory (``.venv``, ``node_modules``...)?
+def gestor_de(raiz: Path) -> IgnoreManager:
+    """El gestor de exclusiones del proyecto, con su ``.gitignore``.
 
-    The whole relative path is checked, not just the parent: ``.venv`` sits
-    many levels above ``site-packages/httpx/_urls.py``.
+    **Se cachea siempre, no solo dentro de un bloque compartido.**
+    ``esta_ignorado()`` se llama una vez por archivo: sin caché, cada llamada
+    abría el ``.gitignore``. La suite pasó de 2 segundos a 16 minutos antes
+    de que esto estuviera aquí.
+
+    Se invalida por la fecha del ``.gitignore``, así que editarlo se nota sin
+    reiniciar nada.
+    """
+    clave = str(raiz)
+
+    gitignore = raiz / ".gitignore"
+
+    try:
+        marca = gitignore.stat().st_mtime_ns
+    except OSError:
+        marca = 0
+
+    guardado = _gestores.get(clave)
+
+    if guardado is not None and guardado[0] == marca:
+        return guardado[1]
+
+    gestor = IgnoreManager.for_project(raiz)
+
+    _gestores[clave] = (marca, gestor)
+
+    return gestor
+
+
+def esta_ignorado(archivo: Path, raiz: Path) -> bool:
+    """¿Está el archivo dentro de algo que no es del proyecto?
+
+    Se mira la ruta relativa entera, no solo la carpeta padre: ``.venv``
+    está cuatro niveles por encima de ``site-packages/httpx/_urls.py``.
+
+    Además de la lista fija, se respeta el ``.gitignore`` del proyecto: cada
+    repositorio ignora sus propias carpetas de salida, y recorrerlas es el
+    mismo error que recorrer el ``.venv``.
     """
     try:
         relativo = archivo.relative_to(raiz)
     except ValueError:
         relativo = archivo
 
-    return any(parte in DEFAULT_IGNORED_DIRECTORIES for parte in relativo.parts)
+    return gestor_de(raiz).should_ignore(relativo)
 
 
 def es_binario(archivo: Path) -> bool:
@@ -86,6 +122,12 @@ def es_binario(archivo: Path) -> bool:
 Clave = tuple[str, str, bool]
 
 _cache: dict[Clave, list[Path]] | None = None
+
+# El gestor de exclusiones de cada raíz, con la fecha del ``.gitignore``
+# que leyó. Va aparte del caché de recorridos: no guarda lo mismo y no
+# caduca igual -- este sobrevive entre ejecuciones, aquel muere con el
+# bloque.
+_gestores: dict[str, tuple[int, IgnoreManager]] = {}
 
 
 @contextmanager
