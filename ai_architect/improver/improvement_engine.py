@@ -21,6 +21,9 @@ from ai_architect.improver.diff_reader import (
 from ai_architect.improver.diff_reader import (
     limpiar as limpiar_diff,
 )
+from ai_architect.improver.diff_reader import (
+    normalizar as normalizar_diff,
+)
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
 from ai_architect.improver.prompt_builder import construir as construir_prompt
 from ai_architect.improver.verification import estado_del_arbol, verificar
@@ -173,6 +176,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             )
 
         improvement = self._clean_diff(improvement)
+
+        # Los contadores de los `@@` los calculamos nosotros: el modelo se
+        # equivoca contando y git rechaza el parche entero por una unidad.
+        improvement = normalizar_diff(improvement)
 
         patch = self.build_patch(
             title="Automatic Improvement",
