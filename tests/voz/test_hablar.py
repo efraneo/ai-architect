@@ -308,3 +308,39 @@ def test_emitir_sin_archivo_no_miente() -> None:
 def test_emitir_no_lanza_si_no_hay_con_que_sonar(tmp_path: Path) -> None:
     with mock.patch.object(voz, "_reproducir", side_effect=RuntimeError("no hay")):
         assert voz.emitir({"archivo": tmp_path / "x.wav"}) is False
+
+
+# --- La clave del proveedor no puede depender de por dónde se entre ---------
+#
+# `cli.main()` carga el `.env`, pero llamar a `avatar.run()` o `pide.run()`
+# como librería no lo carga nadie. Sin la clave, OpenAI se da por no
+# disponible y se cae al siguiente motor: el usuario había elegido `onyx`
+# y la máquina le contestó con la voz que acababa de descartar.
+
+
+def test_si_falta_la_clave_se_lee_el_env(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with mock.patch("ai_architect.core.env_file.cargar") as leer_env:
+        voz._asegurar_entorno()
+
+    leer_env.assert_called_once()
+
+
+def test_si_la_clave_ya_esta_no_se_toca_el_env(monkeypatch) -> None:
+    """Quien exporta la clave a mano está diciendo cuál quiere."""
+    monkeypatch.setenv("OPENAI_API_KEY", "de-la-sesion")
+
+    with mock.patch("ai_architect.core.env_file.cargar") as leer_env:
+        voz._asegurar_entorno()
+
+    leer_env.assert_not_called()
+
+
+def test_los_motores_miran_el_env_antes_de_decidir(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with mock.patch.object(voz, "_asegurar_entorno") as asegurar:
+        voz.motores()
+
+    asegurar.assert_called_once()

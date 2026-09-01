@@ -77,6 +77,8 @@ def motores() -> dict[str, Any]:
     Se consulta antes de hablar, y también desde ``architect voz`` para que
     se pueda ver sin ejecutar nada.
     """
+    _asegurar_entorno()
+
     piper = _piper_disponible()
 
     return {
@@ -100,6 +102,27 @@ def motores() -> dict[str, Any]:
             "nota": _nota_windows(),
         },
     }
+
+
+def _asegurar_entorno() -> None:
+    """Lee el ``.env`` si la clave del proveedor todavía no está.
+
+    Sin esto la voz elegida depende de **por dónde se entre**. ``cli.main()``
+    carga el ``.env``, pero llamando a ``avatar.run()`` o a ``pide.run()``
+    como librería no lo carga nadie: ``OPENAI_API_KEY`` no aparece, OpenAI
+    se da por no disponible, y se cae al siguiente motor de la lista.
+
+    Pasó de verdad, y en lo que peor se nota: el usuario había escuchado
+    las voces, elegido `onyx` y guardado su elección en el perfil — y la
+    máquina le contestó con la voz mexicana que acababa de descartar. El
+    perfil estaba bien; lo que faltaba era la clave.
+    """
+    if os.getenv("OPENAI_API_KEY"):
+        return
+
+    from ai_architect.core.env_file import cargar
+
+    cargar()
 
 
 def elegir(preferido: str = "") -> str:
