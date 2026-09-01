@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any
 from ai_architect.analyzer.analysis_engine import AnalysisEngine
 from ai_architect.core.context_builder import AnalysisContextBuilder
 from ai_architect.decision_engine.decision_engine import DecisionEngine
+from ai_architect.git.git_manager import GitManager
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
 from ai_architect.memory.memory_engine import MemoryEngine
 from ai_architect.memory.models import ExperienceOutcome, ExperienceType
@@ -19,10 +21,24 @@ from ai_architect.planner.planner import Planner
 from ai_architect.providers.provider_manager import ProviderManager
 
 
+def auto_commit_activo() -> bool:
+    """Whether the architect may commit on its own.
+
+    Off unless explicitly enabled: committing modifies the user's repository,
+    and that is not something to do by default. ``.env.example`` already
+    shipped ``AUTO_COMMIT=false``; this is the code that honours it.
+    """
+    return os.getenv("AUTO_COMMIT", "false").strip().lower() == "true"
+
+
 class ImprovementEngine(ImprovementEngineFacadeMixin):
     """High-level improvement orchestrator."""
 
-    def __init__(self, memory: MemoryEngine | None = None) -> None:
+    def __init__(
+        self,
+        memory: MemoryEngine | None = None,
+        git: GitManager | None = None,
+    ) -> None:
         self.analysis = AnalysisEngine()
         self.context_builder = AnalysisContextBuilder()
         self.planner = Planner()
@@ -37,6 +53,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         # Turns "the patch is structurally valid" into "the patch is
         # acceptable", which are not the same thing.
         self.decision = DecisionEngine()
+
+        # Injectable so the tests never touch a real repository. When it is
+        # None, one is built for the repository being improved.
+        self.git = git
 
         # Compatibility aliases for the existing public API.
         self.builder = self.patch_generator.builder
@@ -121,6 +141,13 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             repository,
         )
 
+        commit = self._commit_si_procede(
+            repository=repository,
+            patch=patch,
+            diff=improvement,
+            instruction=instruction,
+        )
+
         duracion = round(time.monotonic() - comenzado, 3)
 
         experiencia = self._recordar(
@@ -132,6 +159,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             plan_tasks=plan.total_tasks,
             duracion=duracion,
             decision=decision,
+            commit=commit,
         )
 
         return {
@@ -148,7 +176,54 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             "duration": duracion,
             "experience_id": experiencia,
             "decision": decision,
+            "committed": commit["committed"],
+            "commit_reason": commit["reason"],
         }
+
+    def _commit_si_procede(
+        self,
+        *,
+        repository: Path,
+        patch: Any,
+        diff: str,
+        instruction: str,
+    ) -> dict[str, Any]:
+        """Apply and commit the patch, only when all three conditions hold.
+
+        Committing modifies the user's repository, so it needs every guard:
+
+        1. ``AUTO_COMMIT`` explicitly enabled -- off by default.
+        2. The decision engine approved the patch.
+        3. The target really is a git repository.
+
+        A failure here does not break the improvement: the patch is already
+        generated and saved on disk, and the user can apply it by hand. The
+        reason is reported in the result.
+        """
+        if not auto_commit_activo():
+            return {"committed": False, "reason": "AUTO_COMMIT desactivado"}
+
+        if not patch.approved:
+            return {"committed": False, "reason": "el parche no fue aprobado"}
+
+        git = self.git or GitManager(repository)
+
+        if not git.is_repository():
+            return {"committed": False, "reason": "el destino no es un repositorio git"}
+
+        try:
+            if not git.apply_patch(diff):
+                return {"committed": False, "reason": "el parche no se pudo aplicar"}
+
+            mensaje = f"AI Architect: {instruction}".strip()
+
+            if not git.commit(mensaje):
+                return {"committed": False, "reason": "el commit fallo"}
+
+        except Exception as e:  # noqa: BLE001 - el parche ya esta guardado
+            return {"committed": False, "reason": f"error de git: {e}"}
+
+        return {"committed": True, "reason": f"commit creado: {mensaje}"}
 
     def _recordar(
         self,
@@ -161,6 +236,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         plan_tasks: int,
         duracion: float,
         decision: dict[str, Any],
+        commit: dict[str, Any],
     ) -> str | None:
         """Record the run in memory so future ones can learn from it.
 
@@ -188,6 +264,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
                     "duration": duracion,
                     "decision": decision.get("decision"),
                     "approved": patch.approved,
+                    "committed": commit["committed"],
                 },
             )
         except Exception:  # noqa: BLE001 - la mejora ya esta hecha
