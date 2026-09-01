@@ -99,6 +99,8 @@ class GitAgent(BaseAgent):
                 cwd=project,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=True,
                 timeout=TIEMPO_LIMITE,
             )

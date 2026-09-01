@@ -14,6 +14,7 @@ from ai_architect.commands import (
     agents,
     analyze,
     auto,
+    changelog,
     doctor,
     execute,
     improve,
@@ -38,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
             "doctor",
             "agents",
             "auto",
+            "changelog",
         ],
     )
 
@@ -77,6 +79,24 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         help="For auto: several instructions, most important first",
+    )
+
+    parser.add_argument(
+        "--version-name",
+        default="",
+        help="For changelog: the name of this version",
+    )
+
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="For changelog: reference to count from (default: latest tag)",
+    )
+
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="For changelog: write CHANGELOG.md instead of only showing it",
     )
 
     parser.add_argument(
@@ -182,6 +202,18 @@ def main():
         result = auto.run(
             args.project,
             instructions=args.instructions,
+        )
+
+    # =====================================================
+    # ChangeLog
+    # =====================================================
+
+    elif args.command == "changelog":
+        result = changelog.run(
+            args.project,
+            version=args.version_name,
+            write=args.write,
+            since=args.since,
         )
 
     # =====================================================

@@ -75,7 +75,8 @@ OLLAMA_HOST=http://localhost:11434
 ## Uso
 
 ```
-architect {analyze,review,improve,execute,agents,auto,doctor} [proyecto] [opciones]
+architect {analyze,review,improve,execute,agents,auto,changelog,doctor} [proyecto]
+          [opciones]
 ```
 
 ### Comprobar la instalación
@@ -169,6 +170,32 @@ architect auto . --instructions "extrae el validador" "documenta el planner"
 Ninguna toca el repositorio salvo que `AUTO_COMMIT` esté encendido, que es la
 misma puerta que ya protege a `architect improve`.
 
+### Generar el CHANGELOG
+
+Lee los commits desde la última etiqueta y arma la entrada de esta versión.
+No usa IA. **No escribe nada salvo que se lo pidas** con `--write`: un
+comando que modifica un archivo del repositorio solo por ejecutarlo es una
+sorpresa desagradable.
+
+```console
+$ architect changelog . --version-name 0.2.0
+version: 0.2.0 | since: (todo el historial)
+total_changes: 24
+by_type: {'UPDATE': 24}
+written: False
+
+## 0.2.0
+- **[UPDATE]** `11 archivos` (+298/-289)
+  Conectar filesystem/ignore_manager: respetar el .gitignore del proyecto
+```
+
+Un ítem por commit, con la carpeta común y las líneas movidas. Reconoce los
+prefijos convencionales (`fix:`, `feat:`, `refactor:`) y, si no los hay, deja
+el cambio como `UPDATE` en vez de inventarle una categoría.
+
+Con `--write` añade la entrada **arriba** del `CHANGELOG.md`, conservando lo
+que ya había.
+
 ### Aplicar un parche
 
 `--dry-run` valida el parche **sin tocar** ningún archivo. Úsalo siempre antes
@@ -214,6 +241,7 @@ Motores independientes que se coordinan entre sí:
 | Autónomo | `autonomous/` | Cola, orden, ejecución y puerta de aprobación |
 | Git | `git/` | Ramas, commits, diffs, parches, estado y etiquetas |
 | Avisos | `notifier/` | Resumen por Telegram al terminar (opcional) |
+| Changelog | `changelog/` | Entrada de versión a partir del historial de git |
 | Generador de parches | `patch_generator/` | Construye y valida el diff |
 | Ejecución | `execution/` | Aplica el parche de forma atómica y lanza las pruebas |
 | Revisor | `reviewer/` | Puntúa el resultado y decide la aprobación |

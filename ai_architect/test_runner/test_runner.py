@@ -64,6 +64,8 @@ class TestRunner:
             cwd=repository,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=self.timeout,
             check=False,
         )
@@ -97,6 +99,8 @@ class TestRunner:
             cwd=repository,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=self.timeout,
             check=False,
         )
