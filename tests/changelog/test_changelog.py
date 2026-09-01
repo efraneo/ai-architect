@@ -93,7 +93,7 @@ def test_un_archivo_se_nombra() -> None:
 
 
 def test_varios_de_la_misma_carpeta_se_cuentan_con_su_carpeta() -> None:
-    """"12 archivos en agents" orienta más que doce rutas seguidas."""
+    """ "12 archivos en agents" orienta más que doce rutas seguidas."""
     rutas = [f"ai_architect/agents/a{i}.py" for i in range(3)]
 
     assert resumir(rutas) == "3 archivos en ai_architect/agents"
