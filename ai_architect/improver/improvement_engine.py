@@ -16,6 +16,7 @@ from ai_architect.git.git_manager import GitManager
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
 from ai_architect.memory.memory_engine import MemoryEngine
 from ai_architect.memory.models import ExperienceOutcome, ExperienceType
+from ai_architect.notifier.improvement_notice import avisar
 from ai_architect.patch_generator.patch_generator import PatchGenerator
 from ai_architect.patch_generator.patch_validator import PatchValidator
 from ai_architect.planner.planner import Planner
@@ -52,6 +53,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         git: GitManager | None = None,
         tests: TestRunner | None = None,
         agents: AgentManager | None = None,
+        notifier: Any = None,
     ) -> None:
         self.analysis = AnalysisEngine()
         self.context_builder = AnalysisContextBuilder()
@@ -79,6 +81,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         # Only its static half is used here: security, dependencies, licences
         # and git, which cost nothing and enrich the decision.
         self.agents = agents or AgentManager()
+
+        # Se construye solo si hace falta: leer el .env y montar el cliente
+        # no tiene sentido cuando nadie va a avisar de nada.
+        self._notifier = notifier
 
         # Compatibility aliases for the existing public API.
         self.builder = self.patch_generator.builder
@@ -195,7 +201,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             commit=commit,
         )
 
-        return {
+        resultado = {
             "success": bool(structurally_valid),
             "approved": patch.approved,
             "structurally_valid": bool(structurally_valid),
@@ -214,6 +220,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             "tests": pruebas,
             "agents": inspeccion,
         }
+
+        avisar(resultado, self._notifier)
+
+        return resultado
 
     def _inspeccionar(self, repository: Path) -> dict[str, Any]:
         """Static inspection by the agents: security, dependencies, licences...
