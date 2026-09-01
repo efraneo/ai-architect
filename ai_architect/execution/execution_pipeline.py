@@ -10,9 +10,9 @@ Git unified-diff patches.
 from __future__ import annotations
 
 import subprocess
-import tempfile
 from pathlib import Path
 
+from ai_architect.execution.git_apply import aplicar, error
 from ai_architect.execution.pipeline_state import ExecutionPipelineStateMixin
 from ai_architect.patch_generator.models import Patch
 
@@ -33,126 +33,12 @@ class ExecutionPipeline(ExecutionPipelineStateMixin):
         check_only: bool = False,
         reverse: bool = False,
     ) -> dict:
-        if not repository.exists():
-            return self._error(
-                f"Repository does not exist: {repository}",
-            )
-
-        if not repository.is_dir():
-            return self._error(
-                f"Repository is not a directory: {repository}",
-            )
-
-        if not patch.diff.strip():
-            return self._error(
-                "Patch contains no unified diff.",
-            )
-
-        git_check = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repository),
-                "rev-parse",
-                "--show-toplevel",
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+        return aplicar(
+            repository,
+            patch.diff,
+            check_only=check_only,
+            reverse=reverse,
         )
-
-        if git_check.returncode != 0:
-            return {
-                "success": False,
-                "message": "Target directory is not a Git repository.",
-                "stdout": git_check.stdout,
-                "stderr": git_check.stderr,
-                "returncode": git_check.returncode,
-            }
-
-        temporary_patch: Path | None = None
-
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                suffix=".patch",
-                delete=False,
-            ) as handle:
-                handle.write(patch.diff)
-
-                if not patch.diff.endswith("\n"):
-                    handle.write("\n")
-
-                temporary_patch = Path(handle.name)
-
-            command = [
-                "git",
-                "-C",
-                str(repository),
-                "apply",
-            ]
-
-            if check_only:
-                command.append("--check")
-
-            if reverse:
-                command.append("--reverse")
-
-            command.append(str(temporary_patch))
-
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-
-            success = result.returncode == 0
-
-            if check_only and success:
-                message = "Patch validation succeeded."
-            elif success:
-                message = "Patch applied successfully."
-            else:
-                message = "Git rejected the patch."
-
-            return {
-                "success": success,
-                "message": message,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode,
-            }
-
-        except FileNotFoundError:
-            return {
-                "success": False,
-                "message": (
-                    "Git executable was not found. "
-                    "Install Git and ensure it is available on PATH."
-                ),
-                "stdout": "",
-                "stderr": "",
-                "returncode": 127,
-            }
-
-        except OSError as exc:
-            return self._error(
-                f"Git execution error: {exc}",
-                stderr=str(exc),
-            )
-
-        finally:
-            if temporary_patch is not None:
-                try:
-                    temporary_patch.unlink(missing_ok=True)
-                except OSError:
-                    # No poder borrar un temporal no cambia el resultado, y
-                    # lanzar desde un `finally` taparía el error de verdad.
-                    pass
 
     @staticmethod
     def _error(
@@ -161,13 +47,7 @@ class ExecutionPipeline(ExecutionPipelineStateMixin):
         stderr: str = "",
         returncode: int = 1,
     ) -> dict:
-        return {
-            "success": False,
-            "message": message,
-            "stdout": "",
-            "stderr": stderr,
-            "returncode": returncode,
-        }
+        return error(message, stderr=stderr, returncode=returncode)
 
     def execute(
         self,
