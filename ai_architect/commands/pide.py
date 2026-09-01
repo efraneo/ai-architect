@@ -95,6 +95,7 @@ def run(
     si: bool = False,
     soy: str = "",
     decir: bool = False,
+    cara: bool = False,
     engine: Any = None,
 ) -> dict:
     """Interpreta la frase y ejecuta el comando que corresponda.
@@ -229,21 +230,37 @@ def run(
         "result": resultado,
     }
 
-    return _decir_si_toca(respuesta, decir)
+    return _decir_si_toca(respuesta, decir, cara)
 
 
-def _decir_si_toca(respuesta: dict[str, Any], decir: bool) -> dict[str, Any]:
+def _decir_si_toca(
+    respuesta: dict[str, Any],
+    decir: bool,
+    cara: bool = False,
+) -> dict[str, Any]:
     """Lee la respuesta en alto, si se pidió.
 
     Que no haya voz no puede impedir que el comando sirva: la respuesta ya
     está escrita en la pantalla. Por eso el fallo se anota y no se lanza.
     """
-    if not decir:
+    if not decir and not cara:
+        return respuesta
+
+    texto = str(respuesta.get("explanation", ""))
+
+    # Con la cara el audio no se reproduce aquí: lo lanza el avatar, que
+    # necesita saber cuánto dura antes de empezar para mover la boca
+    # justo ese rato y no un segundo de más.
+    if cara:
+        from ai_architect.commands import avatar
+
+        respuesta["face"] = avatar.run(decir=texto if decir else "")
+
         return respuesta
 
     from ai_architect.voz.hablar import hablar
 
-    respuesta["spoken"] = hablar(str(respuesta.get("explanation", "")))
+    respuesta["spoken"] = hablar(texto)
 
     return respuesta
 

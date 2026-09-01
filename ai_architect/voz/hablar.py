@@ -215,6 +215,10 @@ def _piper_disponible() -> Path | None:
 
 
 def _con_piper(texto: str) -> None:
+    _reproducir(_wav_piper(texto))
+
+
+def _wav_piper(texto: str) -> Path:
     voz = _piper_disponible()
 
     if voz is None:
@@ -238,13 +242,17 @@ def _con_piper(texto: str) -> None:
         timeout=TIEMPO_LIMITE,
     )
 
-    _reproducir(salida)
+    return salida
 
 
 # --- OpenAI -----------------------------------------------------------------
 
 
 def _con_openai(texto: str) -> None:
+    _reproducir(_wav_openai(texto))
+
+
+def _wav_openai(texto: str) -> Path:
     """Pide el audio crudo y le pone la cabecera aquí.
 
     Pidiendo ``wav`` la respuesta llega en streaming con el tamaño sin
@@ -266,7 +274,95 @@ def _con_openai(texto: str) -> None:
 
     _escribir_wav(salida, respuesta.read())
 
-    _reproducir(salida)
+    return salida
+
+
+# --- Para el avatar ---------------------------------------------------------
+#
+# La cara mueve la boca mientras suena la voz, y para eso hay que saber
+# **cuánto** va a sonar antes de empezar. Estimarlo por el número de
+# palabras se nota: la boca sigue abriéndose medio segundo después del
+# silencio. Con el WAV delante la duración es exacta.
+
+
+PALABRAS_POR_SEGUNDO = 2.6
+
+
+def preparar(texto: str, motor: str = "") -> dict[str, Any]:
+    """Deja el audio listo y dice cuánto dura, sin reproducirlo todavía."""
+    limpio = _para_decir(texto)
+
+    if not limpio:
+        return {"archivo": None, "motor": "", "segundos": 0.0, "motivo": "nada"}
+
+    elegido = elegir(motor)
+
+    if not elegido:
+        return {"archivo": None, "motor": "", "segundos": 0.0, "motivo": "sin voz"}
+
+    # Las voces de Windows hablan por SAPI directamente: no dejan archivo,
+    # así que ahí la duración sí hay que estimarla.
+    if elegido == "windows":
+        return {
+            "archivo": None,
+            "motor": elegido,
+            "segundos": _estimar(limpio),
+            "motivo": "",
+            "texto": limpio,
+        }
+
+    try:
+        archivo = {"piper": _wav_piper, "openai": _wav_openai}[elegido](limpio)
+
+    except Exception as e:  # noqa: BLE001 - sin voz se sigue trabajando
+        return {"archivo": None, "motor": elegido, "segundos": 0.0, "motivo": str(e)}
+
+    return {
+        "archivo": archivo,
+        "motor": elegido,
+        "segundos": duracion(archivo),
+        "motivo": "",
+        "texto": limpio,
+    }
+
+
+def emitir(preparado: dict[str, Any]) -> bool:
+    """Reproduce lo que dejó ``preparar``. Devuelve si sonó."""
+    try:
+        archivo = preparado.get("archivo")
+
+        if archivo is not None:
+            _reproducir(Path(archivo))
+
+        elif preparado.get("motor") == "windows":
+            _con_windows(str(preparado.get("texto", "")))
+
+        else:
+            return False
+
+    except Exception:  # noqa: BLE001 - sin voz se sigue trabajando
+        return False
+
+    return True
+
+
+def duracion(archivo: Path) -> float:
+    """Los segundos que dura un WAV, leídos de su cabecera."""
+    try:
+        with wave.open(str(archivo), "rb") as leido:
+            velocidad = leido.getframerate()
+
+            return leido.getnframes() / velocidad if velocidad else 0.0
+
+    # EOFError y no solo wave.Error: un WAV truncado —una llamada cortada
+    # a mitad— revienta al leer la cabecera, y eso no puede tumbar la
+    # respuesta entera cuando lo único que se perdía era mover la boca.
+    except (OSError, wave.Error, EOFError):
+        return 0.0
+
+
+def _estimar(texto: str) -> float:
+    return max(1.0, len(texto.split()) / PALABRAS_POR_SEGUNDO)
 
 
 def _escribir_wav(destino: Path, crudo: bytes) -> None:

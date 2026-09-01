@@ -28,6 +28,7 @@ from ai_architect.commands import (
     agents,
     analyze,
     auto,
+    avatar,
     changelog,
     doctor,
     execute,
@@ -60,6 +61,11 @@ class Comando:
 # `pide` va aparte de la tabla: es quien la usa, no uno de sus miembros.
 # Meterlo dentro le dejaría elegirse a sí mismo.
 COMANDOS: tuple[Comando, ...] = (
+    Comando(
+        "avatar",
+        "Abrir el rostro (--texto para que lo diga en voz alta)",
+        lambda a: avatar.run(decir=a.texto),
+    ),
     Comando(
         "voz",
         "Ver qué voces hay y probarlas (--probar)",
@@ -139,6 +145,7 @@ PIDE = Comando(
         si=a.si,
         soy=a.soy,
         decir=a.decir,
+        cara=a.cara,
     ),
 )
 
@@ -258,6 +265,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--decir",
         action="store_true",
         help="For pide: read the answer out loud",
+    )
+
+    parser.add_argument(
+        "--cara",
+        action="store_true",
+        help="For pide: show the avatar; with --decir it moves its mouth",
+    )
+
+    parser.add_argument(
+        "--texto",
+        default="",
+        help="For avatar: what the face should say out loud",
     )
 
     parser.add_argument(
