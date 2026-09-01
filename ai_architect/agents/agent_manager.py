@@ -6,6 +6,8 @@ Central Multi-Agent Orchestrator
 
 from __future__ import annotations
 
+from typing import Any
+
 from ai_architect.agents.agent_context import AgentContext
 from ai_architect.agents.architect_agent import ArchitectAgent
 from ai_architect.agents.architecture_agent import ArchitectureAgent
@@ -51,6 +53,69 @@ class AgentManager:
         self.reviewer = CodeReviewerAgent()
         self.tests = TestAgent()
         self.documentation = DocumentationAgent()
+
+    def inspect(
+        self,
+        repository: str,
+    ) -> dict[str, Any]:
+        """Run only the static agents: no LLM, no cost.
+
+        ``execute()`` also runs the five AI agents, which means five provider
+        calls. The improvement flow wants the cheap half -- security,
+        dependencies, licences, git -- to feed the decision engine without
+        making every run five times more expensive.
+
+        One agent failing does not sink the rest: its slot carries the error
+        and the others still report.
+        """
+        estaticos = {
+            "metrics": self.metrics,
+            "architecture": self.architecture,
+            "testing": self.testing,
+            "security": self.security,
+            "dependencies": self.dependencies,
+            "licenses": self.licenses,
+            "git": self.git,
+        }
+
+        salida: dict[str, Any] = {}
+
+        for nombre, agente in estaticos.items():
+            try:
+                salida[nombre] = agente.review(repository)
+            except Exception as e:  # noqa: BLE001 - un agente no tumba al resto
+                salida[nombre] = {"status": "error", "error": str(e)}
+
+        return salida
+
+    @staticmethod
+    def findings_de(inspeccion: dict[str, Any]) -> list[str]:
+        """Flatten the inspection into the findings list the engine reads.
+
+        Each agent reports in its own shape, so what is collected is the
+        common part: the ``findings`` it publishes, and the agents that came
+        back in error -- which is a finding in itself.
+        """
+        encontrados: list[str] = []
+
+        for nombre, datos in inspeccion.items():
+            if not isinstance(datos, dict):
+                continue
+
+            if datos.get("status") == "error":
+                encontrados.append(f"{nombre}: no se pudo revisar")
+                continue
+
+            for hallazgo in datos.get("findings") or []:
+                if isinstance(hallazgo, dict):
+                    detalle = (
+                        hallazgo.get("issue") or hallazgo.get("type") or "hallazgo"
+                    )
+                    encontrados.append(f"{nombre}: {detalle}")
+                else:
+                    encontrados.append(f"{nombre}: {hallazgo}")
+
+        return encontrados
 
     def execute(
         self,

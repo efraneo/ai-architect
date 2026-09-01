@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_agent import BaseAgent
+from .scope import archivos_py
 
 
 class ArchitectureAgent(BaseAgent):
@@ -18,9 +19,7 @@ class ArchitectureAgent(BaseAgent):
     ) -> dict[str, Any]:
         project_path = Path(project)
 
-        python_files = list(
-            project_path.rglob("*.py"),
-        )
+        python_files = archivos_py(project_path)
 
         oversized: list[str] = []
         deep_modules: list[str] = []

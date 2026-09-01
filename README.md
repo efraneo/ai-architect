@@ -75,7 +75,7 @@ OLLAMA_HOST=http://localhost:11434
 ## Uso
 
 ```
-architect {analyze,review,improve,execute,doctor} [proyecto] [opciones]
+architect {analyze,review,improve,execute,agents,doctor} [proyecto] [opciones]
 ```
 
 ### Comprobar la instalación
@@ -109,6 +109,33 @@ recommendations: ['Remove or consolidate duplicated code.']
 ```bash
 architect review .
 ```
+
+### Pasar los agentes
+
+Siete agentes estáticos —métricas, arquitectura, pruebas, seguridad,
+dependencias, licencias y git— revisan el repositorio. **No usan IA ni gastan
+tokens**, y no miran lo que no es tuyo: `.venv`, `node_modules` y las cachés
+quedan fuera.
+
+```console
+$ architect agents .
+success: True
+ai: False
+agents: ['architecture', 'dependencies', 'git', 'licenses', 'metrics',
+         'security', 'testing']
+total_findings: 0
+```
+
+Con `--ai` se suman los cinco agentes de IA (arquitecto, refactor, revisor,
+pruebas y documentación). Son **cinco llamadas al proveedor**, así que hay que
+pedirlo a propósito:
+
+```bash
+architect agents . --ai
+```
+
+Lo que encuentran los agentes estáticos también entra en la decisión de
+`improve`: un secreto filtrado pesa en si el parche se aprueba.
 
 ### Mejorar el código *(requiere clave de proveedor)*
 
@@ -147,6 +174,7 @@ Motores independientes que se coordinan entre sí:
 | Planificador | `planner/` | Convierte el análisis en un plan de cambios |
 | Proveedores | `providers/` | Claude, OpenAI, Gemini, Ollama y OpenRouter tras una interfaz común |
 | Pruebas | `test_runner/` | Ejecuta la suite del proyecto y alimenta la decisión |
+| Agentes | `agents/` | Revisión estática (gratis) y análisis con IA (opcional) |
 | Generador de parches | `patch_generator/` | Construye y valida el diff |
 | Ejecución | `execution/` | Aplica el parche de forma atómica y lanza las pruebas |
 | Revisor | `reviewer/` | Puntúa el resultado y decide la aprobación |

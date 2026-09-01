@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ai_architect.agents.agent_manager import AgentManager
 from ai_architect.analyzer.analysis_engine import AnalysisEngine
 from ai_architect.core.context_builder import AnalysisContextBuilder
 from ai_architect.decision_engine.decision_engine import DecisionEngine
@@ -50,6 +51,7 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         memory: MemoryEngine | None = None,
         git: GitManager | None = None,
         tests: TestRunner | None = None,
+        agents: AgentManager | None = None,
     ) -> None:
         self.analysis = AnalysisEngine()
         self.context_builder = AnalysisContextBuilder()
@@ -73,6 +75,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         # Runs the target project's suite. Injectable so this project's own
         # tests do not spawn a pytest inside another pytest.
         self.tests = tests or TestRunner()
+
+        # Only its static half is used here: security, dependencies, licences
+        # and git, which cost nothing and enrich the decision.
+        self.agents = agents or AgentManager()
 
         # Compatibility aliases for the existing public API.
         self.builder = self.patch_generator.builder
@@ -137,6 +143,8 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
 
         pruebas = self._ejecutar_pruebas(repository)
 
+        inspeccion = self._inspeccionar(repository)
+
         # Structural validation is not approval: a well-formed patch can still
         # be a bad idea. The decision engine weighs the analysis metrics, the
         # findings, the size of the change and the state of the suite.
@@ -145,7 +153,10 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         # the tests had passed when nothing had been run.
         decision = self.decision.decide(
             metrics=self.metrics(analysis),
-            findings=self.recommendations(analysis),
+            findings=[
+                *self.recommendations(analysis),
+                *self.agents.findings_de(inspeccion),
+            ],
             task={
                 "instruction": instruction,
                 "files": patch.total_files,
@@ -201,7 +212,20 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
             "committed": commit["committed"],
             "commit_reason": commit["reason"],
             "tests": pruebas,
+            "agents": inspeccion,
         }
+
+    def _inspeccionar(self, repository: Path) -> dict[str, Any]:
+        """Static inspection by the agents: security, dependencies, licences...
+
+        Only the free half; the AI agents would mean five extra provider calls
+        on every improvement. A failure here does not stop anything: the flow
+        carries on with the analyzer's findings alone.
+        """
+        try:
+            return self.agents.inspect(str(repository))
+        except Exception as e:  # noqa: BLE001 - la mejora no depende de esto
+            return {"error": str(e)}
 
     def _ejecutar_pruebas(self, repository: Path) -> dict[str, Any]:
         """Run the target project's suite and summarise the result.

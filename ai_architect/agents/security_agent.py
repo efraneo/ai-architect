@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_agent import BaseAgent
+from .scope import archivos
 
 
 class SecurityAgent(BaseAgent):
@@ -36,19 +37,13 @@ class SecurityAgent(BaseAgent):
 
         scanned = 0
 
-        for file in project_path.rglob("*"):
-            if not file.is_file() or file.suffix.lower() in {
-                ".png",
-                ".jpg",
-                ".jpeg",
-                ".gif",
-                ".ico",
-                ".pdf",
-                ".zip",
-                ".db",
-                ".sqlite",
-                ".pyc",
-            }:
+        # Its own pattern table matches its own patterns: scanning itself
+        # reports a leaked private key on every repository that ships this
+        # scanner -- starting with this one.
+        yo = Path(__file__).resolve()
+
+        for file in archivos(project_path):
+            if file.resolve() == yo:
                 continue
 
             scanned += 1
