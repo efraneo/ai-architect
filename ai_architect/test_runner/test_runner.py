@@ -167,7 +167,9 @@ class TestRunner:
 
                     stats["duration"] = float(duration)
 
-                except Exception:
+                except (ValueError, IndexError):
+                    # pytest cambia el formato del resumen entre versiones;
+                    # sin duración se sigue pudiendo decidir.
                     pass
 
         return stats

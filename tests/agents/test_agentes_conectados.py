@@ -215,3 +215,82 @@ def test_con_changelog_y_version_esta_listo(proyecto: Path) -> None:
 
     assert informe["release_ready"] is True
     assert informe["findings"] == []
+
+
+# --- La vía de escape del cazador -------------------------------------------
+
+
+def test_un_pass_sin_explicar_se_reporta(proyecto: Path) -> None:
+    (proyecto / "malo.py").write_text(
+        "try:\n    x = 1\nexcept ValueError:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    tipos = [f["type"] for f in BugHunterAgent().review(str(proyecto))["findings"]]
+
+    assert "silent_except" in tipos
+
+
+def test_un_pass_con_el_motivo_escrito_no_se_reporta(proyecto: Path) -> None:
+    """La misma vía de escape que da cualquier linter.
+
+    Hay sitios donde tragarse el error es lo correcto —borrar un archivo
+    temporal en un ``finally``, por ejemplo—, y lanzar desde ahí taparía el
+    error de verdad. Lo que no vale es hacerlo sin decir por qué: el motivo
+    queda escrito donde hay que leerlo.
+    """
+    (proyecto / "bueno.py").write_text(
+        "try:\n"
+        "    x = 1\n"
+        "except ValueError:\n"
+        "    # sin valor se sigue pudiendo continuar\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    assert BugHunterAgent().review(str(proyecto))["total"] == 0
+
+
+def test_el_except_pelado_se_reporta_aunque_esté_explicado(proyecto: Path) -> None:
+    """Un ``except:`` sin tipo se traga hasta KeyboardInterrupt: eso no lo
+    arregla ningún comentario."""
+    (proyecto / "malo.py").write_text(
+        "try:\n    x = 1\nexcept:\n    # da igual\n    x = 2\n",
+        encoding="utf-8",
+    )
+
+    tipos = [f["type"] for f in BugHunterAgent().review(str(proyecto))["findings"]]
+
+    assert "bare_except" in tipos
+
+
+# --- Las métricas ya no mienten en silencio ---------------------------------
+
+
+def test_las_metricas_cuentan_los_archivos_ilegibles(proyecto: Path) -> None:
+    """Antes se descartaban con un ``except: pass``, así que el tamaño y las
+    líneas salían por debajo de lo real y nadie podía saberlo.
+
+    Se simula por la vía de la lectura —``Path.open``— y no por ``stat``,
+    porque ``rglob`` llama a ``stat`` para saber si algo es un archivo:
+    romperlo entero no probaría nada, rompería el recorrido.
+    """
+    from unittest import mock
+
+    from ai_architect.agents.project_metrics_agent import ProjectMetricsAgent
+
+    with mock.patch.object(Path, "open", side_effect=OSError("sin permiso")):
+        informe = ProjectMetricsAgent().review(str(proyecto))
+
+    assert informe["unreadable"] > 0
+    assert informe["findings"][0]["type"] == "ilegible"
+    assert "por debajo de lo real" in informe["findings"][0]["issue"]
+
+
+def test_sin_ilegibles_no_hay_hallazgo(proyecto: Path) -> None:
+    from ai_architect.agents.project_metrics_agent import ProjectMetricsAgent
+
+    informe = ProjectMetricsAgent().review(str(proyecto))
+
+    assert informe["unreadable"] == 0
+    assert "findings" not in informe

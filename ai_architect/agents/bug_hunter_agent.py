@@ -25,11 +25,6 @@ REGLAS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         "except sin tipo: se traga hasta KeyboardInterrupt",
     ),
     (
-        "silent_except",
-        re.compile(r"^\s*except[^:]*:\s*(#.*)?$\n\s*pass\s*$", re.MULTILINE),
-        "except que solo hace pass: el error desaparece sin rastro",
-    ),
-    (
         "marker",
         re.compile(r"#\s*(TODO|FIXME|XXX|HACK)\b", re.IGNORECASE),
         "marcador pendiente en el código",
@@ -69,20 +64,17 @@ class BugHunterAgent(BaseAgent):
             except Exception:
                 continue
 
+            for numero, detalle in self._silenciosos(source):
+                findings.append(
+                    {
+                        "file": str(file),
+                        "line": numero,
+                        "type": "silent_except",
+                        "issue": detalle,
+                    }
+                )
+
             for regla, patron, detalle in REGLAS:
-                if regla == "silent_except":
-                    for coincidencia in patron.finditer(source):
-                        findings.append(
-                            {
-                                "file": str(file),
-                                "line": source[: coincidencia.start()].count("\n") + 1,
-                                "type": regla,
-                                "issue": detalle,
-                            }
-                        )
-
-                    continue
-
                 for numero, linea in enumerate(source.splitlines(), start=1):
                     if patron.search(linea):
                         findings.append(
@@ -100,6 +92,57 @@ class BugHunterAgent(BaseAgent):
             "total": len(findings),
             "status": "OK",
         }
+
+    @staticmethod
+    def _silenciosos(source: str) -> list[tuple[int, str]]:
+        """Los ``except`` cuyo cuerpo es solo ``pass``, sin explicar por qué.
+
+        Se hacía con una expresión regular, y **no funcionaba como decía**:
+        ``\\s*`` traga los saltos de línea, así que un comentario de una sola
+        línea entre el ``except`` y el ``pass`` seguía casando. La vía de
+        escape parecía existir y no existía.
+
+        Aquí se lee por líneas, que es lo que se puede razonar: un comentario
+        encima del ``pass`` es una decisión explicada —la misma vía de escape
+        que da cualquier linter— y el motivo queda escrito donde se lee.
+        """
+        encontrados: list[tuple[int, str]] = []
+
+        lineas = source.splitlines()
+
+        for indice, linea in enumerate(lineas):
+            if not re.match(r"^\s*except\b[^:]*:\s*$", linea):
+                continue
+
+            sangria = len(linea) - len(linea.lstrip())
+
+            explicado = False
+
+            for siguiente in lineas[indice + 1 :]:
+                desnuda = siguiente.strip()
+
+                if not desnuda:
+                    continue
+
+                if len(siguiente) - len(siguiente.lstrip()) <= sangria:
+                    break  # el bloque terminó sin un `pass` solitario
+
+                if desnuda.startswith("#"):
+                    explicado = True
+                    continue
+
+                if desnuda == "pass" and not explicado:
+                    encontrados.append(
+                        (
+                            indice + 1,
+                            "except que solo hace pass: "
+                            "el error desaparece sin rastro",
+                        )
+                    )
+
+                break
+
+        return encontrados
 
     def capabilities(
         self,
