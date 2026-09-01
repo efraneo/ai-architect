@@ -113,7 +113,6 @@ El proyecto está dividido en los siguientes dominios funcionales:
 - execution
 - filesystem
 - git
-- knowledge
 - logger
 - memory
 - notifier

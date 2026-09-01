@@ -3,6 +3,15 @@
 > Estado: Diseño Institucional
 > Versión: 1.0
 
+> **Lo que quedó en pie:** `MemoryEngine` compone `ExperienceStore`,
+> `LearningEngine`, `PatternMiner`, `VectorMemory` y `KnowledgeGraph`.
+> Se podaron nueve módulos que eran implementaciones paralelas de eso
+> mismo (`experience_memory`, `project_history`, `experience`,
+> `knowledge_base`, `repository_memory`), un `vector_store` que
+> llamaba "embedding" a un sha256, y `decision_history` y
+> `metrics_store`, que **creaban una carpeta `memory/` en el
+> directorio actual** con solo construirlos.
+
 ---
 
 # Objetivo
