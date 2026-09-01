@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import time
 from pathlib import Path
 from typing import Any
@@ -13,7 +12,14 @@ from ai_architect.analyzer.analysis_engine import AnalysisEngine
 from ai_architect.core.context_builder import AnalysisContextBuilder
 from ai_architect.decision_engine.decision_engine import DecisionEngine
 from ai_architect.git.git_manager import GitManager
+from ai_architect.improver.diff_reader import (
+    archivos as archivos_del_diff,
+)
+from ai_architect.improver.diff_reader import (
+    limpiar as limpiar_diff,
+)
 from ai_architect.improver.engine_facade import ImprovementEngineFacadeMixin
+from ai_architect.improver.prompt_builder import construir as construir_prompt
 from ai_architect.memory.memory_engine import MemoryEngine
 from ai_architect.memory.models import ExperienceOutcome, ExperienceType
 from ai_architect.notifier.improvement_notice import avisar
@@ -375,92 +381,11 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
         instruction: str,
         file: str | None = None,
     ) -> str:
-        summary = analysis.summary
-
-        lines = [
-            "You are QUANT AI Architect.",
-            "",
-            "Improvement Instruction",
-            "=======================",
-            instruction,
-            "",
-        ]
-
-        if file is not None:
-            lines.extend(
-                [
-                    "Target File",
-                    "===========",
-                    file,
-                    "",
-                ]
-            )
-
-        lines.extend(
-            [
-                "Project Summary",
-                "===============",
-                f"Files: {summary.total_files}",
-                f"Python Files: {summary.python_files}",
-                f"Classes: {summary.total_classes}",
-                f"Functions: {summary.total_functions}",
-                f"Dependencies: {summary.dependency_modules}",
-                f"Duplicates: {summary.duplicate_groups}",
-                f"Complexity: {summary.average_complexity}",
-                "",
-                "Recommendations",
-                "===============",
-            ]
-        )
-
-        lines.extend(
-            f"- {recommendation}" for recommendation in analysis.recommendations
-        )
-
-        lines.extend(
-            [
-                "",
-                "Execution Plan",
-                "==============",
-            ]
-        )
-
-        lines.extend(f"- {task.title}" for task in plan.tasks)
-
-        lines.extend(
-            [
-                "",
-                "Output Requirements",
-                "====================",
-                "Generate ONLY a unified diff patch.",
-                "Do not explain.",
-                "Do not include markdown.",
-                "Do not wrap the patch in code fences.",
-                "Return valid unified diff format.",
-            ]
-        )
-
-        return "\n".join(lines)
+        return construir_prompt(analysis, plan, instruction, file)
 
     @staticmethod
     def _clean_diff(diff: str) -> str:
-        if diff is None:
-            return ""
-
-        diff = str(diff).strip()
-
-        if diff.startswith("```"):
-            lines = diff.splitlines()
-
-            if lines:
-                lines = lines[1:]
-
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-
-            diff = "\n".join(lines)
-
-        return diff.strip()
+        return limpiar_diff(diff)
 
     def _register_patch_files(
         self,
@@ -501,81 +426,4 @@ class ImprovementEngine(ImprovementEngineFacadeMixin):
     def _parse_diff_files(
         diff: str,
     ) -> list[dict[str, Any]]:
-        results: list[dict[str, Any]] = []
-        current: dict[str, Any] | None = None
-
-        for raw_line in diff.splitlines():
-            line = raw_line.rstrip()
-
-            if line.startswith("diff --git "):
-                if current is not None:
-                    results.append(current)
-
-                current = {
-                    "path": "",
-                    "action": "MODIFY",
-                    "additions": 0,
-                    "deletions": 0,
-                }
-
-                match = re.match(
-                    r"diff --git a/(.+?) b/(.+)$",
-                    line,
-                )
-
-                if match:
-                    current["path"] = match.group(2)
-
-                continue
-
-            if current is None:
-                if line.startswith("--- "):
-                    current = {
-                        "path": "",
-                        "action": "MODIFY",
-                        "additions": 0,
-                        "deletions": 0,
-                    }
-                else:
-                    continue
-
-            if line.startswith("new file mode"):
-                current["action"] = "CREATE"
-                continue
-
-            if line.startswith("deleted file mode"):
-                current["action"] = "DELETE"
-                continue
-
-            if line.startswith("+++ "):
-                target = line[4:].strip()
-
-                if target == "/dev/null":
-                    current["action"] = "DELETE"
-
-                elif target.startswith("b/"):
-                    current["path"] = target[2:]
-
-                elif not current["path"]:
-                    current["path"] = target
-
-                continue
-
-            if line.startswith("--- "):
-                source = line[4:].strip()
-
-                if source == "/dev/null":
-                    current["action"] = "CREATE"
-
-                continue
-
-            if line.startswith("+") and not line.startswith("+++"):
-                current["additions"] += 1
-
-            elif line.startswith("-") and not line.startswith("---"):
-                current["deletions"] += 1
-
-        if current is not None:
-            results.append(current)
-
-        return [item for item in results if item["path"]]
+        return archivos_del_diff(diff)
