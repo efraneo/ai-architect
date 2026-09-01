@@ -159,7 +159,7 @@ Motores independientes que se coordinan entre sí:
 ## Desarrollo
 
 ```bash
-pytest                      # 149 tests
+pytest                      # 211 tests
 ruff check .                # linter
 black .                     # formato
 mypy ai_architect           # tipos
@@ -178,14 +178,19 @@ pre-commit install
 
 | | |
 |---|---|
-| Tests | 149 |
-| Cobertura | 33 % |
+| Tests | 211 |
+| Cobertura | 37 % |
 | Errores de tipo | 0 |
 
-> La cobertura del 33 % es baja para un proyecto de este tamaño y es el
+> La cobertura sigue siendo baja para un proyecto de este tamaño y es el
 > principal frente de mejora. Subirla no es cosmético: un método roto en
 > `Reviewer.statistics()` pasó desapercibido justo porque ninguna prueba
 > recorría ese camino.
+>
+> Ya están cubiertos al 94-100 % el proveedor de Claude, `ExecutionResult` y
+> la memoria de experiencias. Los siguientes candidatos, todos en 0 %:
+> `memory/knowledge_base.py`, `execution/task_executor.py`, los proveedores
+> de Ollama y OpenRouter, y `test_runner/`.
 
 ---
 
