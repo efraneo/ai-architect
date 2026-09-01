@@ -3,6 +3,12 @@
 > Estado: Diseño Institucional
 > Versión: 1.0
 
+> **Dónde vive esto hoy:** el paquete `llm/` se podó por estar
+> huérfano y superado. Los proveedores viven en `providers/`, el
+> contexto en `core/context_builder.py` y la validación de parches en
+> `patch_generator/patch_validator.py`.
+> Este documento queda como diseño, no como descripción del código.
+
 ---
 
 # Objetivo

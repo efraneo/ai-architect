@@ -3,6 +3,12 @@
 > Estado: Diseño Institucional
 > Versión: 1.0
 
+> **Dónde vive esto hoy:** el paquete `self_improvement/` se podó por
+> estar huérfano. El aprendizaje real de la experiencia lo implementan
+> `memory/` (qué pasó en cada ejecución) y `decision_engine/` (qué se
+> aprueba), ambos conectados a `improver/improvement_engine.py`.
+> Este documento queda como diseño, no como descripción del código.
+
 ---
 
 # Objetivo

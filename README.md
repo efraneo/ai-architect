@@ -112,18 +112,21 @@ architect review .
 
 ### Pasar los agentes
 
-Siete agentes estáticos —métricas, arquitectura, pruebas, seguridad,
-dependencias, licencias y git— revisan el repositorio. **No usan IA ni gastan
-tokens**, y no miran lo que no es tuyo: `.venv`, `node_modules` y las cachés
-quedan fuera.
+Once agentes estáticos revisan el repositorio: métricas, arquitectura,
+pruebas, seguridad, dependencias, licencias, git, cazador de errores,
+rendimiento, DevOps y publicación. **No usan IA ni gastan tokens**, y no miran
+lo que no es tuyo: `.venv`, `node_modules` y las cachés quedan fuera.
 
 ```console
 $ architect agents .
 success: True
 ai: False
-agents: ['architecture', 'dependencies', 'git', 'licenses', 'metrics',
-         'security', 'testing']
-total_findings: 0
+agents: ['architecture', 'bugs', 'dependencies', 'devops', 'git',
+         'licenses', 'metrics', 'performance', 'release', 'security',
+         'testing']
+total_findings: 6
+findings: ['bugs: except que solo hace pass: el error desaparece sin rastro
+            (ai_architect/memory/knowledge_base.py:57)', ...]
 ```
 
 Con `--ai` se suman los cinco agentes de IA (arquitecto, refactor, revisor,

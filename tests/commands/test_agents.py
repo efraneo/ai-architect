@@ -18,8 +18,16 @@ from ai_architect.commands import agents
 
 @pytest.fixture
 def proyecto(tmp_path: Path) -> Path:
+    """A small but complete project: nothing here should raise a finding."""
     (tmp_path / "modulo.py").write_text("valor = 1\n", encoding="utf-8")
     (tmp_path / "requirements.txt").write_text("httpx\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text("# 1.0\n", encoding="utf-8")
+
+    flujos = tmp_path / ".github" / "workflows"
+    flujos.mkdir(parents=True)
+    (flujos / "ci.yml").write_text("on: push\n", encoding="utf-8")
+
     return tmp_path
 
 
@@ -49,13 +57,17 @@ def test_inspecciona_el_proyecto(proyecto: Path) -> None:
     assert resultado["repository"] == str(proyecto.resolve())
 
 
-def test_reporta_los_siete_agentes_estaticos(proyecto: Path) -> None:
+def test_reporta_los_once_agentes_estaticos(proyecto: Path) -> None:
     assert agents.run(str(proyecto))["agents"] == [
         "architecture",
+        "bugs",
         "dependencies",
+        "devops",
         "git",
         "licenses",
         "metrics",
+        "performance",
+        "release",
         "security",
         "testing",
     ]

@@ -34,12 +34,10 @@ ai_architect/
 ├── config
 ├── core
 ├── decision_engine
-├── development_loop
 ├── execution
 ├── filesystem
 ├── git
 ├── knowledge
-├── llm
 ├── logger
 ├── memory
 ├── notifier
@@ -50,7 +48,6 @@ ai_architect/
 ├── reviewer
 ├── rules
 ├── scheduler
-├── self_improvement
 ├── swarm
 ├── testing
 ├── test_runner
@@ -191,7 +188,6 @@ Componentes principales:
 
 ---
 
-# development_loop
 
 ## Objetivo
 
@@ -237,7 +233,6 @@ Incluye:
 
 ---
 
-# llm
 
 ## Objetivo
 
@@ -381,7 +376,6 @@ Planificación de trabajos.
 
 ---
 
-# self_improvement
 
 ## Objetivo
 
@@ -440,12 +434,10 @@ Gestión del espacio de trabajo.
 | config | Estable |
 | core | Crítico |
 | decision_engine | Muy sólido |
-| development_loop | Auditoría |
 | execution | Auditoría |
 | filesystem | Estable |
 | git | Estable |
 | knowledge | Muy importante |
-| llm | Muy importante |
 | logger | Estable |
 | memory | Muy importante |
 | notifier | Estable |
@@ -456,7 +448,6 @@ Gestión del espacio de trabajo.
 | reviewer | Estable |
 | rules | Estable |
 | scheduler | Auditoría |
-| self_improvement | Auditoría |
 | swarm | Experimental |
 | testing | Estable |
 | test_runner | Estable |
