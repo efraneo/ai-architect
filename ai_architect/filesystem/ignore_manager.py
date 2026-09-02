@@ -117,7 +117,20 @@ def leer_carpetas_ignoradas(gitignore: Path) -> set[str]:
         # extensión -- ``.env`` no entra, y eso es lo que se busca.
         es_carpeta = patron.endswith("/")
 
-        nombre = patron.rstrip("/").lstrip("/")
+        # Una barra al principio ancla el patron a la raiz: `/workspace/`
+        # es la carpeta de datos de arriba, **no** `ai_architect/workspace/`,
+        # que es codigo fuente. Aqui se comparan nombres a cualquier
+        # profundidad, asi que un patron anclado no se puede aplicar sin
+        # traicionar lo que dice.
+        #
+        # Se descarta, y el efecto es ignorar de menos: analizar una carpeta
+        # de datos de mas es un coste cosmetico; esconderle codigo fuente al
+        # agente de seguridad, no. Paso de verdad — el paquete `workspace`
+        # desaparecio del analisis y nadie lo habria notado.
+        if patron.startswith("/"):
+            continue
+
+        nombre = patron.rstrip("/")
 
         if not nombre or any(c in nombre for c in "*?[]") or "/" in nombre:
             continue

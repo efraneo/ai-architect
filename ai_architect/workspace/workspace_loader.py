@@ -58,8 +58,18 @@ class WorkspaceLoader:
             created_at=datetime.utcnow(),
         )
 
+        # Con el `.gitignore` del proyecto, no solo con la lista fija. Los
+        # agentes ya lo leian y el recorrido del analizador no, asi que
+        # `analyze` contaba justo lo que los agentes ignoraban.
+        #
+        # Se vio empaquetando: con `dist_tmp/` en disco, este repositorio
+        # pasaba de 337 archivos a 941 y de 1 grupo duplicado a 4, y los
+        # cuatro eran copias del propio programa dentro del ejecutable.
+        from ai_architect.filesystem.ignore_manager import IgnoreManager
+
         walker = ProjectWalker(
             root=root,
+            ignored_directories=IgnoreManager.for_project(root).directories,
         )
 
         for project_file in walker.walk():

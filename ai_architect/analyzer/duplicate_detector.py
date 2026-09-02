@@ -35,8 +35,16 @@ class DuplicateDetector:
 
         root = Path(root).resolve()
 
+        # Con el `.gitignore` del proyecto: sin el, la salida del
+        # empaquetado cuenta como codigo duplicado — y lo es, pero es una
+        # copia del propio programa dentro del ejecutable. Este repositorio
+        # pasaba de 1 grupo a 4, y la recomendacion de `analyze` era
+        # "consolida el codigo duplicado" apuntando a su propio .exe.
+        from ai_architect.filesystem.ignore_manager import IgnoreManager
+
         walker = ProjectWalker(
             root=root,
+            ignored_directories=IgnoreManager.for_project(root).directories,
         )
 
         hashes: dict[
