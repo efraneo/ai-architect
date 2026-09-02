@@ -160,3 +160,52 @@ def test_los_comandos_estan_declarados_como_ocultos() -> None:
 
     for comando in ("conversar", "crear", "experto", "tareas", "encargo"):
         assert f"ai_architect.commands.{comando}" in texto
+
+
+def test_el_instalador_esta_escrito() -> None:
+    """Sin `.iss` no hay instalador, y sin instalador no hay icono."""
+    from pathlib import Path
+
+    iss = Path(__file__).resolve().parents[2] / "instalador.iss"
+
+    assert iss.is_file()
+
+    texto = iss.read_text(encoding="utf-8")
+
+    assert "arquitecto.exe" in texto
+
+
+def test_el_instalador_no_pide_administrador() -> None:
+    """Es donde se cae la mitad de la gente, y no hace falta: el
+    arquitecto solo escribe en la carpeta del usuario."""
+    from pathlib import Path
+
+    texto = (Path(__file__).resolve().parents[2] / "instalador.iss").read_text(
+        encoding="utf-8"
+    )
+
+    assert "PrivilegesRequired=lowest" in texto
+
+
+def test_al_desinstalar_se_quita_del_programador() -> None:
+    """Una tarea huérfana que arranca un programa borrado deja errores
+    en el visor de sucesos para siempre."""
+    from pathlib import Path
+
+    texto = (Path(__file__).resolve().parents[2] / "instalador.iss").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[UninstallRun]" in texto
+    assert "--desregistrar" in texto
+
+
+def test_el_registro_de_tareas_va_sin_marcar() -> None:
+    """Crear una tarea del sistema sobrevive al programa: se pregunta."""
+    from pathlib import Path
+
+    texto = (Path(__file__).resolve().parents[2] / "instalador.iss").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Flags: unchecked" in texto

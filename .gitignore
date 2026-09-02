@@ -84,3 +84,7 @@ build_tmp/
 dist/
 dist_tmp/
 *.manifest
+
+# El instalador compilado. Sesenta megas que se rehacen con
+# `ISCC.exe instalador.iss`, y que ademas cambian en cada construccion.
+salida/
