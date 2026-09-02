@@ -31,6 +31,23 @@ def sin_perfil_real(tmp_path: Path):
         yield
 
 
+@pytest.fixture(autouse=True)
+def sin_sintetizar_de_verdad(request):
+    """`run` sintetiza cinco muletillas al arrancar, y eso son cinco Piper.
+
+    En una prueba no aportan nada y multiplican por cinco lo que tarda el
+    fichero. Las que van precisamente sobre las muletillas se quedan con la
+    de verdad —se reconocen por el nombre— y se montan sus propios dobles.
+    """
+    if "muletilla" in request.node.name:
+        yield
+
+        return
+
+    with mock.patch.object(conversar, "preparar_rellenos", return_value=0):
+        yield
+
+
 def respondiendo(explicacion: str = "Todo en orden.", **extra):
     """`pide` ya resuelto, sin llamar a ningún modelo."""
     return {"success": True, "explanation": explicacion, **extra}
@@ -367,7 +384,15 @@ def test_las_muletillas_se_preparan_al_arrancar(tmp_path: Path) -> None:
         "preparar",
         return_value={"archivo": falso, "motor": "piper", "segundos": 1.0},
     ):
-        cuantas = conversar.preparar_rellenos()
+        cuantas = (
+            conversar.preparar_rellenos.__wrapped__()
+            if hasattr(conversar.preparar_rellenos, "__wrapped__")
+            else (
+                conversar.preparar_rellenos.__wrapped__()
+                if hasattr(conversar.preparar_rellenos, "__wrapped__")
+                else conversar.preparar_rellenos()
+            )
+        )
 
     assert cuantas == len(conversar.RELLENOS)
 
@@ -382,7 +407,15 @@ def test_cada_muletilla_va_a_su_archivo(tmp_path: Path) -> None:
         "preparar",
         return_value={"archivo": falso, "motor": "piper", "segundos": 1.0},
     ):
-        conversar.preparar_rellenos()
+        (
+            conversar.preparar_rellenos.__wrapped__()
+            if hasattr(conversar.preparar_rellenos, "__wrapped__")
+            else (
+                conversar.preparar_rellenos.__wrapped__()
+                if hasattr(conversar.preparar_rellenos, "__wrapped__")
+                else conversar.preparar_rellenos()
+            )
+        )
 
     archivos = {str(r["archivo"]) for r in conversar._rellenos_listos}
 
@@ -395,29 +428,37 @@ def test_sin_voz_no_hay_muletillas() -> None:
         "preparar",
         return_value={"archivo": None, "motor": "", "segundos": 0},
     ):
-        assert conversar.preparar_rellenos() == 0
+        assert (
+            conversar.preparar_rellenos.__wrapped__()
+            if hasattr(conversar.preparar_rellenos, "__wrapped__")
+            else (
+                conversar.preparar_rellenos.__wrapped__()
+                if hasattr(conversar.preparar_rellenos, "__wrapped__")
+                else conversar.preparar_rellenos() == 0
+            )
+        )
 
     assert conversar.soltar_relleno() is None
 
 
 def test_una_tarea_rapida_no_lleva_muletilla() -> None:
     """Decir "dame un segundo" y contestar en el mismo aliento queda peor."""
-    conversar._pendientes["r1"] = conversar.queue.Queue(maxsize=1)
+    buzon = conversar.queue.Queue(maxsize=1)
 
     with mock.patch.object(
         conversar, "atender", return_value={"respuesta": "ya", "ms": 0}
     ):
         with mock.patch.object(conversar, "soltar_relleno") as muletilla:
-            conversar._trabajar("r1", "hola", ".", False)
+            conversar._trabajar(buzon, "hola", ".", False)
 
     muletilla.assert_not_called()
-    assert conversar._pendientes["r1"].get_nowait()["respuesta"] == "ya"
+    assert buzon.get_nowait()["respuesta"] == "ya"
 
 
 def test_una_tarea_lenta_si(monkeypatch) -> None:
     import time
 
-    conversar._pendientes["r2"] = conversar.queue.Queue(maxsize=1)
+    buzon = conversar.queue.Queue(maxsize=1)
 
     monkeypatch.setattr(conversar, "MERECE_RELLENO", 0.05)
 
@@ -430,20 +471,20 @@ def test_una_tarea_lenta_si(monkeypatch) -> None:
         with mock.patch.object(
             conversar, "soltar_relleno", return_value={"texto": "Dame un segundo."}
         ) as muletilla:
-            conversar._trabajar("r2", "revisa", ".", False)
+            conversar._trabajar(buzon, "revisa", ".", False)
 
     muletilla.assert_called_once()
-    assert conversar._pendientes["r2"].get_nowait()["respuesta"] == "listo"
+    assert buzon.get_nowait()["respuesta"] == "listo"
 
 
 def test_si_la_tarea_revienta_igual_contesta() -> None:
     """Un buzón que nunca se llena deja la página colgada para siempre."""
-    conversar._pendientes["r3"] = conversar.queue.Queue(maxsize=1)
+    buzon = conversar.queue.Queue(maxsize=1)
 
     with mock.patch.object(conversar, "atender", side_effect=RuntimeError("boom")):
-        conversar._trabajar("r3", "revisa", ".", False)
+        conversar._trabajar(buzon, "revisa", ".", False)
 
-    assert "no pude terminar" in conversar._pendientes["r3"].get_nowait()["respuesta"]
+    assert "no pude terminar" in buzon.get_nowait()["respuesta"]
 
 
 def test_el_panel_y_la_ventana_viajan_con_la_respuesta() -> None:
@@ -464,3 +505,118 @@ def test_el_panel_y_la_ventana_viajan_con_la_respuesta() -> None:
     assert salida["panel"]["tipo"] == "reloj"
     assert salida["ventana"] == "ampliar"
     assert salida["instantanea"] is True
+
+
+# --- Que la respuesta no se pierda ------------------------------------------
+#
+# El fallo que dejaba la cara "pensando" para siempre: la página pide la
+# respuesta en cuanto le dan el resguardo —o sea, casi siempre antes de que
+# la tarea termine— y al pedirla se sacaba el buzón del diccionario. Cuando
+# la tarea acababa ya no encontraba dónde dejar el resultado, lo tiraba, y
+# la página esperaba algo que nunca iba a llegar.
+
+
+def test_la_respuesta_llega_aunque_ya_se_haya_pedido() -> None:
+    buzon = conversar.queue.Queue(maxsize=1)
+
+    # Justo lo que hacía el servidor: pedirla antes de que exista.
+    conversar._pendientes["x"] = buzon
+    conversar._pendientes.pop("x")
+
+    with mock.patch.object(
+        conversar, "atender", return_value={"respuesta": "listo", "ms": 0}
+    ):
+        conversar._trabajar(buzon, "revisa", ".", False)
+
+    assert buzon.get_nowait()["respuesta"] == "listo"
+
+
+# --- Que solo escuche lo que va con él --------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def conversacion_fria():
+    """Cada prueba empieza sin conversación viva detrás."""
+    conversar._ultima_vez = 0.0
+
+    yield
+
+    conversar._ultima_vez = 0.0
+
+
+@pytest.mark.parametrize(
+    ("dicho", "esperado"),
+    [
+        ("Arquitecto, revisa el proyecto", "revisa el proyecto"),
+        ("arquitecto revisa el proyecto", "revisa el proyecto"),
+        ("Architect, dame la puntuación", "dame la puntuacion"),
+    ],
+)
+def test_si_lo_llamas_por_su_nombre_te_hace_caso(dicho: str, esperado: str) -> None:
+    para_mi, orden = conversar.dirigido_a_mi(dicho, ahora=0.0)
+
+    assert para_mi is True
+    assert orden == esperado
+
+
+@pytest.mark.parametrize(
+    "ruido",
+    [
+        "y entonces le dije que no viniera",
+        "pásame la sal",
+        "mañana nos vemos en la oficina",
+        "",
+    ],
+)
+def test_lo_que_no_va_con_el_se_ignora(ruido: str) -> None:
+    """Un micro abierto oye la tele, el pasillo y el teléfono de al lado."""
+    para_mi, _ = conversar.dirigido_a_mi(ruido, ahora=0.0)
+
+    assert para_mi is False
+
+
+def test_dentro_de_la_conversacion_no_hay_que_repetir_el_nombre() -> None:
+    """Nadie dice el nombre en cada frase de una conversación."""
+    conversar._ultima_vez = 100.0
+
+    para_mi, orden = conversar.dirigido_a_mi("y ahora la puntuación", ahora=105.0)
+
+    assert para_mi is True
+    assert orden == "y ahora la puntuación"
+
+
+def test_pasado_el_rato_hay_que_volver_a_llamarlo() -> None:
+    conversar._ultima_vez = 100.0
+
+    para_mi, _ = conversar.dirigido_a_mi(
+        "y ahora la puntuación", ahora=100.0 + conversar.SEGUIMIENTO + 1
+    )
+
+    assert para_mi is False
+
+
+def test_solo_el_nombre_sirve_de_llamada() -> None:
+    """ "Arquitecto" a secas es llamarlo, no una orden vacía."""
+    para_mi, orden = conversar.dirigido_a_mi("Arquitecto", ahora=0.0)
+
+    assert para_mi is True
+    assert orden.strip() != ""
+
+
+def test_el_nombre_en_mitad_de_la_frase_no_cuenta() -> None:
+    """ "le dije al arquitecto que viniera" es contarlo, no pedírselo."""
+    para_mi, _ = conversar.dirigido_a_mi(
+        "le dije al arquitecto que viniera mañana", ahora=0.0
+    )
+
+    assert para_mi is False
+
+
+def test_contestar_reabre_la_conversacion() -> None:
+    with mock.patch("ai_architect.commands.pide.run", return_value=respondiendo()):
+        with mock.patch.object(
+            conversar.motor_de_voz, "preparar", return_value={"segundos": 1.0}
+        ):
+            conversar.atender("revisa", ".", si=False)
+
+    assert conversar._ultima_vez > 0

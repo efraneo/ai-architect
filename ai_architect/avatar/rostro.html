@@ -1087,9 +1087,11 @@ panel.addEventListener("dblclick", function () {
 // paras, y solo ese trozo sale de aqui. Una conversacion de una hora con
 // diez ordenes son diez segundos de audio, no una hora.
 
-// Por encima de esto se considera que hay voz. El ruido de fondo de una
-// habitacion se queda bastante por debajo.
-const UMBRAL_VOZ = 0.020;
+// Por encima de esto se considera que hay voz. Subido a proposito: quien
+// habla es el que esta delante del microfono, y con el umbral bajo entraba
+// la television, la conversacion de al lado y el pasillo. Lo lejano queda
+// por debajo; lo tuyo, no.
+const UMBRAL_VOZ = 0.045;
 
 // Cuanto silencio cierra la frase. Menos corta las pausas al pensar;
 // mas y hay que esperar mirando la pantalla.
@@ -1230,18 +1232,45 @@ async function enviarAudio(audio) {
   // medio minuto con los agentes— y en todo ese rato la cara no decia ni
   // hacia nada. Ahora se sabe enseguida que se te oyo, y la respuesta se
   // recoge cuando esta.
+  // No era para el: alguien hablando cerca, la tele, el telefono. Ni se
+  // ejecuta ni se contesta, y se vuelve a escuchar sin decir nada.
+  if (datos.ajeno) {
+    mostrarOido("<i>" + escapar(datos.oido) + "</i> — no era para mi", true);
+    arquitecto.escuchar();
+    ocupado = false;
+
+    return;
+  }
+
   if (datos.resguardo) {
+    // Con tope. Una espera sin limite es como se quedo colgado: la pagina
+    // pidiendo una respuesta que ya no iba a llegar, y sin forma de salir
+    // mas que cerrandola.
+    const corte = new AbortController();
+    const reloj = setTimeout(function () { corte.abort(); }, 200000);
+
     try {
-      const recogida = await fetch("/respuesta?r=" + datos.resguardo);
+      const recogida = await fetch("/respuesta?r=" + datos.resguardo, {
+        signal: corte.signal,
+      });
 
       datos = Object.assign({ oido: datos.oido }, await recogida.json());
 
     } catch (e) {
-      mostrarOido("Se cortó mientras lo hacía: " + e.message, true);
+      mostrarOido(
+        e.name === "AbortError"
+          ? "Se me fue el santo al cielo. Dimelo otra vez."
+          : "Se corto mientras lo hacia: " + e.message,
+        true
+      );
+
       arquitecto.escuchar();
       ocupado = false;
 
       return;
+
+    } finally {
+      clearTimeout(reloj);
     }
   }
 

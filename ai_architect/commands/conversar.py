@@ -45,6 +45,7 @@ import queue
 import random
 import secrets
 import threading
+import time
 import webbrowser
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -96,6 +97,9 @@ def run(
         f"{'' if si else ' (arranca con --si para permitirlas)'}.\n"
         f"  Te oye: {_quien_oye()}\n"
         f"  Muletillas listas: {listas} (dice algo mientras trabaja)\n\n"
+        f"  LLÁMALO POR SU NOMBRE para empezar:\n"
+        f'      "Arquitecto, revisa el proyecto"\n'
+        f"  Después sigue la conversación {int(SEGUIMIENTO)} s sin repetirlo.\n\n"
         f"  Ctrl+C para terminar.\n"
     )
 
@@ -252,6 +256,57 @@ def soltar_relleno() -> dict[str, Any] | None:
     return elegido
 
 
+# Cómo se le llama. Un micrófono abierto oye la tele, a quien pasa por
+# detrás y a quien habla por teléfono al lado, y todo eso llegaba como
+# órdenes. Que haya que nombrarlo es lo único que separa de verdad "me
+# hablan a mí" de "hay ruido".
+NOMBRES = ("arquitecto", "arquitecta", "architect", "oye arquitecto")
+
+# Después de contestar, un rato sin tener que volver a nombrarlo: en una
+# conversación de verdad no se repite el nombre en cada frase.
+SEGUIMIENTO = 25.0
+
+# Cuándo respondió por última vez, para saber si sigue en conversación.
+_ultima_vez = 0.0
+
+
+def dirigido_a_mi(texto: str, ahora: float | None = None) -> tuple[bool, str]:
+    """Si esa frase iba para él, y qué queda al quitarle el nombre.
+
+    Devuelve ``(True, orden)`` o ``(False, "")``. Se le llama por su nombre
+    para empezar; a partir de ahí, mientras la conversación siga viva, no
+    hace falta repetirlo.
+    """
+    limpio = sin_adornos(texto)
+
+    if not limpio:
+        return (False, "")
+
+    for nombre in NOMBRES:
+        clave = sin_adornos(nombre)
+
+        if not limpio.startswith(clave):
+            continue
+
+        # Se le quita el nombre y lo que suele venir pegado detrás.
+        resto = limpio[len(clave) :].strip(" ,.:;")
+
+        return (True, resto or texto)
+
+    # Dentro de la conversación no hace falta nombrarlo. Fuera, sí.
+    #
+    # El cero es "todavía no ha contestado nunca", no "hace un instante".
+    # Sin distinguirlo, al arrancar la resta daba cero y todo lo que se
+    # oyera en la habitación pasaba por conversación en marcha.
+    if _ultima_vez <= 0:
+        return (False, "")
+
+    if (ahora if ahora is not None else time.monotonic()) - _ultima_vez < SEGUIMIENTO:
+        return (True, texto)
+
+    return (False, "")
+
+
 def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
     """Interpreta una orden dicha en voz alta y prepara la respuesta.
 
@@ -271,9 +326,13 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
 
     preparado = motor_de_voz.preparar(respuesta)
 
-    global _ultimo_dicho
+    global _ultimo_dicho, _ultima_vez
 
     _ultimo_dicho = str(preparado.get("texto", "") or respuesta)
+
+    # La conversación sigue viva mientras conteste: durante un rato no hace
+    # falta volver a llamarlo por su nombre.
+    _ultima_vez = time.monotonic()
 
     return {
         "respuesta": respuesta,
@@ -295,7 +354,7 @@ _pendientes: dict[str, queue.Queue] = {}
 ESPERA_TRABAJO = 180.0
 
 
-def _trabajar(resguardo: str, dicho: str, project: str, si: bool) -> None:
+def _trabajar(buzon: queue.Queue, dicho: str, project: str, si: bool) -> None:
     """Hace la tarea, y si tarda dice algo mientras.
 
     El relleno no se elige por adivinanza: se lanza el trabajo, se le dan
@@ -320,11 +379,12 @@ def _trabajar(resguardo: str, dicho: str, project: str, si: bool) -> None:
 
     faena.join(ESPERA_TRABAJO)
 
-    buzon = _pendientes.get(resguardo)
-
-    if buzon is None:
-        return
-
+    # El buzón llega por parámetro, no se busca por su nombre. Buscarlo era
+    # un fallo de los que no se ven leyendo: la página pide la respuesta en
+    # cuanto le dan el resguardo —o sea, casi siempre antes de que la tarea
+    # termine—, y al pedirla se sacaba el buzón del diccionario. Cuando la
+    # tarea acababa ya no encontraba dónde dejar el resultado, lo tiraba, y
+    # la página se quedaba esperando algo que nunca iba a llegar.
     try:
         buzon.put_nowait(
             caja
@@ -480,6 +540,26 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
+            # Solo lo que va dirigido a él. Un micrófono abierto oye la
+            # tele, a quien pasa por detrás y a quien habla por teléfono al
+            # lado, y todo eso llegaba como órdenes.
+            para_mi, orden = dirigido_a_mi(dicho)
+
+            if not para_mi:
+                print(f"  · (no era para mí) {dicho}", flush=True)
+
+                self._responder(
+                    json.dumps(
+                        {"oido": dicho, "ajeno": True, "respuesta": "", "ms": 0},
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+
+                return
+
+            dicho = orden
+
             print(f"  > {dicho}", flush=True)
 
             # Se contesta ya, con un resguardo, y el trabajo se hace aparte.
@@ -489,11 +569,13 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
             # que se le oyó, y va a buscar la respuesta cuando esté.
             resguardo = secrets.token_hex(6)
 
-            _pendientes[resguardo] = queue.Queue(maxsize=1)
+            buzon: queue.Queue = queue.Queue(maxsize=1)
+
+            _pendientes[resguardo] = buzon
 
             threading.Thread(
                 target=_trabajar,
-                args=(resguardo, dicho, project, si),
+                args=(buzon, dicho, project, si),
                 daemon=True,
             ).start()
 
