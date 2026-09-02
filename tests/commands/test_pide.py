@@ -306,7 +306,7 @@ def test_un_repositorio_que_no_existe(tmp_path: Path, con_perfil) -> None:
 def test_una_charla_se_contesta_sin_comando(tmp_path: Path, con_perfil) -> None:
     resultado = pide.run(
         str(tmp_path),
-        "hola, ¿qué tal?",
+        "cuéntame un chiste sobre programadores",
         engine=modelo({"comando": "", "respuesta": "Aquí sigo, listo cuando digas."}),
     )
 
@@ -316,16 +316,27 @@ def test_una_charla_se_contesta_sin_comando(tmp_path: Path, con_perfil) -> None:
     assert "Aquí sigo" in resultado["explanation"]
 
 
-def test_una_charla_tambien_lleva_saludo_y_despedida(
-    tmp_path: Path, con_perfil
-) -> None:
+def test_una_charla_tambien_lleva_el_trato(tmp_path: Path, con_perfil) -> None:
     resultado = pide.run(
         str(tmp_path),
-        "hola",
+        "cuéntame algo",
         engine=modelo({"comando": "", "respuesta": "Buenas."}),
     )
 
     assert resultado["explanation"].count("Eathan") >= 2
+
+
+def test_no_se_despide_al_final_de_cada_respuesta(tmp_path: Path, con_perfil) -> None:
+    """Despedirse tras cada frase corta el hilo de una conversación hablada."""
+    resultado = pide.run(
+        str(tmp_path),
+        "cuéntame algo",
+        engine=modelo({"comando": "", "respuesta": "Buenas."}),
+    )
+
+    assert "te puedo ayudar ahora" in resultado["explanation"]
+    assert "Buena tarde" not in resultado["explanation"]
+    assert "Buena noche" not in resultado["explanation"]
 
 
 def test_sin_comando_y_sin_respuesta_sigue_siendo_un_fallo(
@@ -387,11 +398,90 @@ def test_sabe_la_fecha_y_la_hora() -> None:
 
 
 def test_la_hora_se_le_pasa_al_modelo(tmp_path: Path, con_perfil) -> None:
-    proveedor = modelo({"comando": "", "respuesta": "Son las tres."})
+    """Para lo que sí llega al modelo: que sepa cuándo está contestando."""
+    proveedor = modelo({"comando": "", "respuesta": "Ya voy."})
 
-    pide.run(str(tmp_path), "¿qué hora es?", engine=proveedor)
+    pide.run(str(tmp_path), "cuéntame algo del proyecto", engine=proveedor)
 
     enviado = proveedor.generate.call_args[0][0]
 
     assert "LO QUE SABES AHORA MISMO" in enviado
     assert "Son las" in enviado
+
+
+# --- Lo que no llega al modelo ----------------------------------------------
+#
+# "¿Qué hora es?" tardaba tres segundos y costaba dinero para leer un reloj
+# que está en la máquina.
+
+
+def test_la_hora_no_llama_a_nadie(tmp_path: Path, con_perfil) -> None:
+    proveedor = modelo({"comando": "doctor"})
+
+    resultado = pide.run(str(tmp_path), "¿qué hora es?", engine=proveedor)
+
+    proveedor.generate.assert_not_called()
+    assert resultado["instant"] is True
+    assert resultado["panel"]["tipo"] == "reloj"
+
+
+def test_un_saludo_a_secas_tampoco(tmp_path: Path, con_perfil) -> None:
+    proveedor = modelo({"comando": "doctor"})
+
+    pide.run(str(tmp_path), "hola", engine=proveedor)
+
+    proveedor.generate.assert_not_called()
+
+
+def test_un_saludo_con_orden_detras_si_llega(tmp_path: Path, con_perfil) -> None:
+    """Lo que importa de "hola, revisa el proyecto" es lo segundo."""
+    proveedor = modelo({"comando": "review"})
+
+    with mock.patch(
+        "ai_architect.commands.review.run", return_value={"success": True, "score": 9}
+    ):
+        pide.run(str(tmp_path), "hola, revisa el proyecto entero", engine=proveedor)
+
+    proveedor.generate.assert_called_once()
+
+
+def test_mover_la_ventana_no_llama_a_nadie(tmp_path: Path, con_perfil) -> None:
+    proveedor = modelo({"comando": "doctor"})
+
+    resultado = pide.run(str(tmp_path), "amplíala", engine=proveedor)
+
+    proveedor.generate.assert_not_called()
+    assert resultado["window"] == "ampliar"
+
+
+# --- Lo que se ve en la ventana ---------------------------------------------
+
+
+def test_la_puntuacion_va_al_panel() -> None:
+    cuadro = pide.panel("review", {"success": True, "score": 99.26, "issues": 41})
+
+    assert cuadro["tipo"] == "puntuacion"
+    assert cuadro["valor"] == 99.26
+
+
+def test_los_hallazgos_van_al_panel() -> None:
+    cuadro = pide.panel(
+        "agents",
+        {
+            "success": True,
+            "total_findings": 9,
+            "verdict": {"total_agents": 11, "agents_with_findings": ["security"]},
+        },
+    )
+
+    assert cuadro["total"] == 9
+    assert cuadro["con_hallazgos"] == ["security"]
+
+
+def test_un_comando_fallido_no_pinta_nada() -> None:
+    """Una ventana con datos de algo que falló es peor que ninguna ventana."""
+    assert pide.panel("review", {"success": False, "error": "x"}) is None
+
+
+def test_un_comando_sin_panel_no_inventa_uno() -> None:
+    assert pide.panel("execute", {"success": True}) is None

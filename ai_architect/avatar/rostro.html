@@ -71,6 +71,90 @@
   .oido.se-ve { opacity: 1; }
 
   .oido i { color: rgba(200, 220, 255, .5); font-style: normal; }
+
+  /* --- La ventana flotante -------------------------------------------
+     Miniatura por defecto: lo que se pregunta de viva voz casi siempre
+     cabe en un vistazo. Doble clic —o decirselo— la agranda. */
+  .panel {
+    position: fixed;
+    right: 30px;
+    top: 30px;
+    width: 244px;
+    padding: 15px 17px 17px;
+    border-radius: 15px;
+    background: rgba(12, 10, 30, .82);
+    border: 1px solid rgba(130, 150, 255, .28);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .6),
+                0 0 42px rgba(80, 90, 220, .22) inset;
+    backdrop-filter: blur(13px);
+    color: #dbe6ff;
+    opacity: 0;
+    transform: scale(.94) translateY(-8px);
+    transition: opacity .28s, transform .28s, width .28s, padding .28s;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+  }
+
+  .panel.se-ve { opacity: 1; transform: none; pointer-events: auto; cursor: grab; }
+
+  .panel.grande { width: min(560px, 76vw); padding: 25px 28px 28px; }
+
+  .panel h4 {
+    margin: 0 0 11px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    color: #8fa6ff;
+  }
+
+  .panel .cifra {
+    font-size: 40px;
+    font-weight: 200;
+    line-height: 1;
+    color: #f0f5ff;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel.grande .cifra { font-size: 72px; }
+
+  .panel .cifra small { font-size: .42em; color: #8fa6ff; margin-left: 4px; }
+
+  .panel .pie-panel { margin-top: 9px; font-size: 12px; color: #9fb0dd; }
+
+  .panel ul { margin: 10px 0 0; padding: 0; list-style: none; font-size: 12px; }
+
+  .panel li {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 4px 0;
+    border-top: 1px solid rgba(130, 150, 255, .12);
+  }
+
+  .panel li b { color: #eaf0ff; font-weight: 500; }
+
+  .panel pre {
+    margin: 10px 0 0;
+    max-height: 120px;
+    overflow: auto;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #b9c8ee;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .panel.grande pre { max-height: 52vh; }
+
+  .panel .ojo {
+    margin-top: 11px;
+    font-size: 10px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: rgba(150, 165, 220, .5);
+  }
 </style>
 
 <canvas id="lienzo"></canvas>
@@ -80,6 +164,8 @@
 </div>
 
 <div class="oido" id="oido"></div>
+
+<div class="panel" id="panel"></div>
 
 <div class="pie" id="pie">espacio &middot; hablar &nbsp;&nbsp; raton</div>
 
@@ -850,6 +936,145 @@ async function enviarOrden(texto) {
   }, (datos.ms || 1200) + 700);
 }
 
+// --- La ventana flotante -----------------------------------------------------
+//
+// Oir "puntuacion 99.26, cuarenta y una incidencias" y que se quede en el
+// aire no es lo mismo que verlo. Esto lo deja en pantalla, en miniatura,
+// para poder volver a mirarlo.
+//
+// Se agranda con doble clic o diciendoselo. Lo segundo no pasa por el
+// modelo: "ampliala" se resuelve en el sitio, porque mandar a un modelo la
+// orden de mover una caja que ya esta en pantalla son dos segundos de
+// espera para nada.
+
+const panel = document.getElementById("panel");
+
+let panelActual = null;
+let relojVivo = null;
+
+function mostrarPanel(datos) {
+  panelActual = datos;
+
+  panel.innerHTML = pintarPanel(datos);
+  panel.classList.add("se-ve");
+
+  clearInterval(relojVivo);
+
+  // El reloj sigue corriendo: una hora congelada en pantalla es peor que
+  // no tenerla, porque parece buena y no lo es.
+  if (datos.tipo === "reloj") {
+    relojVivo = setInterval(function () {
+      const ahora = new Date();
+      const hh = String(ahora.getHours()).padStart(2, "0");
+      const mm = String(ahora.getMinutes()).padStart(2, "0");
+      const ss = String(ahora.getSeconds()).padStart(2, "0");
+
+      const donde = panel.querySelector(".cifra");
+
+      if (donde) donde.innerHTML = hh + ":" + mm + "<small>" + ss + "</small>";
+    }, 1000);
+  }
+}
+
+function escapar(texto) {
+  return String(texto === null || texto === undefined ? "" : texto)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function pintarPanel(d) {
+  const titulo = "<h4>" + escapar(d.titulo || "") + "</h4>";
+  const ojo = '<div class="ojo">doble clic para ampliar</div>';
+
+  let cuerpo = "";
+
+  if (d.tipo === "reloj") {
+    cuerpo =
+      '<div class="cifra">' + escapar(d.hora) +
+      "<small>" + escapar(d.segundos) + "</small></div>" +
+      '<div class="pie-panel">' + escapar(d.fecha) + "</div>";
+
+  } else if (d.tipo === "puntuacion") {
+    cuerpo =
+      '<div class="cifra">' + escapar(d.valor) + "<small>/100</small></div>" +
+      '<div class="pie-panel">' + escapar(d.incidencias) + " incidencias" +
+      (d.veredicto ? " · " + escapar(d.veredicto) : "") + "</div>";
+
+  } else if (d.tipo === "hallazgos") {
+    const lista = (d.con_hallazgos || [])
+      .map(function (a) { return "<li><b>" + escapar(a) + "</b></li>"; })
+      .join("");
+
+    cuerpo =
+      '<div class="cifra">' + escapar(d.total) + "</div>" +
+      '<div class="pie-panel">hallazgos de ' + escapar(d.agentes) +
+      " agentes</div><ul>" + lista + "</ul>";
+
+  } else if (d.tipo === "estado") {
+    const filas = Object.entries(d.componentes || {})
+      .map(function (par) {
+        return "<li>" + escapar(par[0]) + "<b>" + escapar(par[1]) + "</b></li>";
+      })
+      .join("");
+
+    cuerpo =
+      '<div class="cifra" style="font-size:26px">' + escapar(d.estado) +
+      "</div><ul>" + filas + "</ul>";
+
+  } else if (d.tipo === "estructura") {
+    cuerpo =
+      '<div class="cifra">' + escapar(d.archivos) + "<small>archivos</small></div>" +
+      "<ul><li>líneas<b>" + escapar(d.lineas) + "</b></li>" +
+      "<li>funciones<b>" + escapar(d.funciones) + "</b></li></ul>";
+
+  } else {
+    cuerpo = "<pre>" + escapar(d.cuerpo) + "</pre>";
+  }
+
+  return titulo + cuerpo + ojo;
+}
+
+function ordenarVentana(orden) {
+  if (orden === "cerrar") {
+    panel.classList.remove("se-ve", "grande");
+    clearInterval(relojVivo);
+
+    return;
+  }
+
+  if (!panelActual) return;                 // no hay nada que agrandar
+
+  panel.classList.add("se-ve");
+  panel.classList.toggle("grande", orden === "ampliar");
+}
+
+panel.addEventListener("dblclick", function () {
+  panel.classList.toggle("grande");
+});
+
+// Arrastrable: si tapa la cara, se aparta.
+(function () {
+  let cogido = false, dx = 0, dy = 0;
+
+  panel.addEventListener("pointerdown", function (e) {
+    cogido = true;
+    dx = e.clientX - panel.offsetLeft;
+    dy = e.clientY - panel.offsetTop;
+    panel.setPointerCapture(e.pointerId);
+  });
+
+  panel.addEventListener("pointermove", function (e) {
+    if (!cogido) return;
+
+    panel.style.left = (e.clientX - dx) + "px";
+    panel.style.top = (e.clientY - dy) + "px";
+    panel.style.right = "auto";
+  });
+
+  panel.addEventListener("pointerup", function () { cogido = false; });
+})();
+
 // --- Oir con Whisper ---------------------------------------------------------
 //
 // El reconocedor de Chrome es gratis pero entiende el espanol regular y
@@ -999,6 +1224,30 @@ async function enviarAudio(audio) {
   }
 
   if (datos.oido) mostrarOido(datos.oido, true);
+
+  // El servidor contesta al momento con un resguardo y hace la faena
+  // aparte. Antes esta peticion tardaba lo que tardara el comando —hasta
+  // medio minuto con los agentes— y en todo ese rato la cara no decia ni
+  // hacia nada. Ahora se sabe enseguida que se te oyo, y la respuesta se
+  // recoge cuando esta.
+  if (datos.resguardo) {
+    try {
+      const recogida = await fetch("/respuesta?r=" + datos.resguardo);
+
+      datos = Object.assign({ oido: datos.oido }, await recogida.json());
+
+    } catch (e) {
+      mostrarOido("Se cortó mientras lo hacía: " + e.message, true);
+      arquitecto.escuchar();
+      ocupado = false;
+
+      return;
+    }
+  }
+
+  if (datos.ventana) ordenarVentana(datos.ventana);
+
+  if (datos.panel) mostrarPanel(datos.panel);
 
   if (!datos.respuesta) {
     // No entendio nada: se vuelve a escuchar sin decir una palabra, que

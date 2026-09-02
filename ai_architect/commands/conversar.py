@@ -41,9 +41,10 @@ from __future__ import annotations
 
 import http.server
 import json
+import queue
+import random
 import secrets
 import threading
-import unicodedata
 import webbrowser
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -51,6 +52,7 @@ from typing import Any
 
 from ai_architect.commands import avatar
 from ai_architect.core import perfil
+from ai_architect.core.texto import sin_adornos
 from ai_architect.voz import hablar as motor_de_voz
 
 # Lo que se espera del navegador en una sola orden. Una transcripción de
@@ -80,6 +82,10 @@ def run(
             ),
         }
 
+    # Antes de abrir nada: si se sintetizan al vuelo, la muletilla llega
+    # tarde y entonces no tapa la espera, la alarga.
+    listas = preparar_rellenos()
+
     webbrowser.open(url)
 
     aviso = (
@@ -88,7 +94,8 @@ def run(
         f"  para que si me equivoco lo veas al momento.\n\n"
         f"  Órdenes que tocan archivos: {'autorizadas' if si else 'NO autorizadas'}"
         f"{'' if si else ' (arranca con --si para permitirlas)'}.\n"
-        f"  Te oye: {_quien_oye()}\n\n"
+        f"  Te oye: {_quien_oye()}\n"
+        f"  Muletillas listas: {listas} (dice algo mientras trabaja)\n\n"
         f"  Ctrl+C para terminar.\n"
     )
 
@@ -151,15 +158,6 @@ def _componer(project: str) -> str:
 _ultimo_dicho = ""
 
 
-def _sin_adornos(texto: str) -> str:
-    """El texto reducido a lo comparable: sin tildes, signos ni mayusculas."""
-    plano = unicodedata.normalize("NFKD", texto.lower())
-
-    letras = [c for c in plano if c.isalnum() or c.isspace()]
-
-    return " ".join("".join(letras).split())
-
-
 def es_eco(oido: str, dicho: str) -> bool:
     """Si lo que se acaba de oir es la propia voz saliendo por los altavoces.
 
@@ -169,8 +167,8 @@ def es_eco(oido: str, dicho: str) -> bool:
     que no enga:na: si lo oido es lo que se acaba de decir. Aunque llegue
     tarde, aunque llegue por otra pestana.
     """
-    a = _sin_adornos(oido)
-    b = _sin_adornos(dicho)
+    a = sin_adornos(oido)
+    b = sin_adornos(dicho)
 
     if not a or not b:
         return False
@@ -184,6 +182,74 @@ def es_eco(oido: str, dicho: str) -> bool:
         return True
 
     return SequenceMatcher(None, a, b).ratio() > 0.62
+
+
+# Lo que dice mientras trabaja. Una cara callada durante tres segundos
+# parece colgada; con esto se sabe que te oyó y está en ello.
+#
+# Varias y al azar para que no suene a grabación. Se sintetizan una sola vez
+# al arrancar —con Piper son milisegundos— porque generarlas en el momento
+# añadiría justo la espera que vienen a tapar.
+RELLENOS = (
+    "Dame un segundo.",
+    "Voy con eso.",
+    "Un momento, lo miro.",
+    "Enseguida te digo.",
+    "Déjame ver.",
+)
+
+# Por debajo de esto no da tiempo ni a abrir la boca: decir "dame un
+# segundo" y contestar en el mismo aliento queda peor que no decir nada.
+MERECE_RELLENO = 0.9
+
+_rellenos_listos: list[dict[str, Any]] = []
+
+
+def preparar_rellenos() -> int:
+    """Deja las muletillas sintetizadas antes de que hagan falta."""
+    _rellenos_listos.clear()
+
+    for frase in RELLENOS:
+        listo = motor_de_voz.preparar(frase)
+
+        if listo.get("archivo") or listo.get("motor") == "windows":
+            # Cada una en su archivo: comparten el temporal de `hablar` y
+            # la última pisaría a todas las anteriores.
+            copia = _apartar(listo, len(_rellenos_listos))
+
+            if copia:
+                _rellenos_listos.append(copia)
+
+    return len(_rellenos_listos)
+
+
+def _apartar(listo: dict[str, Any], indice: int) -> dict[str, Any] | None:
+    origen = listo.get("archivo")
+
+    if origen is None:
+        return dict(listo)
+
+    destino = Path(origen).with_name(f"arquitecto-relleno-{indice}.wav")
+
+    try:
+        destino.write_bytes(Path(origen).read_bytes())
+
+    except OSError:
+        return None
+
+    return {**listo, "archivo": destino}
+
+
+def soltar_relleno() -> dict[str, Any] | None:
+    """Dice una muletilla ya preparada. Devuelve cuál dijo."""
+    if not _rellenos_listos:
+        return None
+
+    elegido = random.choice(_rellenos_listos)
+
+    motor_de_voz.emitir(elegido)
+
+    return elegido
 
 
 def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
@@ -213,8 +279,64 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
         "respuesta": respuesta,
         "dicho": preparado.get("texto", respuesta),
         "ms": int(preparado.get("segundos", 0) * 1000),
+        "panel": resultado.get("panel"),
+        "ventana": resultado.get("window", ""),
+        "instantanea": bool(resultado.get("instant")),
         "_audio": preparado,
     }
+
+
+# Trabajos en marcha, por resguardo. La página deja el suyo y vuelve a
+# recogerlo; entretanto el arquitecto dice algo en vez de callarse.
+_pendientes: dict[str, queue.Queue] = {}
+
+# Tope de paciencia. `agents --ai` con cinco llamadas puede irse lejos, pero
+# no infinito: un buzón que nunca se vacía deja la página colgada.
+ESPERA_TRABAJO = 180.0
+
+
+def _trabajar(resguardo: str, dicho: str, project: str, si: bool) -> None:
+    """Hace la tarea, y si tarda dice algo mientras.
+
+    El relleno no se elige por adivinanza: se lanza el trabajo, se le dan
+    ``MERECE_RELLENO`` segundos, y solo si sigue vivo se habla. Así una
+    pregunta instantánea no lleva un "dame un segundo" pegado delante.
+    """
+    caja: dict[str, Any] = {}
+
+    faena = threading.Thread(
+        target=lambda: caja.update(atender(dicho, project, si)),
+        daemon=True,
+    )
+
+    faena.start()
+    faena.join(MERECE_RELLENO)
+
+    if faena.is_alive():
+        muletilla = soltar_relleno()
+
+        if muletilla:
+            print(f"  · {muletilla.get('texto', '')}", flush=True)
+
+    faena.join(ESPERA_TRABAJO)
+
+    buzon = _pendientes.get(resguardo)
+
+    if buzon is None:
+        return
+
+    try:
+        buzon.put_nowait(
+            caja
+            or {
+                "respuesta": "Algo se me atragantó y no pude terminar.",
+                "dicho": "Algo se me atragantó y no pude terminar.",
+                "ms": 0,
+            }
+        )
+
+    except queue.Full:
+        pass
 
 
 class UnSoloDuenio(http.server.ThreadingHTTPServer):
@@ -238,7 +360,14 @@ class UnSoloDuenio(http.server.ThreadingHTTPServer):
 def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
     class Manos(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - lo exige la librería
-            if self.path.split("?")[0] not in ("/", "/index.html", "/rostro.html"):
+            ruta = self.path.split("?")[0]
+
+            if ruta == "/respuesta":
+                self._recoger()
+
+                return
+
+            if ruta not in ("/", "/index.html", "/rostro.html"):
                 self.send_error(404)
 
                 return
@@ -353,9 +482,53 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
             print(f"  > {dicho}", flush=True)
 
-            salida = atender(dicho, project, si)
+            # Se contesta ya, con un resguardo, y el trabajo se hace aparte.
+            # Antes esta respuesta tardaba lo que tardara el comando entero
+            # —hasta medio minuto con los agentes— y en todo ese rato la
+            # cara no decía ni hacía nada. Ahora la página sabe al instante
+            # que se le oyó, y va a buscar la respuesta cuando esté.
+            resguardo = secrets.token_hex(6)
 
-            salida["oido"] = dicho
+            _pendientes[resguardo] = queue.Queue(maxsize=1)
+
+            threading.Thread(
+                target=_trabajar,
+                args=(resguardo, dicho, project, si),
+                daemon=True,
+            ).start()
+
+            self._responder(
+                json.dumps(
+                    {"oido": dicho, "resguardo": resguardo}, ensure_ascii=False
+                ).encode("utf-8"),
+                "application/json; charset=utf-8",
+            )
+
+        def _recoger(self) -> None:
+            """La respuesta, cuando esté. La página espera aquí colgada."""
+            resguardo = ""
+
+            if "?" in self.path:
+                from urllib.parse import parse_qs
+
+                resguardo = parse_qs(self.path.split("?", 1)[1]).get("r", [""])[0]
+
+            buzon = _pendientes.pop(resguardo, None)
+
+            if buzon is None:
+                self.send_error(404)
+
+                return
+
+            try:
+                salida = buzon.get(timeout=ESPERA_TRABAJO)
+
+            except queue.Empty:
+                salida = {
+                    "respuesta": "Se me hizo largo y lo dejé.",
+                    "dicho": "Se me hizo largo y lo dejé.",
+                    "ms": 0,
+                }
 
             sonido = salida.pop("_audio", None)
 
@@ -364,12 +537,12 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                 "application/json; charset=utf-8",
             )
 
+            print(f"  < {_resumen(salida.get('respuesta', ''))}", flush=True)
+
             if sonido:
                 threading.Thread(
                     target=motor_de_voz.emitir, args=(sonido,), daemon=True
                 ).start()
-
-            print(f"  < {_resumen(salida['respuesta'])}", flush=True)
 
         def _responder(self, cuerpo: bytes, tipo: str) -> None:
             self.send_response(200)

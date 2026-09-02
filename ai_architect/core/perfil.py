@@ -127,8 +127,22 @@ def encabezar(archivo: Path | None = None, ahora: datetime | None = None) -> str
     return f"{saludo(ahora)}, {como_llamarte(archivo)}."
 
 
+def cerrar(archivo: Path | None = None) -> str:
+    """Cómo termina **una respuesta**. No es una despedida.
+
+    Despedirse después de cada frase da a entender que la conversación se
+    acabó, y en una conversación hablada eso corta el hilo cada vez. Se
+    ofrece seguir, que es lo contrario.
+    """
+    return f"¿En qué te puedo ayudar ahora, {como_llamarte(archivo)}?"
+
+
 def despedir(archivo: Path | None = None, ahora: datetime | None = None) -> str:
-    """Cómo termina. El mismo tramo del día, para cerrar el círculo."""
+    """Cómo termina **la sesión**, cuando de verdad se cierra.
+
+    Aquí sí se despide: el mismo tramo del día con el que se saludó, para
+    cerrar el círculo.
+    """
     momento = {
         "Buenos días": "Que tengas buen día",
         "Buenas tardes": "Buena tarde",

@@ -224,6 +224,28 @@ def run(
             ),
         }
 
+    # Antes que nada, lo que no necesita a nadie. "Que hora es" tardaba tres
+    # segundos y costaba dinero para leer un reloj que esta en la maquina.
+    from ai_architect.commands import respuestas
+
+    rapida = respuestas.responder(frase)
+
+    if rapida is not None:
+        return _decir_si_toca(
+            {
+                "success": True,
+                "executed": False,
+                "command": "",
+                "conversation": True,
+                "instant": True,
+                "panel": rapida.get("panel"),
+                "window": rapida.get("ventana", ""),
+                "explanation": _con_trato(rapida["respuesta"]),
+            },
+            decir,
+            cara,
+        )
+
     catalogo, tabla = _catalogo()
 
     try:
@@ -317,6 +339,7 @@ def run(
         "command": nombre,
         "ran": orden,
         "explanation": _con_trato(explicar(nombre, resultado)),
+        "panel": panel(nombre, resultado),
         "result": resultado,
     }
 
@@ -361,7 +384,7 @@ def _con_trato(cuerpo: str) -> str:
     Es lo que separa una herramienta de algo que se siente tuyo: que sepa a
     quién le habla y qué hora es.
     """
-    return "\n\n".join([perfil.encabezar(), cuerpo, perfil.despedir()])
+    return "\n\n".join([perfil.encabezar(), cuerpo, perfil.cerrar()])
 
 
 def explicar(nombre: str, resultado: Any) -> str:
@@ -474,6 +497,90 @@ def _catalogo() -> tuple[str, dict[str, Any]]:
     return "\n".join(lineas), {c.nombre: c for c in elegibles}
 
 
+# El despacho es una clasificacion: de una frase corta, un nombre de la
+# lista. No hace falta el modelo grande, y con el se notaba — tres segundos
+# mirando una cara callada para decidir entre ocho palabras.
+#
+# En orden y con repliegue, porque no todas las cuentas tienen todos los
+# modelos: `gpt-5-mini` contesta 404 pidiendo verificar la organizacion, y
+# ese fallo no puede dejar mudo al arquitecto. El ultimo escalon es el
+# modelo por defecto del proveedor, que siempre esta.
+MODELOS_RAPIDOS = ("gpt-5-mini", "gpt-4o-mini")
+
+# El primero que funciono. Reintentar los caidos en cada frase seria pagar
+# justo la latencia que se venia a quitar.
+_modelo_bueno: str | None = None
+
+
+def panel(nombre: str, resultado: Any) -> dict[str, Any] | None:
+    """Lo que se ensena en la ventana flotante, si hay algo que ensenar.
+
+    Oir "puntuacion 99.26, 41 incidencias" y que se quede en el aire no es
+    lo mismo que verlo y poder volver a mirarlo. Se manda ya masticado
+    porque la pagina no tiene por que saber la forma de cada resultado.
+    """
+    if not isinstance(resultado, dict) or not resultado.get("success", True):
+        return None
+
+    if nombre == "review":
+        return {
+            "tipo": "puntuacion",
+            "titulo": "Revision",
+            "valor": resultado.get("score"),
+            "incidencias": resultado.get("issues") or resultado.get("total_issues"),
+            "veredicto": resultado.get("verdict") or resultado.get("status"),
+        }
+
+    if nombre == "agents":
+        veredicto = resultado.get("verdict") or {}
+
+        return {
+            "tipo": "hallazgos",
+            "titulo": "Agentes",
+            "total": resultado.get("total_findings"),
+            "agentes": veredicto.get("total_agents"),
+            "con_hallazgos": list(veredicto.get("agents_with_findings") or []),
+        }
+
+    if nombre == "doctor":
+        return {
+            "tipo": "estado",
+            "titulo": "Entorno",
+            "estado": resultado.get("status"),
+            "componentes": {
+                clave: (valor or {}).get("status")
+                for clave, valor in (resultado.get("components") or {}).items()
+            },
+        }
+
+    if nombre == "analyze":
+        return {
+            "tipo": "estructura",
+            "titulo": "Estructura",
+            "archivos": resultado.get("total_files") or resultado.get("files"),
+            "lineas": resultado.get("total_lines") or resultado.get("lines"),
+            "funciones": resultado.get("total_functions") or resultado.get("functions"),
+        }
+
+    if nombre == "changelog":
+        return {
+            "tipo": "texto",
+            "titulo": "Changelog",
+            "cuerpo": str(resultado.get("changelog") or resultado.get("entry") or "")[
+                :4000
+            ],
+        }
+
+    if nombre in ("improve", "auto"):
+        return {
+            "tipo": "texto",
+            "titulo": "Mejora",
+            "cuerpo": str(resultado.get("diff") or "")[:4000],
+        }
+
+    return None
+
+
 def _preguntar(engine: Any, catalogo: str, frase: str, repositorio: str = ".") -> str:
     proveedor = engine
 
@@ -482,17 +589,47 @@ def _preguntar(engine: Any, catalogo: str, frase: str, repositorio: str = ".") -
 
         proveedor = ProviderManager()
 
-    return str(
-        proveedor.generate(
-            INSTRUCCIONES.format(
-                catalogo=catalogo,
-                frase=frase,
-                trato=perfil.como_llamarte(),
-                momento=_momento(),
-                repositorio=repositorio,
-            ),
-        )
+    orden = INSTRUCCIONES.format(
+        catalogo=catalogo,
+        frase=frase,
+        trato=perfil.como_llamarte(),
+        momento=_momento(),
+        repositorio=repositorio,
     )
+
+    # Un motor inyectado en las pruebas no tiene por que aceptar `model`.
+    if engine is not None:
+        return str(proveedor.generate(orden))
+
+    global _modelo_bueno
+
+    if _modelo_bueno:
+        return str(proveedor.generate(orden, model=_modelo_bueno))
+
+    ultimo: Exception | None = None
+
+    for modelo in MODELOS_RAPIDOS:
+        try:
+            salida = str(proveedor.generate(orden, model=modelo))
+
+        except Exception as e:  # noqa: BLE001 - se prueba el siguiente
+            ultimo = e
+
+            continue
+
+        _modelo_bueno = modelo
+
+        return salida
+
+    # Ninguno de los rapidos: se cae al de siempre, que sera mas lento pero
+    # contesta. Que tarde es peor que que no funcione.
+    try:
+        return str(proveedor.generate(orden))
+
+    except Exception as fallo:
+        # Se cuenta el fallo del rápido, no el del lento: el primero dice
+        # por qué se llegó hasta aquí, que es lo que habría que arreglar.
+        raise (ultimo if ultimo is not None else fallo) from fallo
 
 
 def _leer_json(texto: str) -> dict[str, Any] | None:

@@ -349,3 +349,118 @@ def test_una_respuesta_de_una_sola_parte_se_deja_entera() -> None:
 
 def test_una_respuesta_vacia_no_revienta() -> None:
     assert conversar._resumen("") == ""
+
+
+# --- Que no se quede callado ------------------------------------------------
+#
+# `agents` tarda medio minuto y en todo ese rato la cara no decía ni hacía
+# nada. Parecía colgada.
+
+
+def test_las_muletillas_se_preparan_al_arrancar(tmp_path: Path) -> None:
+    """Sintetizarlas en el momento añadiría la espera que vienen a tapar."""
+    falso = tmp_path / "x.wav"
+    falso.write_bytes(b"RIFF")
+
+    with mock.patch.object(
+        conversar.motor_de_voz,
+        "preparar",
+        return_value={"archivo": falso, "motor": "piper", "segundos": 1.0},
+    ):
+        cuantas = conversar.preparar_rellenos()
+
+    assert cuantas == len(conversar.RELLENOS)
+
+
+def test_cada_muletilla_va_a_su_archivo(tmp_path: Path) -> None:
+    """Comparten el temporal de `hablar`: la última pisaría a las demás."""
+    falso = tmp_path / "x.wav"
+    falso.write_bytes(b"RIFF")
+
+    with mock.patch.object(
+        conversar.motor_de_voz,
+        "preparar",
+        return_value={"archivo": falso, "motor": "piper", "segundos": 1.0},
+    ):
+        conversar.preparar_rellenos()
+
+    archivos = {str(r["archivo"]) for r in conversar._rellenos_listos}
+
+    assert len(archivos) == len(conversar.RELLENOS)
+
+
+def test_sin_voz_no_hay_muletillas() -> None:
+    with mock.patch.object(
+        conversar.motor_de_voz,
+        "preparar",
+        return_value={"archivo": None, "motor": "", "segundos": 0},
+    ):
+        assert conversar.preparar_rellenos() == 0
+
+    assert conversar.soltar_relleno() is None
+
+
+def test_una_tarea_rapida_no_lleva_muletilla() -> None:
+    """Decir "dame un segundo" y contestar en el mismo aliento queda peor."""
+    conversar._pendientes["r1"] = conversar.queue.Queue(maxsize=1)
+
+    with mock.patch.object(
+        conversar, "atender", return_value={"respuesta": "ya", "ms": 0}
+    ):
+        with mock.patch.object(conversar, "soltar_relleno") as muletilla:
+            conversar._trabajar("r1", "hola", ".", False)
+
+    muletilla.assert_not_called()
+    assert conversar._pendientes["r1"].get_nowait()["respuesta"] == "ya"
+
+
+def test_una_tarea_lenta_si(monkeypatch) -> None:
+    import time
+
+    conversar._pendientes["r2"] = conversar.queue.Queue(maxsize=1)
+
+    monkeypatch.setattr(conversar, "MERECE_RELLENO", 0.05)
+
+    def tarda(*_):
+        time.sleep(0.4)
+
+        return {"respuesta": "listo", "ms": 0}
+
+    with mock.patch.object(conversar, "atender", side_effect=tarda):
+        with mock.patch.object(
+            conversar, "soltar_relleno", return_value={"texto": "Dame un segundo."}
+        ) as muletilla:
+            conversar._trabajar("r2", "revisa", ".", False)
+
+    muletilla.assert_called_once()
+    assert conversar._pendientes["r2"].get_nowait()["respuesta"] == "listo"
+
+
+def test_si_la_tarea_revienta_igual_contesta() -> None:
+    """Un buzón que nunca se llena deja la página colgada para siempre."""
+    conversar._pendientes["r3"] = conversar.queue.Queue(maxsize=1)
+
+    with mock.patch.object(conversar, "atender", side_effect=RuntimeError("boom")):
+        conversar._trabajar("r3", "revisa", ".", False)
+
+    assert "no pude terminar" in conversar._pendientes["r3"].get_nowait()["respuesta"]
+
+
+def test_el_panel_y_la_ventana_viajan_con_la_respuesta() -> None:
+    with mock.patch(
+        "ai_architect.commands.pide.run",
+        return_value={
+            "explanation": "Son las tres.",
+            "panel": {"tipo": "reloj"},
+            "window": "ampliar",
+            "instant": True,
+        },
+    ):
+        with mock.patch.object(
+            conversar.motor_de_voz, "preparar", return_value={"segundos": 1.0}
+        ):
+            salida = conversar.atender("qué hora es", ".", si=False)
+
+    assert salida["panel"]["tipo"] == "reloj"
+    assert salida["ventana"] == "ampliar"
+    assert salida["instantanea"] is True
