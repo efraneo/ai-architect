@@ -37,6 +37,7 @@ import re
 from typing import Any
 
 from ai_architect.core import perfil
+from ai_architect.core.texto import sin_adornos
 from ai_architect.swarm.task_dispatcher import TaskDispatcher
 
 # Los agentes del proyecto que sí leen el código, con lo que cubre cada uno.
@@ -99,6 +100,11 @@ Devuelve SOLO un objeto JSON:
   "respuesta": "lo que le dirías por escrito, tan largo como haga falta"}}
 
 El `resumen` es lo único que se oirá: nada de listas, rutas ni símbolos.
+
+Y tiene que decir **qué**, con el dato concreto: qué has encontrado, qué
+cifra sale, qué harías. "Hay problemas que deben corregirse" no dice nada
+— eso ya lo sabía antes de preguntar. "Hay dos contraseñas escritas en el
+código, en config y en el arranque" sí.
 """
 
 
@@ -156,6 +162,16 @@ def responder(
 # --- Dirigir ----------------------------------------------------------------
 
 
+def es_charla(quien: str) -> bool:
+    """Si ese "especialista" es el comodin de cuando no hay nada que consultar.
+
+    Se compara sin tildes ni mayusculas porque el modelo escribe el nombre
+    como le parece —"conversación", "Conversacion", "conversacion"— y una
+    comparacion literal deja pasar la mitad.
+    """
+    return sin_adornos(quien) == "conversacion"
+
+
 def _dirigir(
     proveedor: Any,
     peticion: str,
@@ -202,6 +218,15 @@ def _dirigir(
                 "encargo": str(encargo.get("encargo") or peticion),
             }
         )
+
+    # `conversación` es el comodín de cuando no hay nada que consultar: al
+    # lado de un especialista de verdad solo estorba. Se vio en uso —a
+    # "qué riesgos de seguridad tengo" contestaron el agente de seguridad
+    # y, detrás, una definición de diccionario de la palabra "riesgo"—.
+    con_oficio = [e for e in limpios if not es_charla(e["quien"])]
+
+    if con_oficio:
+        return con_oficio
 
     # Sin plan utilizable, contesta uno solo. Quedarse callado porque el
     # director se atascó sería el peor de los resultados.
@@ -250,7 +275,7 @@ def _como_se_presenta(quien: str, propio: bool) -> str:
     if propio:
         return f"el agente de {quien} de este proyecto"
 
-    return f"un experto en {quien}" if quien != "conversación" else "el arquitecto"
+    return "el arquitecto" if es_charla(quien) else f"un experto en {quien}"
 
 
 def _lo_que_ve_el_agente(quien: str, project: str) -> str:
@@ -296,7 +321,7 @@ def _hablado(contestaron: list[tuple]) -> str:
         # Se nombra siempre a quien contesta. Una respuesta anónima y una
         # respuesta del agente que ha leído tu código suenan igual, y no
         # valen lo mismo: decirlo es la mitad de la información.
-        if quien == "conversación":
+        if es_charla(quien):
             return str(salida["resumen"])
 
         return f"Te contesta {quien}. {salida['resumen']}"
