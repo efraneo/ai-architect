@@ -75,3 +75,12 @@ telegram_*.env
 coverage.xml
 .coverage
 htmlcov/
+
+# Lo que sale de empaquetar. Son ciento setenta megas por construccion y se
+# rehacen con `pyinstaller arquitecto.spec`: no tienen por que estar en el
+# historial de nadie, ni descargarse con cada clon.
+build/
+build_tmp/
+dist/
+dist_tmp/
+*.manifest

@@ -106,7 +106,12 @@ COMANDOS: tuple[Comando, ...] = (
     Comando(
         "tareas",
         "Ver lo programado, o ejecutar lo que toque (--correr)",
-        lambda a: tareas.run(correr_ahora=a.correr, project=a.project),
+        lambda a: tareas.run(
+            correr_ahora=a.correr,
+            project=a.project,
+            registrar=a.registrar,
+            desregistrar=a.desregistrar,
+        ),
         elegible=False,
     ),
     Comando(
@@ -218,6 +223,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--correr",
         action="store_true",
         help="For tareas: run whatever is due right now",
+    )
+
+    parser.add_argument(
+        "--registrar",
+        action="store_true",
+        help="For tareas: wake the architect from Windows Task Scheduler",
+    )
+
+    parser.add_argument(
+        "--desregistrar",
+        action="store_true",
+        help="For tareas: remove it from Windows Task Scheduler",
     )
 
     parser.add_argument(

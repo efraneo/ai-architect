@@ -314,13 +314,40 @@ def _ejecutar_una(tarea: ScheduledJob) -> dict[str, Any]:
     }
 
 
-def run(correr_ahora: bool = False, project: str = ".") -> dict[str, Any]:
-    """El comando: lista lo programado, o ejecuta lo que toque."""
+def run(
+    correr_ahora: bool = False,
+    project: str = ".",
+    registrar: bool = False,
+    desregistrar: bool = False,
+) -> dict[str, Any]:
+    """El comando: lista, ejecuta, o se registra en Windows."""
+    from ai_architect.core import windows
+
+    if registrar:
+        return windows.registrar(project)
+
+    if desregistrar:
+        return windows.quitar()
+
     if not correr_ahora:
+        # Si Windows no lo despierta, las tareas solo corren con la
+        # conversacion abierta — y eso no es lo que se pidio al decir
+        # "cada noche". Callarlo seria dejar creer que funciona.
+        despierta = (
+            ""
+            if windows.esta_registrada()
+            else (
+                " Ojo: solo se ejecutan con la conversación abierta. "
+                "Para que corran con el programa cerrado: "
+                "architect tareas --registrar"
+            )
+        )
+
         return {
             "success": True,
             "tasks": [asdict(t) for t in cargar()],
-            "explanation": f"{perfil.encabezar()} {contar()}",
+            "windows": windows.esta_registrada(),
+            "explanation": f"{perfil.encabezar()} {contar()}{despierta}",
         }
 
     hechas = correr()
