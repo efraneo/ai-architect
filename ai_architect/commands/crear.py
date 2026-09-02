@@ -321,7 +321,16 @@ def guardar_en(carpeta: Path) -> dict[str, Any]:
 
     try:
         destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(_pendiente["contenido"], encoding="utf-8")
+
+        # Un `.docx` es binario y el HTML es texto. Escribir bytes con
+        # `write_text` revienta; escribir el ZIP como texto da un archivo
+        # que Word abre y muestra vacío, que es peor porque parece que
+        # funcionó.
+        if _pendiente.get("binario") is not None:
+            destino.write_bytes(_pendiente["binario"])
+
+        else:
+            destino.write_text(_pendiente["contenido"], encoding="utf-8")
 
     except OSError as e:
         return {"success": False, "error": f"no pude guardarlo: {e}"}
@@ -375,7 +384,16 @@ def _guardar_exacto(destino: Path) -> dict[str, Any]:
 
     try:
         destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(_pendiente["contenido"], encoding="utf-8")
+
+        # Un `.docx` es binario y el HTML es texto. Escribir bytes con
+        # `write_text` revienta; escribir el ZIP como texto da un archivo
+        # que Word abre y muestra vacío, que es peor porque parece que
+        # funcionó.
+        if _pendiente.get("binario") is not None:
+            destino.write_bytes(_pendiente["binario"])
+
+        else:
+            destino.write_text(_pendiente["contenido"], encoding="utf-8")
 
     except OSError as e:
         return {"success": False, "error": f"no pude guardarlo: {e}"}
@@ -729,3 +747,196 @@ def _pagina(titulo: str, cuerpo: str) -> str:
         firma=f"{_escapar(perfil.como_llamarte())} · {fecha}",
         cuerpo=cuerpo,
     )
+
+
+# =========================================================
+# Word
+#
+# "Pasalo a Word" era la peticion mas razonable del mundo y no habia forma
+# de hacerlo: lo que salia en la ventana flotante se quedaba ahi.
+#
+# Un `.docx` no necesita ninguna libreria: **es un ZIP con tres XML
+# dentro**. Word lo abre sin rechistar y sin modo de compatibilidad. La
+# alternativa —guardar HTML con extension `.doc`— tambien abre, pero Word
+# avisa de que el formato no coincide y queda como un apano.
+# =========================================================
+
+TIPOS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"""
+
+RELACIONES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"""
+
+DOCUMENTO_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>{cuerpo}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>
+<w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418"/>
+</w:sectPr></w:body></w:document>"""
+
+
+def _parrafo_word(texto: str, estilo: str = "") -> str:
+    """Un parrafo de Word. `estilo` marca los titulos.
+
+    El tamano va a mano en vez de con estilos con nombre: los estilos viven
+    en `styles.xml`, que es una cuarta pieza del paquete, y para tres
+    tamanos de letra no compensa arrastrarla.
+    """
+    tamanos = {"h1": "36", "h2": "28"}
+
+    if estilo in tamanos:
+        medida = tamanos[estilo]
+
+        formato = (
+            f'<w:rPr><w:b w:val="1"/><w:sz w:val="{medida}"/>'
+            f'<w:szCs w:val="{medida}"/></w:rPr>'
+        )
+        espacio = '<w:pPr><w:spacing w:before="280" w:after="120"/></w:pPr>'
+
+    else:
+        formato = '<w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>'
+        espacio = (
+            '<w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr>'
+        )
+
+    return (
+        f"<w:p>{espacio}<w:r>{formato}"
+        f'<w:t xml:space="preserve">{_escapar(texto)}</w:t></w:r></w:p>'
+    )
+
+
+def word(titulo: str, bloques: list[tuple[str, str]]) -> bytes:
+    """El `.docx` entero, en memoria. `bloques` son pares (estilo, texto)."""
+    import zipfile
+
+    cuerpo = _parrafo_word(titulo, "h1") + "".join(
+        _parrafo_word(texto, estilo) for estilo, texto in bloques
+    )
+
+    memoria = io.BytesIO()
+
+    with zipfile.ZipFile(memoria, "w", zipfile.ZIP_DEFLATED) as paquete:
+        paquete.writestr("[Content_Types].xml", TIPOS)
+        paquete.writestr("_rels/.rels", RELACIONES)
+        paquete.writestr("word/document.xml", DOCUMENTO_XML.format(cuerpo=cuerpo))
+
+    return memoria.getvalue()
+
+
+# Lo ultimo que contesto, por si se pide pasarlo a un archivo.
+_ultimo: dict[str, Any] = {}
+
+
+def recordar(titulo: str, texto: str) -> None:
+    """Guarda la ultima respuesta, para poder convertirla despues."""
+    if not (texto or "").strip():
+        return
+
+    _ultimo.clear()
+    _ultimo.update({"titulo": titulo or "Respuesta", "texto": texto})
+
+
+A_WORD = (
+    "pasalo a word",
+    "pasala a word",
+    "pasame eso a word",
+    "en word",
+    "a word",
+    "documento de word",
+    "archivo de word",
+    "conviertelo a word",
+    "guardalo en word",
+)
+
+
+def pedir_word(frase: str) -> dict[str, Any] | None:
+    """Si pide pasar a Word lo ultimo, lo prepara y pregunta donde va."""
+    if not contiene(frase, *A_WORD):
+        return None
+
+    fuente = _de_lo_pendiente() or _de_lo_ultimo()
+
+    if fuente is None:
+        return {
+            "success": True,
+            "explanation": "No tengo nada reciente que pasar a Word.",
+        }
+
+    titulo, bloques = fuente
+
+    _pendiente.clear()
+    _pendiente.update(
+        {
+            "titulo": titulo,
+            "nombre": _nombre_de_archivo(titulo),
+            "extension": ".docx",
+            "contenido": None,
+            "binario": word(titulo, bloques),
+            "datos": {"tipo": "word"},
+        }
+    )
+
+    return {
+        "success": True,
+        "awaiting": "destino",
+        "explanation": (
+            "Listo, en Word. Donde lo guardo? En el escritorio, en "
+            "documentos, o dimelo y lo eliges tu."
+        ),
+        "panel": {"tipo": "texto", "titulo": titulo, "cuerpo": "Documento de Word"},
+    }
+
+
+def _de_lo_pendiente() -> tuple[str, list[tuple[str, str]]] | None:
+    """Lo que estaba a punto de guardarse, pero en Word."""
+    datos = _pendiente.get("datos") or {}
+
+    if datos.get("tipo") == "tabla":
+        filas = [" - ".join(str(c) for c in fila) for fila in datos.get("filas") or []]
+
+        return (
+            str(datos.get("titulo") or "Tabla"),
+            [("h2", " - ".join(str(c) for c in datos.get("columnas") or []))]
+            + [("", f) for f in filas],
+        )
+
+    bloques: list[tuple[str, str]] = []
+
+    for seccion in datos.get("secciones") or []:
+        if seccion.get("titulo"):
+            bloques.append(("h2", str(seccion["titulo"])))
+
+        bloques.extend(("", str(p)) for p in seccion.get("parrafos") or [])
+
+    if not bloques:
+        return None
+
+    return (str(datos.get("titulo") or "Documento"), bloques)
+
+
+def _de_lo_ultimo() -> tuple[str, list[tuple[str, str]]] | None:
+    """Lo que se acaba de contestar, tal cual salio en la ventana."""
+    if not _ultimo:
+        return None
+
+    bloques: list[tuple[str, str]] = []
+
+    for trozo in str(_ultimo["texto"]).split(chr(10)):
+        limpio = trozo.strip()
+
+        if not limpio:
+            continue
+
+        # Los titulos que pone el experto cuando contestan varios.
+        if limpio.startswith("—") and limpio.endswith("—"):
+            bloques.append(("h2", limpio.strip("— ").capitalize()))
+
+        else:
+            bloques.append(("", limpio))
+
+    return (str(_ultimo["titulo"]), bloques) if bloques else None

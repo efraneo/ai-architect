@@ -251,6 +251,25 @@ def run(
     # que adivine el contexto que ya tenemos aqui.
     from ai_architect.commands import crear
 
+    # "Pasalo a Word" va antes que nada: se refiere a lo que se acaba de
+    # decir, y mandarlo al modelo era pedirle que adivinara un contexto que
+    # esta aqui al lado.
+    aword = crear.pedir_word(frase)
+
+    if aword is not None:
+        return _decir_si_toca(
+            {
+                "success": True,
+                "executed": False,
+                "command": "crear",
+                "instant": True,
+                "panel": aword.get("panel"),
+                "explanation": _con_trato(aword["explanation"]),
+            },
+            decir,
+            cara,
+        )
+
     if crear.hay_pendiente():
         destino = crear.donde_guardarlo(frase)
 
@@ -336,7 +355,10 @@ def run(
                         "conversation": True,
                         "specialists": dicho.get("specialists", []),
                         "panel": dicho.get("panel"),
-                        "explanation": _con_trato(dicho["explanation"]),
+                        "written": dicho.get("written", ""),
+                        "explanation": _con_trato(
+                            _recordado(frase, dicho["explanation"], dicho)
+                        ),
                     },
                     decir,
                     cara,
@@ -440,7 +462,9 @@ def run(
         "executed": True,
         "command": nombre,
         "ran": orden,
-        "explanation": _con_trato(explicar(nombre, resultado)),
+        "explanation": _con_trato(
+            _recordado(frase, explicar(nombre, resultado), resultado)
+        ),
         "panel": panel(nombre, resultado),
         "result": resultado,
     }
@@ -501,6 +525,24 @@ CORTESIA = 5
 def _merece_experto(frase: str, charla: str) -> bool:
     """Si la frase pide saber algo, o solo esta siendo amable."""
     return len(frase.split()) > CORTESIA or "?" in frase or bool(charla) is False
+
+
+def _recordado(frase: str, cuerpo: str, fuente: Any) -> str:
+    """Deja apuntada la respuesta y la devuelve tal cual.
+
+    Sin esto, "pasalo a Word" no tiene a que referirse: lo que salio en la
+    ventana flotante se quedaba ahi y no habia forma de convertirlo.
+    """
+    from ai_architect.commands import crear
+
+    largo = ""
+
+    if isinstance(fuente, dict):
+        largo = str(fuente.get("written") or "")
+
+    crear.recordar(frase.strip()[:60] or "Respuesta", largo or cuerpo)
+
+    return cuerpo
 
 
 def _con_trato(cuerpo: str) -> str:

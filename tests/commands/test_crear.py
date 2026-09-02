@@ -265,3 +265,100 @@ def test_lo_que_no_es_un_destino_devuelve_nada() -> None:
 
     with mock.patch("ai_architect.core.rutas.resolver", return_value=(None, [])):
         assert crear.donde_guardarlo("cuéntame otra cosa") is None
+
+
+# --- Word -------------------------------------------------------------------
+#
+# "Pásalo a Word" es la petición más razonable del mundo y no había forma:
+# lo que salía en la ventana flotante se quedaba ahí.
+
+
+def paquete(datos: bytes):
+    import io as memoria
+    import zipfile
+
+    return zipfile.ZipFile(memoria.BytesIO(datos))
+
+
+def test_el_docx_es_un_paquete_valido() -> None:
+    """Un .docx es un ZIP con tres XML. Word no perdona que falte uno."""
+    z = paquete(crear.word("Informe", [("", "Hola.")]))
+
+    assert z.testzip() is None
+    assert set(z.namelist()) == {
+        "[Content_Types].xml",
+        "_rels/.rels",
+        "word/document.xml",
+    }
+
+
+def test_el_texto_esta_dentro() -> None:
+    z = paquete(crear.word("Informe", [("h2", "Seguridad"), ("", "Tres avisos.")]))
+
+    xml = z.read("word/document.xml").decode("utf-8")
+
+    assert "Informe" in xml
+    assert "Seguridad" in xml
+    assert "Tres avisos." in xml
+
+
+def test_lo_que_viene_del_modelo_no_rompe_el_xml() -> None:
+    """Un `&` sin escapar deja el documento ilegible para Word."""
+    xml = (
+        paquete(crear.word("A & B", [("", "x < y")]))
+        .read("word/document.xml")
+        .decode("utf-8")
+    )
+
+    assert "A &amp; B" in xml
+    assert "x &lt; y" in xml
+
+
+def test_pasar_a_word_lo_ultimo_que_dijo() -> None:
+    crear.recordar("Dependencias", "Seguridad\nTres avisos.\nFinanzas\nSube un 12%.")
+
+    salida = crear.pedir_word("pásalo a word")
+
+    assert salida["success"] is True
+    assert crear._pendiente["extension"] == ".docx"
+    assert crear._pendiente["binario"]
+
+
+def test_se_guarda_como_binario(tmp_path: Path) -> None:
+    """Escribir el ZIP como texto da un archivo que Word abre vacío."""
+    crear.recordar("Informe", "Una línea.")
+    crear.pedir_word("pásalo a word")
+
+    with mock.patch.object(crear, "_abrir"):
+        salida = crear.guardar_en(tmp_path)
+
+    guardado = Path(salida["path"])
+
+    assert guardado.suffix == ".docx"
+    assert paquete(guardado.read_bytes()).testzip() is None
+
+
+def test_tambien_convierte_lo_que_estaba_pendiente() -> None:
+    """Si preparó un HTML y luego lo quiere en Word, no hay que repetirlo."""
+    crear.run("x", engine=modelo(DOCUMENTO))
+
+    crear.pedir_word("mejor en word")
+
+    xml = paquete(crear._pendiente["binario"]).read("word/document.xml").decode("utf-8")
+
+    assert "La fotosíntesis" in xml
+    assert "Un proceso." in xml
+
+
+def test_sin_nada_reciente_lo_dice() -> None:
+    crear._ultimo.clear()
+
+    salida = crear.pedir_word("pásalo a word")
+
+    assert "No tengo nada reciente" in salida["explanation"]
+
+
+def test_lo_que_no_menciona_word_no_se_ataja() -> None:
+    crear.recordar("x", "y")
+
+    assert crear.pedir_word("revisa el proyecto") is None

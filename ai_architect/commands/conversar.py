@@ -270,7 +270,13 @@ NOMBRES = ("arquitecto", "arquitecta", "architect", "oye arquitecto")
 
 # Después de contestar, un rato sin tener que volver a nombrarlo: en una
 # conversación de verdad no se repite el nombre en cada frase.
-SEGUIMIENTO = 25.0
+#
+# Noventa segundos, y no veinticinco. Con veinticinco se rechazaban
+# respuestas legítimas: entre que termina de hablar, se lee lo que salió en
+# la ventana y se piensa qué pedir, pasan de sobra. Y el precio de
+# equivocarse no es simétrico — colarse un ruido se descarta solo; rechazar
+# lo que le estás diciendo obliga a repetirlo todo.
+SEGUIMIENTO = 90.0
 
 # Cuándo respondió por última vez, para saber si sigue en conversación.
 _ultima_vez = 0.0
@@ -336,9 +342,14 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
 
     _ultimo_dicho = str(preparado.get("texto", "") or respuesta)
 
-    # La conversación sigue viva mientras conteste: durante un rato no hace
-    # falta volver a llamarlo por su nombre.
-    _ultima_vez = time.monotonic()
+    # La cuenta empieza cuando **acaba de hablar**, no cuando prepara la
+    # respuesta. Sumarle la duración del audio es exactamente eso: si va a
+    # hablar treinta segundos, la ventana no se abre hasta el final.
+    #
+    # Sin esto, una respuesta larga se comía la ventana entera y la
+    # siguiente frase —la de verdad, la del usuario— se descartaba con un
+    # "no era para mí". Que es justo lo contrario de lo que hace falta.
+    _ultima_vez = time.monotonic() + float(preparado.get("segundos", 0) or 0)
 
     return {
         "respuesta": respuesta,

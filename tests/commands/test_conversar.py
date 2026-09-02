@@ -620,3 +620,44 @@ def test_contestar_reabre_la_conversacion() -> None:
             conversar.atender("revisa", ".", si=False)
 
     assert conversar._ultima_vez > 0
+
+
+# --- La ventana de conversación empieza cuando acaba de hablar --------------
+#
+# Con 25 s y contando desde que *prepara* la respuesta, una contestación
+# larga se comía la ventana entera: para cuando el usuario abría la boca ya
+# había caducado y su frase se descartaba con un "no era para mí".
+
+
+def test_la_cuenta_empieza_cuando_termina_de_hablar() -> None:
+    with mock.patch("ai_architect.commands.pide.run", return_value=respondiendo()):
+        with mock.patch.object(
+            conversar.motor_de_voz, "preparar", return_value={"segundos": 30.0}
+        ):
+            antes = conversar.time.monotonic()
+
+            conversar.atender("revisa", ".", si=False)
+
+    # 30 segundos hablando: la ventana no empieza hasta el final.
+    assert conversar._ultima_vez >= antes + 29
+
+
+def test_una_respuesta_larga_ya_no_se_come_la_ventana() -> None:
+    """El caso real: contesta 30 s y la siguiente frase debe entrar."""
+    with mock.patch("ai_architect.commands.pide.run", return_value=respondiendo()):
+        with mock.patch.object(
+            conversar.motor_de_voz, "preparar", return_value={"segundos": 30.0}
+        ):
+            conversar.atender("revisa", ".", si=False)
+
+    # Diez segundos después de terminar de hablar.
+    para_mi, _ = conversar.dirigido_a_mi(
+        "pásalo a word", ahora=conversar._ultima_vez + 10
+    )
+
+    assert para_mi is True
+
+
+def test_la_ventana_es_larga_de_verdad() -> None:
+    """Leer lo que salió en la ventana y pensar qué pedir lleva su tiempo."""
+    assert conversar.SEGUIMIENTO >= 60
