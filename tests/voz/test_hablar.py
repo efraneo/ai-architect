@@ -324,7 +324,14 @@ def test_si_falta_la_clave_se_lee_el_env(monkeypatch) -> None:
     with mock.patch("ai_architect.core.env_file.cargar") as leer_env:
         voz._asegurar_entorno()
 
-    leer_env.assert_called_once()
+    # Se miran varios sitios, y el que importa aqui es el del usuario:
+    # instalado en otro ordenador, es el unico donde va a haber una clave.
+    mirados = [
+        str(llamada.args[0]) for llamada in leer_env.call_args_list if llamada.args
+    ]
+
+    assert mirados, "no se leyo ningun .env"
+    assert any(".ai_architect" in ruta for ruta in mirados)
 
 
 def test_si_la_clave_ya_esta_no_se_toca_el_env(monkeypatch) -> None:

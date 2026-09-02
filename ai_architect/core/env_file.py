@@ -105,6 +105,13 @@ def cargar(env_file: str | Path = ".env") -> list[str]:
     return cargadas
 
 
+# Donde vive lo del usuario: su perfil, sus voces y su clave. La clave es
+# de la persona y no cambia segun en que repositorio este trabajando, asi
+# que no tiene por que estar junto al codigo — donde ademas acabaria en un
+# commit tarde o temprano.
+CARPETA_USUARIO = Path.home() / ".ai_architect"
+
+
 def raiz_del_paquete() -> Path:
     """La carpeta del proyecto instalado, subiendo desde este archivo.
 
@@ -127,6 +134,10 @@ def cargar_todo(project: str | Path | None = None) -> list[str]:
     está exportado manda sobre los tres.
     """
     sitios: list[Path] = [Path.cwd()]
+
+    # La del usuario va justo detras de la sesion: instalado en otro
+    # ordenador, es el unico sitio donde va a haber una clave.
+    sitios.append(CARPETA_USUARIO)
 
     if project:
         sitios.append(Path(project))

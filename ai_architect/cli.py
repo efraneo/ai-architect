@@ -30,6 +30,7 @@ from ai_architect.commands import (
     auto,
     avatar,
     changelog,
+    configurar,
     conversar,
     crear,
     doctor,
@@ -94,6 +95,12 @@ COMANDOS: tuple[Comando, ...] = (
         "Preparar un documento, una tabla o una gráfica (--peticion)",
         lambda a: crear.run(a.peticion),
         requiere=(("peticion", "crear requires --peticion <qué quieres>"),),
+    ),
+    Comando(
+        "configurar",
+        "Guardar la clave del proveedor (--clave sk-...)",
+        lambda a: configurar.run(clave=a.clave),
+        elegible=False,
     ),
     Comando(
         "doctor",
@@ -198,6 +205,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--file",
         default=None,
         help="Target file for improve command",
+    )
+
+    parser.add_argument(
+        "--clave",
+        default="",
+        help="For configurar: the provider API key to store",
     )
 
     parser.add_argument(

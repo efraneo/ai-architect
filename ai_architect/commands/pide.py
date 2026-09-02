@@ -34,7 +34,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from ai_architect.core import perfil
 
@@ -256,7 +256,37 @@ def run(
     # Si acaba de preguntar donde guardar algo, la frase siguiente es la
     # respuesta a eso y no una orden nueva. Mandarla al modelo seria pedirle
     # que adivine el contexto que ya tenemos aqui.
-    from ai_architect.commands import crear
+    # Si preguntó dónde está el repositorio, la frase siguiente es la
+    # respuesta a eso. Mandarla al modelo sería pedirle que adivine un
+    # contexto que está aquí al lado.
+    from ai_architect.commands import crear, encargo
+
+    if encargo.hay_encargo():
+        vuelta = encargo.con_el_sitio(frase, repositorio)
+
+        if vuelta is not None and not vuelta.get("listo"):
+            return _decir_si_toca(
+                {
+                    "success": True,
+                    "executed": False,
+                    "command": "",
+                    "instant": True,
+                    "explanation": _con_trato(vuelta["explanation"]),
+                },
+                decir,
+                cara,
+            )
+
+        if vuelta is not None:
+            return _ejecutar(
+                vuelta["comando"],
+                vuelta["intencion"],
+                vuelta["sitio"],
+                vuelta["frase"],
+                si,
+                decir,
+                cara,
+            )
 
     # "Pasalo a Word" va antes que nada: se refiere a lo que se acaba de
     # decir, y mandarlo al modelo era pedirle que adivinara un contexto que
@@ -325,6 +355,14 @@ def run(
         cruda = _preguntar(engine, catalogo, frase, str(repositorio))
 
     except Exception as e:  # noqa: BLE001 - un proveedor caído no revienta
+        from ai_architect.commands import configurar
+
+        # "OPENAI_API_KEY is not configured" es correcto y no ayuda a nadie:
+        # es lo primero que ve quien acaba de instalarlo, en inglés y con el
+        # nombre de una variable de entorno que no tiene por qué conocer.
+        if not configurar.esta_configurado():
+            return _error(configurar.falta_la_clave())
+
         return _error(f"el proveedor falló: {e}")
 
     intencion = _leer_json(cruda)
@@ -397,9 +435,18 @@ def run(
             disponibles=sorted(tabla),
         )
 
-    comando = tabla[nombre]
-
     dicha = str(intencion.get("carpeta") or "").strip()
+
+    # Sin saber sobre qué repositorio, lo que haga no vale nada: `project`
+    # vale "." por defecto, así que analizaba el que tuviera delante y no
+    # decía nada. Cuando acierta parece listo; cuando falla, ha trabajado
+    # media hora sobre el proyecto equivocado.
+    if encargo.falta_el_sitio(frase, nombre, dicha):
+        return _decir_si_toca(
+            {**encargo.anotar(nombre, frase, intencion), "instant": True},
+            decir,
+            cara,
+        )
 
     if dicha:
         from ai_architect.core import rutas
@@ -430,53 +477,11 @@ def run(
 
         repositorio = elegida
 
-    args = _argumentos(intencion, str(repositorio))
+        # La carpeta dicha manda sobre el `project` del modelo, que suele
+        # ser "." y ganaría por ser lo primero que mira `_argumentos`.
+        intencion = {**intencion, "project": str(elegida)}
 
-    escribe = nombre in MODIFICAN or any(
-        getattr(args, bandera, False) for bandera in BANDERAS_QUE_ESCRIBEN
-    )
-
-    orden = _como_se_escribe(nombre, args)
-
-    if escribe and not si:
-        return {
-            "success": True,
-            "executed": False,
-            "command": nombre,
-            "would_run": orden,
-            "reason": (
-                "esto modifica archivos de tu repositorio. "
-                "Repite con --si para que lo haga."
-            ),
-            "explanation": _con_trato(
-                f"Entendí que quieres: {orden}\n"
-                "No lo ejecuto porque toca tus archivos. Añade --si si es eso."
-            ),
-        }
-
-    for bandera, mensaje in comando.requiere:
-        if not getattr(args, bandera, None):
-            return _error(f"falta un dato para {nombre}: {mensaje}")
-
-    try:
-        resultado = comando.ejecutar(args)
-
-    except Exception as e:  # noqa: BLE001 - el comando falla, `pide` informa
-        return _error(f"{nombre} falló: {e}", command=nombre)
-
-    respuesta = {
-        "success": True,
-        "executed": True,
-        "command": nombre,
-        "ran": orden,
-        "explanation": _con_trato(
-            _recordado(frase, explicar(nombre, resultado), resultado)
-        ),
-        "panel": panel(nombre, resultado),
-        "result": resultado,
-    }
-
-    return _decir_si_toca(respuesta, decir, cara)
+    return _ejecutar(nombre, intencion, repositorio, frase, si, decir, cara)
 
 
 def _decir_si_toca(
@@ -892,3 +897,75 @@ def _error(mensaje: str, **extra: Any) -> dict[str, Any]:
         "explanation": mensaje,
         **extra,
     }
+
+
+def _ejecutar(
+    nombre: str,
+    intencion: dict[str, Any],
+    repositorio: Any,
+    frase: str,
+    si: bool,
+    decir: bool,
+    cara: bool,
+) -> dict:
+    """Corre el comando elegido y redacta la respuesta.
+
+    Separado de `run` porque hay dos caminos que llegan aqui: la frase que
+    lo dice todo de una vez, y la que se resolvio a medias —"analicemos un
+    repositorio", "autosgsst"— y llega con el sitio ya sabido.
+    """
+    from ai_architect.cli import POR_NOMBRE
+
+    comando = POR_NOMBRE[nombre]
+
+    args = _argumentos(intencion, str(repositorio))
+
+    escribe = nombre in MODIFICAN or any(
+        getattr(args, bandera, False) for bandera in BANDERAS_QUE_ESCRIBEN
+    )
+
+    orden = _como_se_escribe(nombre, args)
+
+    if escribe and not si:
+        return {
+            "success": True,
+            "executed": False,
+            "command": nombre,
+            "would_run": orden,
+            "reason": (
+                "esto modifica archivos de tu repositorio. "
+                "Repite con --si para que lo haga."
+            ),
+            "explanation": _con_trato(
+                f"Entendí que quieres: {orden}\n"
+                "No lo ejecuto porque toca tus archivos. Añade --si si es eso."
+            ),
+        }
+
+    for bandera, mensaje in comando.requiere:
+        if not getattr(args, bandera, None):
+            return _error(f"falta un dato para {nombre}: {mensaje}")
+
+    try:
+        # `Comando.ejecutar` está tipado para el `Namespace` de argparse, y
+        # aquí se le pasa uno construido a mano con los mismos campos. Es
+        # deliberado: `pide` no viene de la línea de órdenes, pero ejecuta
+        # exactamente los mismos comandos y no va a haber dos tablas.
+        resultado = comando.ejecutar(cast(Any, args))
+
+    except Exception as e:  # noqa: BLE001 - el comando falla, `pide` informa
+        return _error(f"{nombre} falló: {e}", command=nombre)
+
+    respuesta = {
+        "success": True,
+        "executed": True,
+        "command": nombre,
+        "ran": orden,
+        "explanation": _con_trato(
+            _recordado(frase, explicar(nombre, resultado), resultado)
+        ),
+        "panel": panel(nombre, resultado),
+        "result": resultado,
+    }
+
+    return _decir_si_toca(respuesta, decir, cara)

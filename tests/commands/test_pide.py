@@ -37,15 +37,23 @@ def con_perfil(tmp_path: Path):
 def saludo_limpio():
     """Cada prueba empieza como una sesión recién abierta.
 
-    El saludo va una sola vez por sesión, así que sin esto una prueba deja
-    marcado que ya saludó y la siguiente ve una respuesta sin saludo — o al
-    revés, según el orden en que se ejecuten.
+    Tres estados viven en módulo y se pegan de una prueba a la siguiente:
+    si ya saludó, si hay un documento sin guardar, y si está esperando que
+    le digan sobre qué repositorio trabajar. Sin limpiarlos, una prueba
+    contesta a la pregunta que dejó pendiente la anterior — y falla por un
+    motivo que no tiene nada que ver con lo que comprueba.
     """
+    from ai_architect.commands import crear, encargo
+
     pide.reiniciar_saludo()
+    encargo.olvidar()
+    crear.olvidar()
 
     yield
 
     pide.reiniciar_saludo()
+    encargo.olvidar()
+    crear.olvidar()
 
 
 def modelo(respuesta: dict | str):
