@@ -209,3 +209,35 @@ def test_ctrl_c_cierra_el_servidor() -> None:
             conversar.run(".")
 
     servidor.server_close.assert_called_once()
+
+
+# --- Oír con Whisper --------------------------------------------------------
+
+
+def test_la_pagina_sabe_quien_la_va_a_oir() -> None:
+    with mock.patch("ai_architect.voz.escuchar.disponible", return_value=True):
+        pagina = conversar._componer(".")
+
+    datos = json.loads(pagina.split("window.DATOS_ARQUITECTO = ")[-1].split(";")[0])
+
+    assert datos["oido"] == "whisper"
+
+
+def test_sin_clave_se_cae_al_oido_del_navegador() -> None:
+    """Peor en español, pero mejor que quedarse sordo."""
+    with mock.patch("ai_architect.voz.escuchar.disponible", return_value=False):
+        pagina = conversar._componer(".")
+
+    datos = json.loads(pagina.split("window.DATOS_ARQUITECTO = ")[-1].split(";")[0])
+
+    assert datos["oido"] == "navegador"
+
+
+def test_se_dice_quien_te_oye_y_cuanto_cuesta() -> None:
+    """Que el audio salga del equipo no puede ser una sorpresa."""
+    with mock.patch("ai_architect.voz.escuchar.disponible", return_value=True):
+        assert "OpenAI" in conversar._quien_oye()
+        assert "0.006" in conversar._quien_oye()
+
+    with mock.patch("ai_architect.voz.escuchar.disponible", return_value=False):
+        assert "Google" in conversar._quien_oye()

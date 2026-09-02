@@ -20,10 +20,15 @@ Esto deja el servidor levantado y abre una conversación de verdad:
 5. Vuelve a escuchar cuando termina de hablar — no antes, o se oiría a sí
    mismo por los altavoces y se contestaría solo.
 
-**Lo que conviene saber.** La transcripción la hace Chrome, y Chrome manda
-el audio a los servidores de Google. No es local. La alternativa sería
-grabar en el navegador y transcribir con Whisper desde Python: más privado
-frente a Google —aunque el audio acabe igualmente en OpenAI— y de pago.
+**Quién transcribe.** Si hay clave de OpenAI, el audio se graba aquí y lo
+transcribe Whisper, que entiende mejor el español y **acepta contexto**:
+pasándole los nombres de los comandos deja de oír "revista" donde dices
+"revisa". Cuesta unos seis milésimos de dólar por minuto, y solo se manda
+lo que suena — el silencio lo recorta el navegador antes de enviarlo.
+
+Sin clave se usa el reconocedor del propio Chrome: gratis, peor en español,
+y manda el audio a los servidores de Google. Se dice cuál de los dos está
+en uso al arrancar, porque no es un detalle.
 
 **Lo que toca archivos sigue pidiendo permiso.** Que una orden llegue por
 voz no la autoriza: ``pide`` responde con lo que haría y espera. Por voz
@@ -80,7 +85,7 @@ def run(
         f"  para que si me equivoco lo veas al momento.\n\n"
         f"  Órdenes que tocan archivos: {'autorizadas' if si else 'NO autorizadas'}"
         f"{'' if si else ' (arranca con --si para permitirlas)'}.\n"
-        f"  La transcripción la hace Chrome, y va por los servidores de Google.\n\n"
+        f"  Te oye: {_quien_oye()}\n\n"
         f"  Ctrl+C para terminar.\n"
     )
 
@@ -99,8 +104,27 @@ def run(
     return {"success": True, "url": url, "authorised": si}
 
 
+def _quien_oye() -> str:
+    from ai_architect.voz import escuchar
+
+    if escuchar.disponible():
+        return "Whisper (OpenAI), con vocabulario del proyecto. ~$0.006/minuto"
+
+    return "el reconocedor de Chrome — gratis, peor en español, pasa por Google"
+
+
 def _componer(project: str) -> str:
-    datos = {"ms": 0, "texto": "", "modo": "conversacion", "proyecto": project}
+    from ai_architect.voz import escuchar
+
+    datos = {
+        "ms": 0,
+        "texto": "",
+        "modo": "conversacion",
+        "proyecto": project,
+        # Sin clave no hay Whisper, y callarlo sería peor: se notaría que
+        # entiende peor y no habría forma de saber por qué.
+        "oido": "whisper" if escuchar.disponible() else "navegador",
+    }
 
     return avatar.ROSTRO.read_text(encoding="utf-8").replace(
         avatar.MARCA,
@@ -147,7 +171,14 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
             self._responder(pagina.encode("utf-8"), "text/html; charset=utf-8")
 
         def do_POST(self) -> None:  # noqa: N802 - lo exige la librería
-            if self.path.split("?")[0] != "/orden":
+            ruta = self.path.split("?")[0]
+
+            if ruta == "/oir":
+                self._oir()
+
+                return
+
+            if ruta != "/orden":
                 self.send_error(404)
 
                 return
@@ -178,6 +209,61 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
             if audio:
                 threading.Thread(
                     target=motor_de_voz.emitir, args=(audio,), daemon=True
+                ).start()
+
+            print(f"  < {salida['respuesta'].splitlines()[0]}")
+
+        def _oir(self) -> None:
+            """Audio en crudo: se transcribe aquí y se trata como una orden."""
+            from ai_architect.voz import escuchar
+
+            largo = min(
+                int(self.headers.get("Content-Length") or 0),
+                escuchar.LIMITE_BYTES,
+            )
+
+            try:
+                audio = self.rfile.read(largo)
+
+            except OSError:
+                self.send_error(400)
+
+                return
+
+            oido = escuchar.transcribir(audio)
+
+            dicho = oido["texto"]
+
+            if not dicho:
+                # Ni se ejecuta ni se contesta. Lo que no se entendió no se
+                # adivina, y soltar "no te entendí" a cada ruido de la
+                # habitación acabaría siendo insoportable.
+                self._responder(
+                    json.dumps(
+                        {"oido": "", "respuesta": "", "ms": 0, "error": oido["error"]},
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+
+                return
+
+            print(f"  > {dicho}")
+
+            salida = atender(dicho, project, si)
+
+            salida["oido"] = dicho
+
+            sonido = salida.pop("_audio", None)
+
+            self._responder(
+                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
+                "application/json; charset=utf-8",
+            )
+
+            if sonido:
+                threading.Thread(
+                    target=motor_de_voz.emitir, args=(sonido,), daemon=True
                 ).start()
 
             print(f"  < {salida['respuesta'].splitlines()[0]}")

@@ -850,8 +850,163 @@ async function enviarOrden(texto) {
   }, (datos.ms || 1200) + 700);
 }
 
-if (window.DATOS_ARQUITECTO && window.DATOS_ARQUITECTO.modo === "conversacion") {
-  conversar();
+// --- Oir con Whisper ---------------------------------------------------------
+//
+// El reconocedor de Chrome es gratis pero entiende el espanol regular y
+// manda el audio a Google. Esto graba aqui y lo transcribe OpenAI, que
+// ademas acepta contexto: pasandole los nombres de los comandos deja de
+// oir "revista" donde dices "revisa".
+//
+// Lo que se paga es por minuto de audio, asi que **no se manda el
+// silencio**. Un medidor de volumen decide cuando empiezas y cuando
+// paras, y solo ese trozo sale de aqui. Una conversacion de una hora con
+// diez ordenes son diez segundos de audio, no una hora.
+
+// Por encima de esto se considera que hay voz. El ruido de fondo de una
+// habitacion se queda bastante por debajo.
+const UMBRAL_VOZ = 0.020;
+
+// Cuanto silencio cierra la frase. Menos corta las pausas al pensar;
+// mas y hay que esperar mirando la pantalla.
+const SILENCIO_FINAL = 900;
+
+// Voz sostenida minima para que cuente como orden, y no una tos.
+const VOZ_MINIMA = 280;
+
+async function escucharConWhisper() {
+  let flujo;
+
+  try {
+    flujo = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+    });
+
+  } catch (e) {
+    rotulo.textContent = "sin permiso de microfono";
+    mostrarOido("Dale permiso al microfono y recarga la pagina.", true);
+
+    return;
+  }
+
+  const sonido = new (window.AudioContext || window.webkitAudioContext)();
+  const fuente = sonido.createMediaStreamSource(flujo);
+  const medidor = sonido.createAnalyser();
+
+  medidor.fftSize = 1024;
+  fuente.connect(medidor);
+
+  const muestras = new Float32Array(medidor.fftSize);
+
+  let grabadora = null;
+  let trozos = [];
+  let vozAcumulada = 0;
+  let calladoDesde = 0;
+
+  arquitecto.escuchar();
+
+  setInterval(function () {
+    if (ocupado) return;
+
+    medidor.getFloatTimeDomainData(muestras);
+
+    let suma = 0;
+
+    for (let i = 0; i < muestras.length; i++) suma += muestras[i] * muestras[i];
+
+    const volumen = Math.sqrt(suma / muestras.length);
+    const ahora = performance.now();
+
+    if (volumen > UMBRAL_VOZ) {
+      calladoDesde = 0;
+      vozAcumulada += 60;
+
+      if (!grabadora) {
+        trozos = [];
+        vozAcumulada = 60;
+
+        grabadora = new MediaRecorder(flujo);
+        grabadora.ondataavailable = function (e) {
+          if (e.data.size) trozos.push(e.data);
+        };
+        grabadora.start(200);
+      }
+
+      return;
+    }
+
+    if (!grabadora) return;
+
+    if (!calladoDesde) calladoDesde = ahora;
+
+    if (ahora - calladoDesde < SILENCIO_FINAL) return;
+
+    // Se acabo la frase.
+    const suficiente = vozAcumulada >= VOZ_MINIMA;
+    const cerrando = grabadora;
+
+    grabadora = null;
+    calladoDesde = 0;
+    vozAcumulada = 0;
+
+    cerrando.onstop = function () {
+      if (!suficiente || !trozos.length) return;      // una tos, un golpe
+
+      enviarAudio(new Blob(trozos, { type: "audio/webm" }));
+    };
+
+    cerrando.stop();
+  }, 60);
+}
+
+async function enviarAudio(audio) {
+  ocupado = true;
+
+  arquitecto.pensar();
+  mostrarOido("...", false);
+
+  let datos;
+
+  try {
+    const respuesta = await fetch("/oir", {
+      method: "POST",
+      headers: { "Content-Type": "audio/webm" },
+      body: audio,
+    });
+
+    datos = await respuesta.json();
+
+  } catch (e) {
+    mostrarOido("No pude hablar con el arquitecto: " + e.message, true);
+    arquitecto.escuchar();
+    ocupado = false;
+
+    return;
+  }
+
+  if (datos.oido) mostrarOido(datos.oido, true);
+
+  if (!datos.respuesta) {
+    // No entendio nada: se vuelve a escuchar sin decir una palabra, que
+    // es lo que haria alguien que no oyo bien y no quiere interrumpir.
+    arquitecto.escuchar();
+    ocupado = false;
+
+    return;
+  }
+
+  arquitecto.hablar(datos.ms || 1200, datos.dicho || datos.respuesta);
+
+  setTimeout(function () {
+    ocupado = false;
+    arquitecto.escuchar();
+  }, (datos.ms || 1200) + 700);
+}
+
+const AJUSTES = window.DATOS_ARQUITECTO || {};
+
+if (AJUSTES.modo === "conversacion") {
+  if (AJUSTES.oido === "whisper") escucharConWhisper();
+  else conversar();
 }
 
 // --- El bucle ----------------------------------------------------------------
