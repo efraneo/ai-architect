@@ -46,7 +46,8 @@ CONTEXTO = (
     "Vocabulario probable: revisa, analiza, agentes, mejora, ejecuta, "
     "changelog, doctor, parche, diff, repositorio, commit, rama, pruebas, "
     "cobertura, dependencias, seguridad, secretos, complejidad, refactor, "
-    "puntuación, incidencias, entorno."
+    "puntuación, incidencias, entorno, arquitecto, pásalo a Word, "
+    "escritorio, documentos, ciérrala, amplíala, tabla, gráfica, resumen."
 )
 
 

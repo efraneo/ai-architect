@@ -291,7 +291,15 @@ def _ordenar(reparto: dict[str, Any], plan: list[dict[str, Any]]) -> list[tuple]
 
 def _hablado(contestaron: list[tuple]) -> str:
     if len(contestaron) == 1:
-        return str(contestaron[0][1]["resumen"])
+        quien, salida = contestaron[0]
+
+        # Se nombra siempre a quien contesta. Una respuesta anónima y una
+        # respuesta del agente que ha leído tu código suenan igual, y no
+        # valen lo mismo: decirlo es la mitad de la información.
+        if quien == "conversación":
+            return str(salida["resumen"])
+
+        return f"Te contesta {quien}. {salida['resumen']}"
 
     # Con varios se dice quién dijo qué: oír dos párrafos seguidos sin saber
     # de quién son no se sigue.

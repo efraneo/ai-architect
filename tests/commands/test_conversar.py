@@ -531,12 +531,23 @@ def test_la_respuesta_llega_aunque_ya_se_haya_pedido() -> None:
     assert buzon.get_nowait()["respuesta"] == "listo"
 
 
-# --- Que solo escuche lo que va con él --------------------------------------
+# --- Lo que le llega, le llega ----------------------------------------------
+#
+# Antes exigía que se le llamara por su nombre, y el registro de la primera
+# sesión real enseñó por qué fue un error:
+#
+#     · (no era para mí) arquitect
+#     · (no era para mí) revisa las dependencias
+#     · (no era para mí) pásalo a word
+#
+# Whisper transcribió "arquitect", cortado —el detector de voz recorta el
+# arranque de la frase—, así que la palabra clave no llegaba entera. Y como
+# no contestó ni una vez, la ventana de conversación no se abrió nunca:
+# todo rechazado, en un círculo del que no se sale hablando.
 
 
 @pytest.fixture(autouse=True)
 def conversacion_fria():
-    """Cada prueba empieza sin conversación viva detrás."""
     conversar._ultima_vez = 0.0
 
     yield
@@ -545,71 +556,54 @@ def conversacion_fria():
 
 
 @pytest.mark.parametrize(
-    ("dicho", "esperado"),
+    "dicho",
     [
-        ("Arquitecto, revisa el proyecto", "revisa el proyecto"),
-        ("arquitecto revisa el proyecto", "revisa el proyecto"),
-        ("Architect, dame la puntuación", "dame la puntuacion"),
+        "revisa las dependencias",
+        "pásalo a word",
+        "cierra la ventana",
+        "¿qué problemas tiene mi proyecto?",
     ],
 )
-def test_si_lo_llamas_por_su_nombre_te_hace_caso(dicho: str, esperado: str) -> None:
-    para_mi, orden = conversar.dirigido_a_mi(dicho, ahora=0.0)
+def test_lo_que_le_dices_le_llega(dicho: str) -> None:
+    """La regla entera: si te oye, te atiende."""
+    para_mi, orden = conversar.dirigido_a_mi(dicho)
 
     assert para_mi is True
-    assert orden == esperado
+    assert orden == dicho
 
 
-@pytest.mark.parametrize(
-    "ruido",
-    [
-        "y entonces le dije que no viniera",
-        "pásame la sal",
-        "mañana nos vemos en la oficina",
-        "",
-    ],
-)
-def test_lo_que_no_va_con_el_se_ignora(ruido: str) -> None:
-    """Un micro abierto oye la tele, el pasillo y el teléfono de al lado."""
-    para_mi, _ = conversar.dirigido_a_mi(ruido, ahora=0.0)
-
-    assert para_mi is False
-
-
-def test_dentro_de_la_conversacion_no_hay_que_repetir_el_nombre() -> None:
-    """Nadie dice el nombre en cada frase de una conversación."""
-    conversar._ultima_vez = 100.0
-
-    para_mi, orden = conversar.dirigido_a_mi("y ahora la puntuación", ahora=105.0)
+def test_si_lo_nombras_se_le_quita_el_nombre() -> None:
+    para_mi, orden = conversar.dirigido_a_mi("Arquitecto, revisa el proyecto")
 
     assert para_mi is True
-    assert orden == "y ahora la puntuación"
+    assert orden == "revisa el proyecto"
 
 
-def test_pasado_el_rato_hay_que_volver_a_llamarlo() -> None:
-    conversar._ultima_vez = 100.0
+def test_el_nombre_recortado_tambien_cuenta() -> None:
+    """El micro se enciende a media palabra y llega "arquitect"."""
+    para_mi, orden = conversar.dirigido_a_mi("arquitect revisa las dependencias")
 
-    para_mi, _ = conversar.dirigido_a_mi(
-        "y ahora la puntuación", ahora=100.0 + conversar.SEGUIMIENTO + 1
-    )
-
-    assert para_mi is False
+    assert para_mi is True
+    assert "revisa las dependencias" in orden
 
 
-def test_solo_el_nombre_sirve_de_llamada() -> None:
-    """ "Arquitecto" a secas es llamarlo, no una orden vacía."""
-    para_mi, orden = conversar.dirigido_a_mi("Arquitecto", ahora=0.0)
+def test_solo_su_nombre_sigue_siendo_algo() -> None:
+    para_mi, orden = conversar.dirigido_a_mi("arquitecto")
 
     assert para_mi is True
     assert orden.strip() != ""
 
 
-def test_el_nombre_en_mitad_de_la_frase_no_cuenta() -> None:
-    """ "le dije al arquitecto que viniera" es contarlo, no pedírselo."""
-    para_mi, _ = conversar.dirigido_a_mi(
-        "le dije al arquitecto que viniera mañana", ahora=0.0
-    )
+def test_el_silencio_no() -> None:
+    assert conversar.dirigido_a_mi("   ") == (False, "")
 
-    assert para_mi is False
+
+def test_de_su_propia_voz_sigue_encargandose_el_eco() -> None:
+    """Lo que de verdad se colaba no era la tele: eran los altavoces."""
+    assert conversar.es_eco(
+        "el entorno esta healthy provider ready",
+        "El entorno está healthy. Provider ready, agents ready.",
+    )
 
 
 def test_contestar_reabre_la_conversacion() -> None:

@@ -262,61 +262,60 @@ def soltar_relleno() -> dict[str, Any] | None:
     return elegido
 
 
-# Cómo se le llama. Un micrófono abierto oye la tele, a quien pasa por
-# detrás y a quien habla por teléfono al lado, y todo eso llegaba como
-# órdenes. Que haya que nombrarlo es lo único que separa de verdad "me
-# hablan a mí" de "hay ruido".
+# Cómo se le llama, si es que se le llama. Ya no hace falta.
 NOMBRES = ("arquitecto", "arquitecta", "architect", "oye arquitecto")
 
-# Después de contestar, un rato sin tener que volver a nombrarlo: en una
-# conversación de verdad no se repite el nombre en cada frase.
-#
-# Noventa segundos, y no veinticinco. Con veinticinco se rechazaban
-# respuestas legítimas: entre que termina de hablar, se lee lo que salió en
-# la ventana y se piensa qué pedir, pasan de sobra. Y el precio de
-# equivocarse no es simétrico — colarse un ruido se descarta solo; rechazar
-# lo que le estás diciendo obliga a repetirlo todo.
+# Sin uso desde que se quitó la palabra clave. Se mantiene porque la
+# conversación sigue teniendo un "hace poco que hablamos" del que dependen
+# otras cosas.
 SEGUIMIENTO = 90.0
 
-# Cuándo respondió por última vez, para saber si sigue en conversación.
 _ultima_vez = 0.0
 
 
 def dirigido_a_mi(texto: str, ahora: float | None = None) -> tuple[bool, str]:
-    """Si esa frase iba para él, y qué queda al quitarle el nombre.
+    """Si eso iba para él, y qué queda al quitarle el nombre.
 
-    Devuelve ``(True, orden)`` o ``(False, "")``. Se le llama por su nombre
-    para empezar; a partir de ahí, mientras la conversación siga viva, no
-    hace falta repetirlo.
+    **Antes exigía que se le llamara por su nombre, y fue un error.** El
+    registro de la primera sesión real lo enseña entero:
+
+        · (no era para mí) arquitect
+        · (no era para mí) revisa las dependencias
+        · (no era para mí) pásalo a word
+
+    Whisper transcribió "arquitect", cortado — el detector de voz recorta
+    el arranque de la frase y la palabra clave nunca llegaba entera. Y como
+    no llegó a contestar ni una vez, la ventana de conversación no se abrió
+    nunca: todo rechazado, en un círculo del que no se sale hablando.
+
+    El ruido de fondo no era el problema que parecía. Lo que de verdad se
+    colaba era su propia voz por los altavoces, y de eso ya se encarga
+    ``es_eco``, que compara con lo que acaba de decir en vez de exigir una
+    contraseña. Quien habla delante del micrófono es el usuario.
+
+    Así que ahora se acepta lo que llegue. Si viene el nombre delante, se
+    quita —"arquitecto, revisa" es "revisa"— y ya está.
     """
-    limpio = sin_adornos(texto)
+    limpio = (texto or "").strip()
 
     if not limpio:
         return (False, "")
 
+    plano = sin_adornos(limpio)
+
     for nombre in NOMBRES:
         clave = sin_adornos(nombre)
 
-        if not limpio.startswith(clave):
-            continue
+        # `startswith` con el nombre entero fallaba con "arquitect": se
+        # comprueba también el nombre recortado, que es como llega cuando
+        # el micro se enciende a media palabra.
+        for variante in (clave, clave[:-1], clave[:-2]):
+            if len(variante) >= 7 and plano.startswith(variante):
+                resto = plano[len(variante) :].strip(" ,.:;")
 
-        # Se le quita el nombre y lo que suele venir pegado detrás.
-        resto = limpio[len(clave) :].strip(" ,.:;")
+                return (True, resto or limpio)
 
-        return (True, resto or texto)
-
-    # Dentro de la conversación no hace falta nombrarlo. Fuera, sí.
-    #
-    # El cero es "todavía no ha contestado nunca", no "hace un instante".
-    # Sin distinguirlo, al arrancar la resta daba cero y todo lo que se
-    # oyera en la habitación pasaba por conversación en marcha.
-    if _ultima_vez <= 0:
-        return (False, "")
-
-    if (ahora if ahora is not None else time.monotonic()) - _ultima_vez < SEGUIMIENTO:
-        return (True, texto)
-
-    return (False, "")
+    return (True, limpio)
 
 
 def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
