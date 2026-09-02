@@ -37,7 +37,7 @@ import re
 from typing import Any
 
 from ai_architect.core import perfil
-from ai_architect.core.texto import sin_adornos
+from ai_architect.core.texto import SON_DATOS, sin_adornos
 from ai_architect.swarm.task_dispatcher import TaskDispatcher
 
 # Los agentes del proyecto que sí leen el código, con lo que cubre cada uno.
@@ -297,7 +297,14 @@ def _lo_que_ve_el_agente(quien: str, project: str) -> str:
 
     trozo = json.dumps(hallazgos, ensure_ascii=False, default=str)[:2500]
 
-    return f"\n\nLo que el análisis del repositorio ha encontrado:\n{trozo}"
+    return (
+        chr(10) * 2
+        + SON_DATOS
+        + chr(10) * 2
+        + "Lo que el análisis del repositorio ha encontrado:"
+        + chr(10)
+        + trozo
+    )
 
 
 # --- Juntar las respuestas ---------------------------------------------------

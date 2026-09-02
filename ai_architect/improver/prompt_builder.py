@@ -16,6 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ai_architect.core.texto import SON_DATOS
+
 # Lo que se exige de la respuesta. Va al final a propósito: es lo último que
 # lee el modelo antes de contestar.
 #
@@ -94,6 +96,8 @@ def construir(
                 [
                     "Current content (with line numbers, for the @@ headers)",
                     "======================================================",
+                    SON_DATOS,
+                    "",
                     contenido,
                     "",
                 ]

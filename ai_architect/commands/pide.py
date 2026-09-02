@@ -36,7 +36,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
-from ai_architect.core import perfil
+from ai_architect.core import gasto, perfil
 
 # Comandos que tocan el repositorio del usuario. No se ejecutan sin permiso
 # explícito, por muy claro que parezca lo que pidió.
@@ -353,6 +353,10 @@ def run(
 
     try:
         cruda = _preguntar(engine, catalogo, frase, str(repositorio))
+
+    except gasto.TopeAlcanzado as tope:
+        # No es una avería: es lo que se le pidió que hiciera.
+        return _error(str(tope))
 
     except Exception as e:  # noqa: BLE001 - un proveedor caído no revienta
         from ai_architect.commands import configurar

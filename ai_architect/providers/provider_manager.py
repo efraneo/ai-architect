@@ -54,11 +54,28 @@ class ProviderManager:
         **kwargs: Any,
     ) -> str:
 
-        return self.provider.generate(
+        # Antes de llamar, no despues: comprobarlo despues seria contar el
+        # dinero que ya se fue.
+        from ai_architect.core import gasto
+
+        puede, motivo = gasto.permitido()
+
+        if not puede:
+            raise gasto.TopeAlcanzado(motivo)
+
+        salida = self.provider.generate(
             prompt,
             temperature=temperature,
             **kwargs,
         )
+
+        gasto.registrar(
+            str(kwargs.get("model") or getattr(self.provider, "model", "")),
+            prompt,
+            salida,
+        )
+
+        return salida
 
     def configuration(self) -> dict:
 

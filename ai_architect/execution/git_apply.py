@@ -66,6 +66,17 @@ def aplicar(
     if problema is not None:
         return problema
 
+    # Que el parche no escriba fuera. `git apply` interpreta las rutas
+    # relativas al repositorio y un `../../` en la cabecera sube por el
+    # arbol tan tranquilo. Autorizar cambios en un repositorio no es
+    # autorizar cambios en el disco, y hasta ahora eran el mismo permiso.
+    from ai_architect.core import alcance
+
+    fuera = alcance.revisar(diff, repository)
+
+    if fuera:
+        return error(alcance.motivo(fuera, repository))
+
     temporal: Path | None = None
 
     try:
