@@ -28,7 +28,9 @@ from ai_architect.commands import (
     agents,
     analyze,
     auto,
+    avatar,
     changelog,
+    conversar,
     doctor,
     execute,
     improve,
@@ -36,7 +38,7 @@ from ai_architect.commands import (
     review,
     voz,
 )
-from ai_architect.core.env_file import cargar
+from ai_architect.core.env_file import cargar_todo
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,16 @@ class Comando:
 # `pide` va aparte de la tabla: es quien la usa, no uno de sus miembros.
 # Meterlo dentro le dejaría elegirse a sí mismo.
 COMANDOS: tuple[Comando, ...] = (
+    Comando(
+        "conversar",
+        "Hablarle por el micrófono y que conteste (--si autoriza lo que escribe)",
+        lambda a: conversar.run(a.project, si=a.si),
+    ),
+    Comando(
+        "avatar",
+        "Abrir el rostro (--texto para que lo diga en voz alta)",
+        lambda a: avatar.run(decir=a.texto),
+    ),
     Comando(
         "voz",
         "Ver qué voces hay y probarlas (--probar)",
@@ -139,6 +151,7 @@ PIDE = Comando(
         si=a.si,
         soy=a.soy,
         decir=a.decir,
+        cara=a.cara,
     ),
 )
 
@@ -261,6 +274,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--cara",
+        action="store_true",
+        help="For pide: show the avatar; with --decir it moves its mouth",
+    )
+
+    parser.add_argument(
+        "--texto",
+        default="",
+        help="For avatar: what the face should say out loud",
+    )
+
+    parser.add_argument(
         "--soy",
         default="",
         help="For pide: how you want to be addressed (asked once, remembered)",
@@ -269,7 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--si",
         action="store_true",
-        help="For pide: authorise the commands that modify your files",
+        help="For pide/conversar: authorise the commands that modify your files",
     )
 
     parser.add_argument(
@@ -315,15 +340,16 @@ def print_result(
 
 def main():
 
-    # Antes de nada, el `.env` del directorio desde el que se ejecuta. Sin
-    # esto había que exportar la clave del proveedor a mano en cada sesión,
-    # aunque estuviera escrita en el archivo que el propio `.env.example`
-    # sugiere. Lo ya exportado manda.
-    cargar()
-
     parser = build_parser()
 
     args = parser.parse_args()
+
+    # El `.env`: el de la sesión, el del proyecto que se analiza y el del
+    # propio paquete. Mirar solo el directorio actual hacía que la clave
+    # dependiera de desde dónde se llame — un acceso directo o un `.cmd`
+    # desde otra carpeta y el proveedor contestaba `not_configured`
+    # teniendo la clave a dos carpetas. Lo ya exportado manda sobre todo.
+    cargar_todo(getattr(args, "project", None))
 
     comando = PIDE if args.command == PIDE.nombre else POR_NOMBRE.get(args.command)
 

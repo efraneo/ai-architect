@@ -138,7 +138,7 @@ def test_openai_avisa_de_que_no_suena_latino() -> None:
     nota = voz.motores()["openai"]["nota"]
 
     assert "pago" in nota
-    assert "latino" in nota
+    assert "latinoamericano" in nota
 
 
 @pytest.mark.parametrize("voces", [None, "Sabina (es-MX, Female)"])
@@ -219,3 +219,128 @@ def test_si_la_elegida_no_esta_se_usa_otra(tmp_path: Path) -> None:
     with mock.patch.object(perfil, "ARCHIVO", archivo):
         with mock.patch.object(voz, "motores", return_value=_todos(False, True, True)):
             assert voz.elegir() == "openai"
+
+
+# --- Preparar el audio sin reproducirlo -------------------------------------
+#
+# El avatar mueve la boca los milisegundos que dura el audio. Estimarlos por
+# el número de palabras se nota a simple vista: la boca sigue abriéndose
+# medio segundo después del silencio. Por eso se separa generar de sonar.
+
+
+def test_la_duracion_sale_de_la_cabecera_del_wav(tmp_path: Path) -> None:
+    import wave
+
+    archivo = tmp_path / "medio.wav"
+
+    with wave.open(str(archivo), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(b"\x00\x00" * 12000)  # medio segundo
+
+    assert voz.duracion(archivo) == pytest.approx(0.5)
+
+
+def test_un_archivo_que_no_es_wav_no_revienta(tmp_path: Path) -> None:
+    roto = tmp_path / "roto.wav"
+    roto.write_text("esto no es audio")
+
+    assert voz.duracion(roto) == 0.0
+
+
+def test_preparar_no_reproduce_nada(tmp_path: Path) -> None:
+    """Ese es todo el sentido: el avatar decide cuándo suena."""
+    falso = tmp_path / "x.wav"
+    falso.write_bytes(b"")
+
+    with mock.patch.object(voz, "elegir", return_value="openai"):
+        with mock.patch.object(voz, "_wav_openai", return_value=falso):
+            with mock.patch.object(voz, "_reproducir") as sonar:
+                preparado = voz.preparar("hola")
+
+    sonar.assert_not_called()
+    assert preparado["motor"] == "openai"
+
+
+def test_sin_texto_no_se_prepara_nada() -> None:
+    assert voz.preparar("   ")["motor"] == ""
+
+
+def test_sin_ninguna_voz_se_dice(tmp_path: Path) -> None:
+    with mock.patch.object(voz, "elegir", return_value=""):
+        assert voz.preparar("hola")["motivo"] == "sin voz"
+
+
+def test_si_falla_la_sintesis_no_lanza() -> None:
+    with mock.patch.object(voz, "elegir", return_value="openai"):
+        with mock.patch.object(
+            voz, "_wav_openai", side_effect=RuntimeError("sin cuota")
+        ):
+            preparado = voz.preparar("hola")
+
+    assert preparado["archivo"] is None
+    assert "sin cuota" in preparado["motivo"]
+
+
+def test_windows_no_deja_archivo_asi_que_se_estima() -> None:
+    """SAPI habla directamente: ahí la duración sí es una estimación."""
+    with mock.patch.object(voz, "elegir", return_value="windows"):
+        preparado = voz.preparar("una dos tres cuatro cinco seis")
+
+    assert preparado["archivo"] is None
+    assert preparado["segundos"] > 1
+
+
+def test_emitir_reproduce_lo_preparado(tmp_path: Path) -> None:
+    archivo = tmp_path / "x.wav"
+
+    with mock.patch.object(voz, "_reproducir") as sonar:
+        assert voz.emitir({"archivo": archivo, "motor": "openai"}) is True
+
+    sonar.assert_called_once()
+
+
+def test_emitir_sin_archivo_no_miente() -> None:
+    assert voz.emitir({"archivo": None, "motor": ""}) is False
+
+
+def test_emitir_no_lanza_si_no_hay_con_que_sonar(tmp_path: Path) -> None:
+    with mock.patch.object(voz, "_reproducir", side_effect=RuntimeError("no hay")):
+        assert voz.emitir({"archivo": tmp_path / "x.wav"}) is False
+
+
+# --- La clave del proveedor no puede depender de por dónde se entre ---------
+#
+# `cli.main()` carga el `.env`, pero llamar a `avatar.run()` o `pide.run()`
+# como librería no lo carga nadie. Sin la clave, OpenAI se da por no
+# disponible y se cae al siguiente motor: el usuario había elegido `onyx`
+# y la máquina le contestó con la voz que acababa de descartar.
+
+
+def test_si_falta_la_clave_se_lee_el_env(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with mock.patch("ai_architect.core.env_file.cargar") as leer_env:
+        voz._asegurar_entorno()
+
+    leer_env.assert_called_once()
+
+
+def test_si_la_clave_ya_esta_no_se_toca_el_env(monkeypatch) -> None:
+    """Quien exporta la clave a mano está diciendo cuál quiere."""
+    monkeypatch.setenv("OPENAI_API_KEY", "de-la-sesion")
+
+    with mock.patch("ai_architect.core.env_file.cargar") as leer_env:
+        voz._asegurar_entorno()
+
+    leer_env.assert_not_called()
+
+
+def test_los_motores_miran_el_env_antes_de_decidir(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with mock.patch.object(voz, "_asegurar_entorno") as asegurar:
+        voz.motores()
+
+    asegurar.assert_called_once()

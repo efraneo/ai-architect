@@ -39,17 +39,33 @@ TIEMPO_LIMITE = 60
 # Dónde se buscan las voces de Piper, si están.
 CARPETA_VOCES = Path.home() / ".ai_architect" / "voces"
 
-# Voces masculinas de español latino que Piper publica. La primera que
-# aparezca es la que se usa.
+# Las voces masculinas de español latino que Piper publica de verdad. Se
+# comprobó contra el repositorio: `es_AR/daniel` no existe —la argentina es
+# `daniela`, femenina—, así que las dos opciones son mexicanas. La primera
+# que aparezca es la que se usa, salvo que el perfil diga otra.
 VOCES_PIPER = (
-    "es_MX-ald-medium.onnx",
-    "es_AR-daniel-high.onnx",
     "es_MX-claude-high.onnx",
+    "es_MX-ald-medium.onnx",
 )
 
-# Las voces de OpenAI que suenan masculinas. No están etiquetadas por acento:
-# suenan neutras, no latinas, y conviene decirlo.
+# Donde queda el binario si se instaló con el propio proyecto.
+PIPER_LOCAL = (
+    CARPETA_VOCES / "piper" / ("piper.exe" if sys.platform == "win32" else "piper")
+)
+
+# La voz elegida tras escuchar las cinco masculinas de OpenAI —ash, ballad,
+# echo, verse y onyx— y las cuatro de Piper en español.
 VOZ_OPENAI = "onyx"
+
+# `gpt-4o-mini-tts` acepta instrucciones de interpretación, y ahí está la
+# diferencia: sin ellas la voz suena neutra de informativo. Piper no tiene
+# ninguna voz masculina latina salvo dos mexicanas, así que pedir el acento
+# es lo más cerca que se llega sin pagar otro servicio.
+ACENTO = (
+    "Habla en español latinoamericano neutro, con acento colombiano suave. "
+    "Tono cálido, cercano y seguro, como un compañero de trabajo. "
+    "Ritmo natural, sin sonar a locutor."
+)
 
 # El PCM que devuelve OpenAI: 24 kHz, 16 bits, mono.
 HERCIOS_OPENAI = 24000
@@ -61,6 +77,8 @@ def motores() -> dict[str, Any]:
     Se consulta antes de hablar, y también desde ``architect voz`` para que
     se pueda ver sin ejecutar nada.
     """
+    _asegurar_entorno()
+
     piper = _piper_disponible()
 
     return {
@@ -76,7 +94,7 @@ def motores() -> dict[str, Any]:
         "openai": {
             "disponible": bool(os.getenv("OPENAI_API_KEY")),
             "voz": VOZ_OPENAI,
-            "nota": "de pago por uso; suena neutro, no latino",
+            "nota": "de pago por uso; se le pide acento latinoamericano",
         },
         "windows": {
             "disponible": _windows_disponible(),
@@ -84,6 +102,27 @@ def motores() -> dict[str, Any]:
             "nota": _nota_windows(),
         },
     }
+
+
+def _asegurar_entorno() -> None:
+    """Lee el ``.env`` si la clave del proveedor todavía no está.
+
+    Sin esto la voz elegida depende de **por dónde se entre**. ``cli.main()``
+    carga el ``.env``, pero llamando a ``avatar.run()`` o a ``pide.run()``
+    como librería no lo carga nadie: ``OPENAI_API_KEY`` no aparece, OpenAI
+    se da por no disponible, y se cae al siguiente motor de la lista.
+
+    Pasó de verdad, y en lo que peor se nota: el usuario había escuchado
+    las voces, elegido `onyx` y guardado su elección en el perfil — y la
+    máquina le contestó con la voz mexicana que acababa de descartar. El
+    perfil estaba bien; lo que faltaba era la clave.
+    """
+    if os.getenv("OPENAI_API_KEY"):
+        return
+
+    from ai_architect.core.env_file import cargar_todo
+
+    cargar_todo()
 
 
 def elegir(preferido: str = "") -> str:
@@ -166,12 +205,30 @@ def _para_decir(texto: str) -> str:
 # --- Piper ------------------------------------------------------------------
 
 
+def _binario_piper() -> str | None:
+    """El ejecutable de Piper, esté en el PATH o instalado con el proyecto."""
+    if PIPER_LOCAL.is_file():
+        return str(PIPER_LOCAL)
+
+    return shutil.which("piper")
+
+
 def _piper_disponible() -> Path | None:
-    """La voz de Piper que se va a usar, si hay alguna."""
-    if not shutil.which("piper"):
+    """La voz de Piper que se va a usar, si hay alguna.
+
+    Se respeta la que el usuario haya elegido en su perfil; si no eligió,
+    la primera de la lista que esté descargada.
+    """
+    if _binario_piper() is None:
         return None
 
-    for nombre in VOCES_PIPER:
+    from ai_architect.core.perfil import cargar
+
+    suya = str(cargar().get("voz_piper") or "")
+
+    orden = (suya, *VOCES_PIPER) if suya else VOCES_PIPER
+
+    for nombre in orden:
         voz = CARPETA_VOCES / nombre
 
         if voz.is_file():
@@ -181,6 +238,10 @@ def _piper_disponible() -> Path | None:
 
 
 def _con_piper(texto: str) -> None:
+    _reproducir(_wav_piper(texto))
+
+
+def _wav_piper(texto: str) -> Path:
     voz = _piper_disponible()
 
     if voz is None:
@@ -188,8 +249,13 @@ def _con_piper(texto: str) -> None:
 
     salida = Path(tempfile.gettempdir()) / "arquitecto.wav"
 
+    binario = _binario_piper()
+
+    if binario is None:
+        raise RuntimeError("no encontré el ejecutable de Piper")
+
     subprocess.run(
-        ["piper", "--model", str(voz), "--output_file", str(salida)],
+        [binario, "--model", str(voz), "--output_file", str(salida)],
         input=texto,
         capture_output=True,
         text=True,
@@ -199,13 +265,17 @@ def _con_piper(texto: str) -> None:
         timeout=TIEMPO_LIMITE,
     )
 
-    _reproducir(salida)
+    return salida
 
 
 # --- OpenAI -----------------------------------------------------------------
 
 
 def _con_openai(texto: str) -> None:
+    _reproducir(_wav_openai(texto))
+
+
+def _wav_openai(texto: str) -> Path:
     """Pide el audio crudo y le pone la cabecera aquí.
 
     Pidiendo ``wav`` la respuesta llega en streaming con el tamaño sin
@@ -221,12 +291,101 @@ def _con_openai(texto: str) -> None:
         model="gpt-4o-mini-tts",
         voice=VOZ_OPENAI,
         input=texto,
+        instructions=ACENTO,
         response_format="pcm",
     )
 
     _escribir_wav(salida, respuesta.read())
 
-    _reproducir(salida)
+    return salida
+
+
+# --- Para el avatar ---------------------------------------------------------
+#
+# La cara mueve la boca mientras suena la voz, y para eso hay que saber
+# **cuánto** va a sonar antes de empezar. Estimarlo por el número de
+# palabras se nota: la boca sigue abriéndose medio segundo después del
+# silencio. Con el WAV delante la duración es exacta.
+
+
+PALABRAS_POR_SEGUNDO = 2.6
+
+
+def preparar(texto: str, motor: str = "") -> dict[str, Any]:
+    """Deja el audio listo y dice cuánto dura, sin reproducirlo todavía."""
+    limpio = _para_decir(texto)
+
+    if not limpio:
+        return {"archivo": None, "motor": "", "segundos": 0.0, "motivo": "nada"}
+
+    elegido = elegir(motor)
+
+    if not elegido:
+        return {"archivo": None, "motor": "", "segundos": 0.0, "motivo": "sin voz"}
+
+    # Las voces de Windows hablan por SAPI directamente: no dejan archivo,
+    # así que ahí la duración sí hay que estimarla.
+    if elegido == "windows":
+        return {
+            "archivo": None,
+            "motor": elegido,
+            "segundos": _estimar(limpio),
+            "motivo": "",
+            "texto": limpio,
+        }
+
+    try:
+        archivo = {"piper": _wav_piper, "openai": _wav_openai}[elegido](limpio)
+
+    except Exception as e:  # noqa: BLE001 - sin voz se sigue trabajando
+        return {"archivo": None, "motor": elegido, "segundos": 0.0, "motivo": str(e)}
+
+    return {
+        "archivo": archivo,
+        "motor": elegido,
+        "segundos": duracion(archivo),
+        "motivo": "",
+        "texto": limpio,
+    }
+
+
+def emitir(preparado: dict[str, Any]) -> bool:
+    """Reproduce lo que dejó ``preparar``. Devuelve si sonó."""
+    try:
+        archivo = preparado.get("archivo")
+
+        if archivo is not None:
+            _reproducir(Path(archivo))
+
+        elif preparado.get("motor") == "windows":
+            _con_windows(str(preparado.get("texto", "")))
+
+        else:
+            return False
+
+    except Exception:  # noqa: BLE001 - sin voz se sigue trabajando
+        return False
+
+    return True
+
+
+def duracion(archivo: Path) -> float:
+    """Los segundos que dura un WAV, leídos de su cabecera."""
+    try:
+        with wave.open(str(archivo), "rb") as leido:
+            velocidad = leido.getframerate()
+
+            return leido.getnframes() / velocidad if velocidad else 0.0
+
+    # EOFError y no solo wave.Error: un WAV truncado —una llamada cortada
+    # a mitad— revienta al leer la cabecera, y eso no puede tumbar la
+    # respuesta entera cuando lo único que se perdía era mover la boca.
+    except (OSError, wave.Error, EOFError):
+        return 0.0
+
+
+def _estimar(texto: str) -> float:
+    return max(1.0, len(texto.split()) / PALABRAS_POR_SEGUNDO)
 
 
 def _escribir_wav(destino: Path, crudo: bytes) -> None:
