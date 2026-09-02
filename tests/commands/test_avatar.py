@@ -245,3 +245,38 @@ def test_el_servidor_no_sirve_nada_mas() -> None:
         avatar._apagar(servidor)
 
     assert fallo.value.code == 404
+
+
+# --- Deshacerse al pensar ---------------------------------------------------
+#
+# El rostro se abre en nebulosa mientras piensa y se rehace al contestar.
+# Vive entero en el HTML, que ninguna prueba mira: esto al menos avisa si
+# desaparece una pieza en una edición.
+
+
+def rostro() -> str:
+    return avatar.ROSTRO.read_text(encoding="utf-8")
+
+
+def test_cada_particula_sabe_a_donde_se_va() -> None:
+    """Sin destino propio, la cara se rehace parecida pero no igual."""
+    pagina = rostro()
+
+    assert "dx:" in pagina
+    assert "dz:" in pagina
+    assert "retraso:" in pagina
+
+
+def test_pensando_se_deshace_y_contestando_se_rehace() -> None:
+    pagina = rostro()
+
+    assert 'estado.modo === "pensando" ? 1 : 0' in pagina
+    assert "estado.dispersion" in pagina
+
+
+def test_se_rehace_mas_deprisa_de_lo_que_se_deshace() -> None:
+    """Tardar más en recomponerse que en perderse se lee como desgana."""
+    pagina = rostro()
+
+    assert "0.028" in pagina, "lo que tarda en deshacerse"
+    assert "0.075" in pagina, "lo que tarda en volver"
