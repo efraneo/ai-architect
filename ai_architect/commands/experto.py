@@ -40,16 +40,65 @@ from ai_architect.core import perfil
 from ai_architect.core.texto import SON_DATOS, sin_adornos
 from ai_architect.swarm.task_dispatcher import TaskDispatcher
 
-# Los agentes del proyecto que sí leen el código, con lo que cubre cada uno.
-# La clave es como se nombra hablando.
-DEL_PROYECTO = {
-    "seguridad": "secretos, contraseñas, inyección, permisos, dependencias con fallos",
+# Los agentes del proyecto que sí leen el código, con lo que cubre cada
+# uno. Es el respaldo: lo primero que se mira son las competencias que
+# declaran ellos mismos.
+POR_DEFECTO_PROYECTO = {
+    "seguridad": "secretos, contraseñas, inyección, permisos",
     "rendimiento": "lentitud, bucles caros, consultas repetidas, memoria",
     "pruebas": "cobertura, casos sin probar, pruebas frágiles",
-    "dependencias": "librerías, versiones, licencias, lo que sobra",
+    "dependencias": "librerías, versiones, licencias, vulnerabilidades",
     "documentacion": "docstrings, README, lo que no está explicado",
     "arquitectura": "estructura, acoplamiento, módulos, complejidad",
 }
+
+
+def del_proyecto() -> dict[str, str]:
+    """Qué cubre cada agente, preguntándoselo a los agentes.
+
+    `BaseAgent.capabilities()` existía desde el principio y **todos
+    devolvían una lista vacía**, así que el director llevaba la lista
+    escrita a mano aquí: dos sitios que se desincronizan en cuanto alguien
+    añade un agente. Ahora la declara cada uno y esto solo la recoge.
+
+    Si un agente no declara nada, se usa la lista de respaldo: perder el
+    reparto porque alguien no rellenó su ficha sería peor.
+    """
+    from ai_architect.agents.agent_manager import AgentManager
+
+    declaradas: dict[str, str] = {}
+
+    try:
+        jefe = AgentManager()
+
+    except Exception:  # noqa: BLE001 - sin agentes se usa el respaldo
+        return dict(POR_DEFECTO_PROYECTO)
+
+    # `AgentManager` los guarda como atributos sueltos —`self.security`,
+    # `self.dependencies`—, no en una lista. Se recogen por lo que son y no
+    # por como se llaman: asi un agente nuevo entra sin tocar esto.
+    from ai_architect.agents.base_agent import BaseAgent
+
+    agentes = [valor for valor in vars(jefe).values() if isinstance(valor, BaseAgent)]
+
+    for agente in agentes:
+        try:
+            cubre = [str(c) for c in agente.capabilities() if str(c).strip()]
+
+        except Exception:  # noqa: BLE001 - un agente roto no calla a los demás
+            continue
+
+        if not cubre:
+            continue
+
+        # La primera competencia es su nombre corto: es como se le llama
+        # hablando —"el de seguridad"—, no "Security Agent".
+        declaradas[sin_adornos(cubre[0])] = ", ".join(cubre[1:]) or cubre[0]
+
+    return declaradas or dict(POR_DEFECTO_PROYECTO)
+
+
+DEL_PROYECTO = POR_DEFECTO_PROYECTO
 
 # Cuántos se consultan como mucho a la vez. Más que esto es gastar por
 # gastar: a partir del tercero las respuestas empiezan a repetirse.
@@ -177,9 +226,9 @@ def _dirigir(
     peticion: str,
     engine: Any = None,
 ) -> list[dict[str, Any]]:
-    catalogo = "\n".join(
-        f"  {nombre}: {cubre}" for nombre, cubre in DEL_PROYECTO.items()
-    )
+    agentes = del_proyecto()
+
+    catalogo = chr(10).join(f"  {nombre}: {cubre}" for nombre, cubre in agentes.items())
 
     from ai_architect.commands.pide import MODELOS_RAPIDOS
 
@@ -214,7 +263,7 @@ def _dirigir(
                 # modelo puede marcar como agente del proyecto a alguien que
                 # no existe, y entonces se prometería una lectura del código
                 # que nadie ha hecho.
-                "propio": bool(encargo.get("propio")) and quien.lower() in DEL_PROYECTO,
+                "propio": bool(encargo.get("propio")) and sin_adornos(quien) in agentes,
                 "encargo": str(encargo.get("encargo") or peticion),
             }
         )

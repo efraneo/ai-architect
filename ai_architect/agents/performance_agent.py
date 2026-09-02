@@ -82,6 +82,7 @@ class PerformanceAgent(BaseAgent):
         self,
     ) -> list[str]:
         return [
+            "rendimiento",
             "Pandas Iteration Detection",
             "Index Loop Detection",
             "String Concatenation Detection",

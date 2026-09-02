@@ -50,6 +50,7 @@ high-risk integration issues, and prefer the smallest safe change.
 
     def capabilities(self) -> list[str]:
         return [
+            "arquitectura",
             "Architecture Review",
             "Integration Analysis",
             "API Preservation",

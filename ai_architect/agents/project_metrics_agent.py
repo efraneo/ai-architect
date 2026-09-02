@@ -164,6 +164,7 @@ class ProjectMetricsAgent(BaseAgent):
         self,
     ) -> list[str]:
         return [
+            "metricas",
             "Repository Metrics",
             "Language Distribution",
             "Repository Size",

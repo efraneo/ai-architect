@@ -75,6 +75,7 @@ class ReleaseAgent(BaseAgent):
         self,
     ) -> list[str]:
         return [
+            "publicacion",
             "Changelog Detection",
             "Version Detection",
             "Release Readiness",

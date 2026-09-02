@@ -48,6 +48,7 @@ regression tests. Do not modify production code.
 
     def capabilities(self) -> list[str]:
         return [
+            "pruebas",
             "Pytest",
             "Regression Testing",
             "Boundary Testing",

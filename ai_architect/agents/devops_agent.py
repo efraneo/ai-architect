@@ -72,6 +72,7 @@ class DevOpsAgent(BaseAgent):
         self,
     ) -> list[str]:
         return [
+            "devops",
             "Docker Detection",
             "CI Detection",
             "Packaging Detection",

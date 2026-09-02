@@ -148,6 +148,7 @@ class BugHunterAgent(BaseAgent):
         self,
     ) -> list[str]:
         return [
+            "errores",
             "Bare Except Detection",
             "Silent Exception Detection",
             "Pending Marker Detection",

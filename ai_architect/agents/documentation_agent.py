@@ -80,6 +80,7 @@ Return only the documentation analysis.
     ) -> list[str]:
 
         return [
+            "documentacion",
             "Docstrings",
             "README",
             "Architecture Docs",

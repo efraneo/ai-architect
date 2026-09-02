@@ -70,24 +70,45 @@ class SecurityAgent(BaseAgent):
                         }
                     )
 
+        # El historial, que es lo que de verdad quema. Un secreto en el
+        # disco se arregla borrandolo; uno commiteado sigue ahi despues de
+        # borrarlo, lo tiene quien clono y hay que rotarlo. Dos problemas
+        # distintos que hasta ahora se contaban igual.
+        from ai_architect.herramientas import historial
+
+        pasado = historial.revisar(project)
+
+        quemados = pasado["hallazgos"]
+
         return {
             "agent": self.name,
             "files_scanned": scanned,
-            "findings": findings,
+            "findings": findings
+            + [
+                {
+                    "file": f"historial (commit {h['commit']})",
+                    "type": h["tipo"],
+                    "severity": "CRITICAL",
+                    "detail": h["muestra"],
+                }
+                for h in quemados
+            ],
+            "history_reviewed": pasado["revisados"],
+            "history_note": pasado["nota"],
+            "history_summary": historial.resumen(pasado),
             "security_score": max(
                 0,
-                100 - len(findings) * 10,
+                100 - len(findings) * 10 - len(quemados) * 20,
             ),
-            "status": "OK" if not findings else "WARN",
+            "status": "OK" if not findings and not quemados else "WARN",
         }
 
     def capabilities(
         self,
     ) -> list[str]:
         return [
-            "Secret Detection",
-            "Credential Scan",
-            "Token Detection",
-            "Private Key Detection",
-            "Basic Security Audit",
+            "seguridad",
+            "secretos y contrasenas en el codigo",
+            "secretos commiteados en el historial",
+            "claves y tokens expuestos",
         ]

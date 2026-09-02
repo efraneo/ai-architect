@@ -94,6 +94,7 @@ class LicenseAgent(BaseAgent):
         self,
     ) -> list[str]:
         return [
+            "licencias",
             "License Detection",
             "Compliance Check",
             "Open Source Analysis",

@@ -83,6 +83,7 @@ Return a structured review only.
     ) -> list[str]:
 
         return [
+            "revision",
             "Bug Detection",
             "Security Review",
             "SOLID Validation",

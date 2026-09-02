@@ -179,6 +179,7 @@ class GitAgent(BaseAgent):
         self,
     ) -> list[str]:
         return [
+            "git",
             "Branch Detection",
             "Repository Status",
             "Modified Files",

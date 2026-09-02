@@ -82,6 +82,7 @@ Return only the refactoring proposal.
     ) -> list[str]:
 
         return [
+            "refactor",
             "SOLID",
             "Refactoring",
             "Clean Code",
