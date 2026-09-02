@@ -49,6 +49,28 @@
     letter-spacing: .12em;
     pointer-events: none;
   }
+
+  /* Lo que cree haber oido. Verlo en pantalla es la diferencia entre
+     "no me escucha" y "me escucha pero entendio otra cosa". */
+  .oido {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 66px;
+    max-width: 74vw;
+    text-align: center;
+    color: #cfe4ff;
+    font-size: 15px;
+    line-height: 1.5;
+    text-shadow: 0 0 18px rgba(60, 120, 255, .9);
+    opacity: 0;
+    transition: opacity .25s;
+    pointer-events: none;
+  }
+
+  .oido.se-ve { opacity: 1; }
+
+  .oido i { color: rgba(200, 220, 255, .5); font-style: normal; }
 </style>
 
 <canvas id="lienzo"></canvas>
@@ -56,6 +78,8 @@
 <div class="hud">
   <b>ARQUITECTO</b> &nbsp;&middot;&nbsp; <span class="estado" id="estado">en reposo</span>
 </div>
+
+<div class="oido" id="oido"></div>
 
 <div class="pie" id="pie">espacio &middot; hablar &nbsp;&nbsp; raton</div>
 
@@ -529,6 +553,12 @@ const arquitecto = {
     rotulo.textContent = "escuchando";
   },
 
+  pensar: function () {
+    estado.modo = "pensando";
+    estado.guion = [];
+    rotulo.textContent = "pensando";
+  },
+
   reposo: function () {
     estado.modo = "reposo";
     estado.guion = [];
@@ -690,6 +720,140 @@ function mirar(ahora, antes) {
 
 encenderCamara();
 
+// --- El oido: hablarle en vez de escribirle ----------------------------------
+//
+// Hasta aqui la cara veia pero no oia, y eso no se nota hasta que alguien
+// se pone a hablarle delante y no pasa nada.
+//
+// Se usa el reconocimiento del propio navegador. Conviene decir lo que
+// implica: **Chrome manda el audio a los servidores de Google** para
+// transcribirlo. No es local. La alternativa es grabar aqui y transcribir
+// con Whisper desde Python — mas privado respecto a Google, aunque el
+// audio acabe igualmente en OpenAI, y de pago.
+//
+// Lo que se oye se escribe en pantalla siempre. Si entiende otra cosa, se
+// ve al momento; sin eso, "no me escucha" y "te oyo mal" son lo mismo.
+
+const oido = document.getElementById("oido");
+
+let escuchando = null;
+let ocupado = false;
+
+function mostrarOido(texto, seguro) {
+  if (!texto) {
+    oido.classList.remove("se-ve");
+
+    return;
+  }
+
+  oido.innerHTML = seguro ? texto : "<i>" + texto + "</i>";
+  oido.classList.add("se-ve");
+}
+
+function conversar() {
+  const Reconocedor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!Reconocedor) {
+    rotulo.textContent = "sin oido en este navegador";
+    mostrarOido("Este navegador no reconoce voz. Prueba con Chrome.", true);
+
+    return;
+  }
+
+  escuchando = new Reconocedor();
+
+  escuchando.lang = "es-CO";
+  escuchando.continuous = true;
+  escuchando.interimResults = true;
+
+  escuchando.onstart = function () {
+    if (!ocupado) arquitecto.escuchar();
+  };
+
+  escuchando.onresult = function (e) {
+    let firme = "", suelto = "";
+
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) firme += e.results[i][0].transcript;
+      else suelto += e.results[i][0].transcript;
+    }
+
+    if (suelto) mostrarOido(suelto, false);
+
+    const orden = firme.trim();
+
+    if (!orden || ocupado) return;
+
+    // Dos palabras minimo: un carraspeo o un "ya" suelto no es una orden.
+    if (orden.split(/\s+/).length < 2) return;
+
+    mostrarOido(orden, true);
+    enviarOrden(orden);
+  };
+
+  escuchando.onerror = function (e) {
+    if (e.error === "not-allowed") {
+      rotulo.textContent = "sin permiso de microfono";
+      mostrarOido("Dale permiso al microfono y recarga.", true);
+    }
+  };
+
+  // Chrome corta la escucha sola cada cierto tiempo. Sin volver a
+  // arrancarla, deja de oir a los pocos minutos y parece averiada.
+  escuchando.onend = function () {
+    if (ocupado) return;
+
+    try { escuchando.start(); } catch (e) { /* ya estaba */ }
+  };
+
+  try { escuchando.start(); } catch (e) { /* ya estaba */ }
+}
+
+async function enviarOrden(texto) {
+  ocupado = true;
+
+  try { escuchando.stop(); } catch (e) { /* ya parada */ }
+
+  arquitecto.pensar();
+
+  let datos;
+
+  try {
+    const respuesta = await fetch("/orden", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: texto }),
+    });
+
+    datos = await respuesta.json();
+
+  } catch (e) {
+    mostrarOido("No pude hablar con el arquitecto: " + e.message, true);
+    arquitecto.reposo();
+    ocupado = false;
+
+    try { escuchando.start(); } catch (e2) { /* ya estaba */ }
+
+    return;
+  }
+
+  mostrarOido(datos.respuesta || texto, true);
+
+  arquitecto.hablar(datos.ms || 1200, datos.dicho || datos.respuesta || "");
+
+  // No se vuelve a escuchar hasta que termina de hablar: si no, se oye a
+  // si mismo por los altavoces y se contesta solo.
+  setTimeout(function () {
+    ocupado = false;
+
+    try { escuchando.start(); } catch (e) { /* ya estaba */ }
+  }, (datos.ms || 1200) + 700);
+}
+
+if (window.DATOS_ARQUITECTO && window.DATOS_ARQUITECTO.modo === "conversacion") {
+  conversar();
+}
+
 // --- El bucle ----------------------------------------------------------------
 
 let anterior = 0;
@@ -734,7 +898,11 @@ function gesticular(ahora) {
   if (estado.modo !== "hablando") {
     estado.objetivoApertura = estado.modo === "escuchando" ? 0.05 : 0;
     estado.objetivoRedondeo = 0;
-    estado.objetivoCejas = estado.modo === "escuchando" ? 0.35 : 0;
+
+    // Escuchando levanta las cejas —atencion—; pensando las baja y las
+    // junta. Son dos gestos distintos y se leen sin explicarlos.
+    estado.objetivoCejas = estado.modo === "escuchando" ? 0.35
+                         : estado.modo === "pensando" ? -0.30 : 0;
     estado.cabeceo *= 0.94;
 
     return;

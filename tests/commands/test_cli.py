@@ -45,6 +45,7 @@ def test_estan_los_comandos() -> None:
         "auto",
         "changelog",
         "voz",
+        "conversar",
         "avatar",
     }
 

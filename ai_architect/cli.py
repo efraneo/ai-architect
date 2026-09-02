@@ -30,6 +30,7 @@ from ai_architect.commands import (
     auto,
     avatar,
     changelog,
+    conversar,
     doctor,
     execute,
     improve,
@@ -61,6 +62,11 @@ class Comando:
 # `pide` va aparte de la tabla: es quien la usa, no uno de sus miembros.
 # Meterlo dentro le dejaría elegirse a sí mismo.
 COMANDOS: tuple[Comando, ...] = (
+    Comando(
+        "conversar",
+        "Hablarle por el micrófono y que conteste (--si autoriza lo que escribe)",
+        lambda a: conversar.run(a.project, si=a.si),
+    ),
     Comando(
         "avatar",
         "Abrir el rostro (--texto para que lo diga en voz alta)",
@@ -288,7 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--si",
         action="store_true",
-        help="For pide: authorise the commands that modify your files",
+        help="For pide/conversar: authorise the commands that modify your files",
     )
 
     parser.add_argument(
