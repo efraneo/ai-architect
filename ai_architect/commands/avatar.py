@@ -141,6 +141,24 @@ def _archivo_suelto(pagina: str) -> Path:
 # --- El servidor ------------------------------------------------------------
 
 
+class UnSoloDuenio(http.server.ThreadingHTTPServer):
+    """Un servidor que **no** comparte el puerto.
+
+    `HTTPServer` trae `allow_reuse_address = 1`, y en Windows eso no
+    significa lo que en Unix: alli permite reciclar un puerto en TIME_WAIT,
+    pero aqui deja que un segundo proceso se ate a un puerto que ya esta
+    escuchando. Las dos instancias quedan vivas y el sistema reparte las
+    conexiones entre ellas a capricho.
+
+    Se vio en una prueba: con una conversacion abierta, levantar otro
+    servidor no fallaba —como se esperaba— sino que se colaba, y las
+    peticiones se iban a la conversacion de al lado. Poniendolo en False,
+    el puerto ocupado se nota al instante y se puede decir.
+    """
+
+    allow_reuse_address = False
+
+
 def _levantar(pagina: str) -> tuple[Any, str, threading.Event | None]:
     """Sirve la página en localhost. Devuelve ``(None, "", None)`` si no puede."""
     servido = threading.Event()
@@ -170,7 +188,7 @@ def _levantar(pagina: str) -> tuple[Any, str, threading.Event | None]:
             """El servidor no escribe en la terminal del usuario."""
 
     try:
-        servidor = http.server.ThreadingHTTPServer(("127.0.0.1", PUERTO), Manos)
+        servidor = UnSoloDuenio(("127.0.0.1", PUERTO), Manos)
 
     except OSError:
         return (None, "", None)

@@ -42,7 +42,9 @@ from __future__ import annotations
 import http.server
 import json
 import threading
+import unicodedata
 import webbrowser
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -89,7 +91,7 @@ def run(
         f"  Ctrl+C para terminar.\n"
     )
 
-    print(aviso)
+    print(aviso, flush=True)
 
     if servir_para_siempre:
         try:
@@ -133,6 +135,46 @@ def _componer(project: str) -> str:
     )
 
 
+# Lo ultimo que dijo el arquitecto en voz alta, para reconocerlo si le vuelve
+# por el microfono.
+_ultimo_dicho = ""
+
+
+def _sin_adornos(texto: str) -> str:
+    """El texto reducido a lo comparable: sin tildes, signos ni mayusculas."""
+    plano = unicodedata.normalize("NFKD", texto.lower())
+
+    letras = [c for c in plano if c.isalnum() or c.isspace()]
+
+    return " ".join("".join(letras).split())
+
+
+def es_eco(oido: str, dicho: str) -> bool:
+    """Si lo que se acaba de oir es la propia voz saliendo por los altavoces.
+
+    El navegador ya se tapa los oidos mientras habla, pero eso depende de
+    que su reloj y el del audio vayan a la par —y no van—, y de que no haya
+    dos pestanas abiertas escuchando a la vez. Aqui se comprueba lo unico
+    que no enga:na: si lo oido es lo que se acaba de decir. Aunque llegue
+    tarde, aunque llegue por otra pestana.
+    """
+    a = _sin_adornos(oido)
+    b = _sin_adornos(dicho)
+
+    if not a or not b:
+        return False
+
+    # Con menos de tres palabras no se puede juzgar: "si", "ya" o "para"
+    # son ordenes legitimas y aparecen en cualquier respuesta.
+    if len(a.split()) < 3:
+        return False
+
+    if a in b:
+        return True
+
+    return SequenceMatcher(None, a, b).ratio() > 0.62
+
+
 def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
     """Interpreta una orden dicha en voz alta y prepara la respuesta.
 
@@ -152,12 +194,34 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
 
     preparado = motor_de_voz.preparar(respuesta)
 
+    global _ultimo_dicho
+
+    _ultimo_dicho = str(preparado.get("texto", "") or respuesta)
+
     return {
         "respuesta": respuesta,
         "dicho": preparado.get("texto", respuesta),
         "ms": int(preparado.get("segundos", 0) * 1000),
         "_audio": preparado,
     }
+
+
+class UnSoloDuenio(http.server.ThreadingHTTPServer):
+    """Un servidor que **no** comparte el puerto.
+
+    `HTTPServer` trae `allow_reuse_address = 1`, y en Windows eso no
+    significa lo que en Unix: alli permite reciclar un puerto en TIME_WAIT,
+    pero aqui deja que un segundo proceso se ate a un puerto que ya esta
+    escuchando. Las dos instancias quedan vivas y el sistema reparte las
+    conexiones entre ellas a capricho.
+
+    Se vio en una prueba: con una conversacion abierta, levantar otro
+    servidor no fallaba —como se esperaba— sino que se colaba, y las
+    peticiones se iban a la conversacion de al lado. Poniendolo en False,
+    el puerto ocupado se nota al instante y se puede decir.
+    """
+
+    allow_reuse_address = False
 
 
 def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
@@ -193,7 +257,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
-            print(f"  > {dicho}")
+            print(f"  > {dicho}", flush=True)
 
             salida = atender(str(dicho), project, si)
 
@@ -211,7 +275,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                     target=motor_de_voz.emitir, args=(audio,), daemon=True
                 ).start()
 
-            print(f"  < {salida['respuesta'].splitlines()[0]}")
+            print(f"  < {salida['respuesta'].splitlines()[0]}", flush=True)
 
         def _oir(self) -> None:
             """Audio en crudo: se transcribe aquí y se trata como una orden."""
@@ -234,6 +298,22 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
             dicho = oido["texto"]
 
+            if dicho and es_eco(dicho, _ultimo_dicho):
+                # Se oyó a sí mismo por los altavoces. Ni se ejecuta ni se
+                # contesta: contestar sería empezar una conversación consigo
+                # mismo que no para hasta que alguien cierre la pestaña.
+                print(f"  ~ (eco descartado) {dicho}", flush=True)
+
+                self._responder(
+                    json.dumps(
+                        {"oido": "", "respuesta": "", "ms": 0, "error": "eco"},
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+
+                return
+
             if not dicho:
                 # Ni se ejecuta ni se contesta. Lo que no se entendió no se
                 # adivina, y soltar "no te entendí" a cada ruido de la
@@ -248,7 +328,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
-            print(f"  > {dicho}")
+            print(f"  > {dicho}", flush=True)
 
             salida = atender(dicho, project, si)
 
@@ -266,7 +346,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                     target=motor_de_voz.emitir, args=(sonido,), daemon=True
                 ).start()
 
-            print(f"  < {salida['respuesta'].splitlines()[0]}")
+            print(f"  < {salida['respuesta'].splitlines()[0]}", flush=True)
 
         def _responder(self, cuerpo: bytes, tipo: str) -> None:
             self.send_response(200)
@@ -281,7 +361,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
             """El servidor no ensucia la conversación con líneas de acceso."""
 
     try:
-        servidor = http.server.ThreadingHTTPServer(("127.0.0.1", avatar.PUERTO), Manos)
+        servidor = UnSoloDuenio(("127.0.0.1", avatar.PUERTO), Manos)
 
     except OSError:
         return (None, "")

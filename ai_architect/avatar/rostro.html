@@ -996,10 +996,14 @@ async function enviarAudio(audio) {
 
   arquitecto.hablar(datos.ms || 1200, datos.dicho || datos.respuesta);
 
+  // Margen generoso al volver a escuchar. El reloj de aqui y el del audio
+  // —que lo pone Python— no van a la par, y quedarse corto significa oir
+  // el final de la propia frase y contestarse solo. El servidor tiene su
+  // propio guardia contra el eco, pero mas vale no darle trabajo.
   setTimeout(function () {
     ocupado = false;
     arquitecto.escuchar();
-  }, (datos.ms || 1200) + 700);
+  }, (datos.ms || 1200) + 1400);
 }
 
 const AJUSTES = window.DATOS_ARQUITECTO || {};

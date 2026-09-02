@@ -241,3 +241,63 @@ def test_se_dice_quien_te_oye_y_cuanto_cuesta() -> None:
 
     with mock.patch("ai_architect.voz.escuchar.disponible", return_value=False):
         assert "Google" in conversar._quien_oye()
+
+
+# --- No conversar consigo mismo ---------------------------------------------
+#
+# Pasó en la primera prueba de verdad: oyó "Revisa el changelog", contestó,
+# y acto seguido se oyó a sí mismo por los altavoces. El navegador se tapa
+# los oídos mientras habla, pero eso depende de que su reloj y el del audio
+# vayan a la par —no van— y de que no haya dos pestañas escuchando.
+
+
+def test_reconoce_su_propia_voz() -> None:
+    assert conversar.es_eco(
+        "Buenas tardes, Efraín. Puntuación 99.26, 41 incidencias.",
+        "Buenas tardes, Efraín. Puntuación 99.26, 41 incidencias. Aprobado.",
+    )
+
+
+def test_un_trozo_de_lo_que_dijo_tambien_es_eco() -> None:
+    """El micro coge la mitad de la frase, no la frase entera."""
+    assert conversar.es_eco(
+        "cuarenta y una incidencias aprobado",
+        "Puntuación 99.26, cuarenta y una incidencias. Aprobado.",
+    )
+
+
+def test_las_tildes_y_los_signos_no_estorban() -> None:
+    """Whisper puntúa a su manera; comparar en crudo fallaría siempre."""
+    assert conversar.es_eco(
+        "buenas tardes efrain todo esta en orden",
+        "¡Buenas tardes, Efraín! Todo está en orden.",
+    )
+
+
+def test_una_orden_de_verdad_no_es_eco() -> None:
+    """Lo que más importa: no tragarse una orden legítima por parecerse."""
+    assert not conversar.es_eco(
+        "revisa el changelog y dime que falta",
+        "Buenas tardes, Efraín. El entorno está healthy. Buena tarde, Efraín.",
+    )
+
+
+def test_una_orden_corta_nunca_se_descarta() -> None:
+    """ "sí", "ya" o "para" salen en cualquier respuesta y son órdenes."""
+    assert not conversar.es_eco("para", "Ya paré, Efraín, no hay nada que parar.")
+
+
+def test_sin_nada_dicho_antes_no_hay_eco() -> None:
+    assert not conversar.es_eco("revisa el proyecto", "")
+
+
+def test_lo_que_dice_se_recuerda_para_reconocerlo() -> None:
+    with mock.patch("ai_architect.commands.pide.run", return_value=respondiendo()):
+        with mock.patch.object(
+            conversar.motor_de_voz,
+            "preparar",
+            return_value={"texto": "Todo en orden, Efraín.", "segundos": 1.0},
+        ):
+            conversar.atender("revisa", ".", si=False)
+
+    assert conversar._ultimo_dicho == "Todo en orden, Efraín."
