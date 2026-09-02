@@ -103,9 +103,7 @@ def run(
         f"{'' if si else ' (arranca con --si para permitirlas)'}.\n"
         f"  Te oye: {_quien_oye()}\n"
         f"  Muletillas listas: {listas} (dice algo mientras trabaja)\n\n"
-        f"  LLÁMALO POR SU NOMBRE para empezar:\n"
-        f'      "Arquitecto, revisa el proyecto"\n'
-        f"  Después sigue la conversación {int(SEGUIMIENTO)} s sin repetirlo.\n\n"
+        f"  Háblale sin más: no hace falta llamarlo por su nombre.\n\n"
         f"  Ctrl+C para terminar.\n"
     )
 
@@ -210,7 +208,14 @@ RELLENOS = (
 
 # Por debajo de esto no da tiempo ni a abrir la boca: decir "dame un
 # segundo" y contestar en el mismo aliento queda peor que no decir nada.
-MERECE_RELLENO = 0.9
+#
+# Sube de 0,9 a 1,8 por algo que se vio en uso: "cierra la ventana" se
+# resuelve al instante, pero **sintetizar la respuesta también cuenta**, y
+# Piper tarda casi un segundo. Con el listón en 0,9 saltaba la muletilla
+# para contestar "Cerrada" — un "enseguida te digo" delante de una palabra.
+# Lo que de verdad tarda —los agentes, una revisión— se pasa de 1,8 de
+# sobra, así que no se pierde nada.
+MERECE_RELLENO = 1.8
 
 _rellenos_listos: list[dict[str, Any]] = []
 

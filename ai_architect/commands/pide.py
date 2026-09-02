@@ -85,10 +85,13 @@ REGLAS
   -> "review" (es el único que puntúa).
 - "cómo va", "qué problemas hay", "revísalo", "hallazgos", "seguridad"
   -> "agents".
-- Pero si además pide **criterio** sobre eso —"qué riesgos tengo", "qué
-  arreglo primero", "está bien la cobertura", "qué opinas de las
-  dependencias"— NO uses comando: {{"comando": "", "respuesta": ""}} con
-  la respuesta vacía, que de eso contesta el especialista que toque.
+- CUIDADO con la diferencia, que es la que más se falla:
+    "pásame los agentes", "cuántos hallazgos hay"  -> comando "agents"
+    "QUÉ RIESGOS TENGO", "qué arreglo primero", "está bien la cobertura",
+    "qué opinas de las dependencias", "es grave", "me preocupa algo"
+      -> {{"comando": "", "respuesta": ""}}, con la respuesta VACÍA.
+  Lo primero pide una cuenta; lo segundo pide criterio, y de eso contesta
+  el especialista que toque, no una lista de hallazgos en crudo.
 - "cuántos archivos", "cuántas funciones", "estructura", "complejidad media"
   -> "analyze".
 - "arregla", "mejora", "cambia", "añade", "extrae" -> "improve" con

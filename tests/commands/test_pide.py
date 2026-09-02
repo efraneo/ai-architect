@@ -516,8 +516,10 @@ def test_solo_saluda_la_primera_vez(tmp_path: Path, con_perfil) -> None:
         str(tmp_path), "y otra cosa", engine=modelo({"comando": "", "respuesta": "B"})
     )
 
-    assert "Buenas" in primera["explanation"]
-    assert "Buenas" not in segunda["explanation"]
+    saludo = perfil.saludo()
+
+    assert saludo in primera["explanation"]
+    assert saludo not in segunda["explanation"]
 
 
 def test_pero_siempre_ofrece_seguir(tmp_path: Path, con_perfil) -> None:
@@ -540,7 +542,7 @@ def test_una_sesion_nueva_vuelve_a_saludar(tmp_path: Path, con_perfil) -> None:
         str(tmp_path), "algo", engine=modelo({"comando": "", "respuesta": "B"})
     )
 
-    assert "Buenas" in otra["explanation"]
+    assert perfil.saludo() in otra["explanation"]
 
 
 # --- La carpeta que se dice hablando ----------------------------------------
