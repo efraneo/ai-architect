@@ -44,6 +44,7 @@ def test_estan_los_comandos() -> None:
         "agents",
         "auto",
         "changelog",
+        "tareas",
         "configurar",
         "crear",
         "voz",

@@ -288,6 +288,25 @@ def run(
                 cara,
             )
 
+    # Programar, pausar o listar tareas son cuatro verbos y una hora.
+    # Mandarlo al modelo son dos segundos para entender algo ya dicho.
+    from ai_architect.commands import tareas
+
+    de_tareas = tareas.por_voz(frase, str(repositorio))
+
+    if de_tareas is not None:
+        return _decir_si_toca(
+            {
+                "success": de_tareas.get("success", True),
+                "executed": bool(de_tareas.get("task")),
+                "command": "tareas",
+                "instant": True,
+                "explanation": _con_trato(de_tareas["explanation"]),
+            },
+            decir,
+            cara,
+        )
+
     # "Pasalo a Word" va antes que nada: se refiere a lo que se acaba de
     # decir, y mandarlo al modelo era pedirle que adivinara un contexto que
     # esta aqui al lado.

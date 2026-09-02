@@ -87,6 +87,12 @@ def run(
     # tarde y entonces no tapa la espera, la alarga.
     listas = preparar_rellenos()
 
+    # Las tareas programadas se miran mientras la conversacion este
+    # abierta. Con el programa cerrado hace falta que alguien lo despierte,
+    # y de eso sabe Windows: `architect tareas --correr` es lo que se
+    # registra en el Programador de tareas.
+    _vigilar_tareas()
+
     # Cada sesion empieza con un saludo, y solo uno: "Buenas tardes,
     # Efrain" delante de cada respuesta cansa a la tercera.
     from ai_architect.commands import pide
@@ -120,6 +126,37 @@ def run(
             _apagar(servidor)
 
     return {"success": True, "url": url, "authorised": si}
+
+
+# Cada cuanto se mira si toca alguna. Un minuto: mas seguido es gastar
+# lecturas de disco para nada, y menos se nota en una tarea "a las diez".
+LATIDO = 60.0
+
+
+def _vigilar_tareas() -> None:
+    """Un hilo que ejecuta lo programado y lo cuenta en voz alta."""
+    from ai_architect.commands import tareas
+
+    def vigilar() -> None:
+        while True:
+            time.sleep(LATIDO)
+
+            try:
+                hechas = tareas.correr()
+
+            except Exception:  # noqa: BLE001 - una tarea rota no calla la voz
+                continue
+
+            for hecha in hechas:
+                dicho = str(hecha.get("explanation") or hecha.get("error") or "")
+
+                print(f"  ~ tarea: {hecha['name']} -> {_resumen(dicho)}", flush=True)
+
+                # Se dice en voz alta: una tarea que se ejecuta en silencio
+                # es indistinguible de una que no se ejecuto.
+                motor_de_voz.emitir(motor_de_voz.preparar(dicho))
+
+    threading.Thread(target=vigilar, daemon=True).start()
 
 
 def _quien_oye() -> str:

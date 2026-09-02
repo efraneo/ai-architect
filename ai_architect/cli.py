@@ -38,6 +38,7 @@ from ai_architect.commands import (
     improve,
     pide,
     review,
+    tareas,
     voz,
 )
 from ai_architect.core.env_file import cargar_todo
@@ -100,6 +101,12 @@ COMANDOS: tuple[Comando, ...] = (
         "configurar",
         "Guardar la clave del proveedor (--clave sk-...)",
         lambda a: configurar.run(clave=a.clave),
+        elegible=False,
+    ),
+    Comando(
+        "tareas",
+        "Ver lo programado, o ejecutar lo que toque (--correr)",
+        lambda a: tareas.run(correr_ahora=a.correr, project=a.project),
         elegible=False,
     ),
     Comando(
@@ -205,6 +212,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--file",
         default=None,
         help="Target file for improve command",
+    )
+
+    parser.add_argument(
+        "--correr",
+        action="store_true",
+        help="For tareas: run whatever is due right now",
     )
 
     parser.add_argument(
