@@ -73,6 +73,8 @@ ARGUMENTOS
   ai             para agents: true solo si pide análisis con IA
   version_name   para changelog: nombre de la versión, si lo dice
   write          para changelog: true solo si pide escribir el archivo
+  peticion       para crear: qué documento, tabla o gráfica quiere, con
+                 todo lo que haya dicho del tema
   patch          para execute: ruta del parche
   dry_run        para execute: true si pide validar sin aplicar
 
@@ -88,6 +90,9 @@ REGLAS
 - "arregla", "mejora", "cambia", "añade", "extrae" -> "improve" con
   instruction en español, copiando lo que pidió.
 - "está todo bien configurado", "funciona", "tengo la clave" -> "doctor".
+- "hazme", "prepárame", "redacta", "resume", "una tabla de", "una gráfica
+  de", "ayúdame con mi tarea", "un trabajo sobre" -> "crear", con `peticion`
+  copiando lo que pidió, entero y con sus detalles.
 - Pon apply/write en true SOLO si la frase lo pide de verdad. "dime",
   "muéstrame" y "revisa" NO lo piden; "arregla", "aplica" y "hazlo" sí.
 
@@ -241,6 +246,31 @@ def run(
             ),
         }
 
+    # Si acaba de preguntar donde guardar algo, la frase siguiente es la
+    # respuesta a eso y no una orden nueva. Mandarla al modelo seria pedirle
+    # que adivine el contexto que ya tenemos aqui.
+    from ai_architect.commands import crear
+
+    if crear.hay_pendiente():
+        destino = crear.donde_guardarlo(frase)
+
+        if destino is not None:
+            return _decir_si_toca(
+                {
+                    "success": destino.get("success", True),
+                    "executed": bool(destino.get("path")),
+                    "command": "crear",
+                    "instant": True,
+                    "path": destino.get("path", ""),
+                    "panel": destino.get("panel"),
+                    "explanation": _con_trato(
+                        destino.get("explanation") or destino.get("error", "")
+                    ),
+                },
+                decir,
+                cara,
+            )
+
     # Antes que nada, lo que no necesita a nadie. "Que hora es" tardaba tres
     # segundos y costaba dinero para leer un reloj que esta en la maquina.
     from ai_architect.commands import respuestas
@@ -287,6 +317,30 @@ def run(
         # contestar "no supe qué comando usar" a un "buenas tardes" es lo
         # que hace que una herramienta no se sienta tuya.
         charla = str(intencion.get("respuesta") or "").strip()
+
+        # Una pregunta de verdad no la contesta el despachador: la dirige a
+        # quien sepa del tema. El despachador usa el modelo rapido y su
+        # trabajo es elegir, no saber; contestar con el es contestar con
+        # quien menos sabe de la casa.
+        if _merece_experto(frase, charla):
+            from ai_architect.commands import experto
+
+            dicho = experto.responder(frase, str(repositorio), engine=engine)
+
+            if dicho.get("success"):
+                return _decir_si_toca(
+                    {
+                        "success": True,
+                        "executed": False,
+                        "command": "",
+                        "conversation": True,
+                        "specialists": dicho.get("specialists", []),
+                        "panel": dicho.get("panel"),
+                        "explanation": _con_trato(dicho["explanation"]),
+                    },
+                    decir,
+                    cara,
+                )
 
         if charla:
             return _decir_si_toca(
@@ -437,6 +491,16 @@ def reiniciar_saludo() -> None:
     global _ya_saludo
 
     _ya_saludo = False
+
+
+# Palabras de cortesia. Mandar "gracias" a un panel de expertos es gastar
+# tres llamadas para que alguien diga "de nada".
+CORTESIA = 5
+
+
+def _merece_experto(frase: str, charla: str) -> bool:
+    """Si la frase pide saber algo, o solo esta siendo amable."""
+    return len(frase.split()) > CORTESIA or "?" in frase or bool(charla) is False
 
 
 def _con_trato(cuerpo: str) -> str:
@@ -741,6 +805,7 @@ def _argumentos(intencion: dict[str, Any], repositorio: str) -> SimpleNamespace:
         version_name=str(intencion.get("version_name") or ""),
         write=bool(intencion.get("write", False)),
         since=intencion.get("since") or None,
+        peticion=str(intencion.get("peticion") or ""),
         patch=intencion.get("patch") or None,
         dry_run=bool(intencion.get("dry_run", False)),
         json=False,

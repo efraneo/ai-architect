@@ -31,6 +31,7 @@ from ai_architect.commands import (
     avatar,
     changelog,
     conversar,
+    crear,
     doctor,
     execute,
     improve,
@@ -87,6 +88,12 @@ COMANDOS: tuple[Comando, ...] = (
             probar=a.probar, motor=a.motor, usar=a.usar, voz_piper=a.voz_piper
         ),
         elegible=False,
+    ),
+    Comando(
+        "crear",
+        "Preparar un documento, una tabla o una gráfica (--peticion)",
+        lambda a: crear.run(a.peticion),
+        requiere=(("peticion", "crear requires --peticion <qué quieres>"),),
     ),
     Comando(
         "doctor",
@@ -191,6 +198,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--file",
         default=None,
         help="Target file for improve command",
+    )
+
+    parser.add_argument(
+        "--peticion",
+        default="",
+        help="For crear: what document, table or chart you want",
     )
 
     parser.add_argument(
