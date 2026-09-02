@@ -32,22 +32,28 @@ classifiers = [
     "Operating System :: OS Independent"
 ]
 
+# Lo que de verdad se importa. Se comprobo una por una: `numpy`,
+# `networkx`, `typer`, `pydantic`, `GitPython`, `rich` y `colorama` no
+# aparecen en una sola linea del codigo. Estaban en la lista desde el
+# principio y obligaban a descargar cientos de megas para nada.
+#
+# Git se usa, pero por `subprocess`, no por `GitPython`: es una herramienta
+# externa, no una libreria.
 dependencies = [
     "openai>=1.40.0",
     "anthropic>=0.34.0",
-    "google-generativeai>=0.8.0",
-    "ollama>=0.3.0",
-    "GitPython>=3.1",
-    "networkx>=3.3",
-    "numpy>=2.0",
-    "pydantic>=2.8",
     "pyyaml>=6.0",
-    "rich>=13.8",
-    "typer>=0.12",
-    "colorama>=0.4",
 ]
 
+# Proveedores que no todo el mundo usa. Quien quiera Gemini o un modelo
+# local se los instala aparte, y el resto no paga la descarga.
 [project.optional-dependencies]
+
+gemini = ["google-generativeai>=0.8.0"]
+
+local = ["ollama>=0.3.0"]
+
+todo = ["google-generativeai>=0.8.0", "ollama>=0.3.0"]
 
 dev = [
     "pytest",
@@ -68,6 +74,14 @@ include-package-data = true
 [tool.setuptools.packages.find]
 
 include = ["ai_architect*"]
+
+# El rostro es parte del programa, no documentacion. `include-package-data`
+# a secas no lo mete: sin MANIFEST.in ni esta lista, setuptools solo empaqueta
+# los `.py`. Se comprobo construyendo la rueda — 200 archivos dentro y ningun
+# `.html`, o sea que `pip install ai-architect` daba un avatar que no existe.
+[tool.setuptools.package-data]
+
+ai_architect = ["avatar/*.html"]
 
 [tool.black]
 
