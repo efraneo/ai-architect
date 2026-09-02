@@ -293,3 +293,105 @@ def test_un_repositorio_que_no_existe(tmp_path: Path, con_perfil) -> None:
 
     assert resultado["success"] is False
     assert "No existe" in resultado["error"]
+
+
+# --- Lo que no es una orden --------------------------------------------------
+#
+# Hablándole de verdad salió lo obvio: no toda frase es una tarea. A "saluda
+# a Rafa de mi parte" respondía "no supe qué comando usar" — o peor, elegía
+# `avatar` y reventaba, porque los comandos de interfaz esperan argumentos
+# que `pide` no construye.
+
+
+def test_una_charla_se_contesta_sin_comando(tmp_path: Path, con_perfil) -> None:
+    resultado = pide.run(
+        str(tmp_path),
+        "hola, ¿qué tal?",
+        engine=modelo({"comando": "", "respuesta": "Aquí sigo, listo cuando digas."}),
+    )
+
+    assert resultado["success"] is True
+    assert resultado["conversation"] is True
+    assert resultado["executed"] is False
+    assert "Aquí sigo" in resultado["explanation"]
+
+
+def test_una_charla_tambien_lleva_saludo_y_despedida(
+    tmp_path: Path, con_perfil
+) -> None:
+    resultado = pide.run(
+        str(tmp_path),
+        "hola",
+        engine=modelo({"comando": "", "respuesta": "Buenas."}),
+    )
+
+    assert resultado["explanation"].count("Eathan") >= 2
+
+
+def test_sin_comando_y_sin_respuesta_sigue_siendo_un_fallo(
+    tmp_path: Path, con_perfil
+) -> None:
+    """No se puede convertir todo fallo en charla: eso taparía los de verdad."""
+    resultado = pide.run(
+        str(tmp_path),
+        "haz algo raro",
+        engine=modelo({"comando": "", "motivo": "eso no lo sé hacer"}),
+    )
+
+    assert resultado["success"] is False
+    assert "no lo sé hacer" in resultado["error"]
+
+
+# --- La interfaz no se elige a sí misma -------------------------------------
+
+
+def test_los_comandos_de_interfaz_no_estan_en_el_catalogo() -> None:
+    """`avatar` esperaba un argumento que `pide` no construye, y reventaba."""
+    catalogo, tabla = pide._catalogo()
+
+    for interfaz in ("avatar", "conversar", "voz"):
+        assert interfaz not in tabla
+        assert f"  {interfaz}:" not in catalogo
+
+
+def test_los_que_analizan_el_proyecto_si_estan() -> None:
+    _, tabla = pide._catalogo()
+
+    for util in ("review", "agents", "analyze", "doctor", "improve"):
+        assert util in tabla
+
+
+def test_elegir_uno_de_interfaz_ya_no_se_ejecuta(tmp_path: Path, con_perfil) -> None:
+    with mock.patch("ai_architect.commands.avatar.run") as abrir:
+        resultado = pide.run(
+            str(tmp_path), "saluda a Rafa", engine=modelo({"comando": "avatar"})
+        )
+
+    abrir.assert_not_called()
+    assert resultado["success"] is False
+
+
+# --- Sabe qué hora es -------------------------------------------------------
+
+
+def test_sabe_la_fecha_y_la_hora() -> None:
+    """A "¿qué hora es?" contestaba que no tenía acceso. La tenía delante."""
+    from datetime import datetime
+
+    dicho = pide._momento(datetime(2026, 9, 1, 15, 42))
+
+    assert "15:42" in dicho
+    assert "martes" in dicho
+    assert "septiembre" in dicho
+    assert "2026" in dicho
+
+
+def test_la_hora_se_le_pasa_al_modelo(tmp_path: Path, con_perfil) -> None:
+    proveedor = modelo({"comando": "", "respuesta": "Son las tres."})
+
+    pide.run(str(tmp_path), "¿qué hora es?", engine=proveedor)
+
+    enviado = proveedor.generate.call_args[0][0]
+
+    assert "LO QUE SABES AHORA MISMO" in enviado
+    assert "Son las" in enviado

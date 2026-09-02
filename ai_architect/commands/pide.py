@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -104,9 +105,56 @@ FORMATO
 {{"comando": "agents", "project": ".", "razon": "pregunta por el estado"}}
 {{"comando": "", "respuesta": "Aquí sigo. ¿Miramos el proyecto?"}}
 
+LO QUE SABES AHORA MISMO
+{momento}
+El repositorio del que se habla: {repositorio}
+
 LA FRASE
 {frase}
 """
+
+DIAS = (
+    "lunes",
+    "martes",
+    "miércoles",
+    "jueves",
+    "viernes",
+    "sábado",
+    "domingo",
+)
+
+MESES = (
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+)
+
+
+def _momento(ahora: datetime | None = None) -> str:
+    """La fecha y la hora, en español y sin depender del locale.
+
+    Sin esto, a "¿qué hora es?" contestaba que no tenía acceso a la hora —
+    teniéndola delante—. Es lo primero que se le pregunta a algo que habla,
+    y quedar mal ahí tiñe todo lo demás.
+    """
+    momento = ahora or datetime.now()
+
+    dia = DIAS[momento.weekday()]
+    mes = MESES[momento.month - 1]
+
+    return (
+        f"Son las {momento.hour:02d}:{momento.minute:02d} "
+        f"del {dia} {momento.day} de {mes} de {momento.year}."
+    )
 
 
 def run(
@@ -166,8 +214,11 @@ def run(
             "explanation": "\n\n".join(
                 [
                     f"{perfil.saludo()}. Es la primera vez que hablamos.",
+                    # El ejemplo llevaba un nombre real escrito a mano, y en
+                    # un equipo compartido eso es proponerle a alguien que
+                    # se llame como su compañero.
                     "¿Cómo quieres que te llame? Dímelo así:\n"
-                    '    architect pide --soy "Eathan"',
+                    '    architect pide --soy "tu nombre"',
                     f"Me hizo {perfil.quien_te_hizo()}.",
                 ]
             ),
@@ -176,7 +227,7 @@ def run(
     catalogo, tabla = _catalogo()
 
     try:
-        cruda = _preguntar(engine, catalogo, frase)
+        cruda = _preguntar(engine, catalogo, frase, str(repositorio))
 
     except Exception as e:  # noqa: BLE001 - un proveedor caído no revienta
         return _error(f"el proveedor falló: {e}")
@@ -423,7 +474,7 @@ def _catalogo() -> tuple[str, dict[str, Any]]:
     return "\n".join(lineas), {c.nombre: c for c in elegibles}
 
 
-def _preguntar(engine: Any, catalogo: str, frase: str) -> str:
+def _preguntar(engine: Any, catalogo: str, frase: str, repositorio: str = ".") -> str:
     proveedor = engine
 
     if proveedor is None:
@@ -437,6 +488,8 @@ def _preguntar(engine: Any, catalogo: str, frase: str) -> str:
                 catalogo=catalogo,
                 frase=frase,
                 trato=perfil.como_llamarte(),
+                momento=_momento(),
+                repositorio=repositorio,
             ),
         )
     )
