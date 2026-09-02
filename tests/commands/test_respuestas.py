@@ -168,3 +168,54 @@ def test_hablar_de_la_hora_no_es_preguntarla() -> None:
     salida = respuestas.responder("mide cuánto tarda cada prueba", TARDE)
 
     assert salida is None
+
+
+# --- El cambio de divisas ---------------------------------------------------
+#
+# "¿A cuánto está el dólar?" acabó en "búscalo mejor en un sitio de
+# finanzas". Es una pregunta razonable y el dato está a una petición.
+
+
+def test_pregunta_la_cotizacion_y_la_dice() -> None:
+    with mock.patch.object(
+        respuestas, "_cotizacion", return_value=(4109.5, "2026-09-01")
+    ):
+        salida = respuestas.responder("a cuánto está el dólar en pesos", TARDE)
+
+    assert "dólar" in salida["respuesta"]
+    assert "4.110" in salida["respuesta"]
+    assert salida["panel"]["tipo"] == "cambio"
+
+
+def test_la_cifra_se_dice_como_se_dice() -> None:
+    """ "4109.5" leído en voz alta es un galimatías."""
+    assert respuestas._redondo(4109.5) == "4.110"
+    assert respuestas._redondo(1.09) == "1,09"
+
+
+def test_se_entiende_de_qué_moneda_a_cuál() -> None:
+    with mock.patch.object(respuestas, "_cotizacion", return_value=(21.5, "")) as pedir:
+        respuestas.responder("a cuánto está el dólar en pesos mexicanos", TARDE)
+
+    assert pedir.call_args[0] == ("USD", "MXN")
+
+
+def test_sin_destino_se_usa_el_peso_colombiano() -> None:
+    with mock.patch.object(respuestas, "_cotizacion", return_value=(4000.0, "")) as p:
+        respuestas.responder("cuánto está el euro", TARDE)
+
+    assert p.call_args[0] == ("EUR", "COP")
+
+
+def test_sin_red_no_se_inventa_una_cifra() -> None:
+    """Una cotización inventada es peor que ninguna: parece buena."""
+    with mock.patch.object(respuestas, "_cotizacion", return_value=(None, "")):
+        salida = respuestas.responder("a cuánto está el dólar", TARDE)
+
+    assert "No pude consultar" in salida["respuesta"]
+    assert "panel" not in salida
+
+
+def test_una_moneda_que_no_se_nombra_no_se_ataja() -> None:
+    """ "a cuánto está el proyecto" no es una pregunta de divisas."""
+    assert respuestas.responder("a cuánto está el proyecto", TARDE) is None

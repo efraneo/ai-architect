@@ -87,6 +87,12 @@ def run(
     # tarde y entonces no tapa la espera, la alarga.
     listas = preparar_rellenos()
 
+    # Cada sesion empieza con un saludo, y solo uno: "Buenas tardes,
+    # Efrain" delante de cada respuesta cansa a la tercera.
+    from ai_architect.commands import pide
+
+    pide.reiniciar_saludo()
+
     webbrowser.open(url)
 
     aviso = (

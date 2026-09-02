@@ -33,6 +33,21 @@ def con_perfil(tmp_path: Path):
         yield archivo
 
 
+@pytest.fixture(autouse=True)
+def saludo_limpio():
+    """Cada prueba empieza como una sesión recién abierta.
+
+    El saludo va una sola vez por sesión, así que sin esto una prueba deja
+    marcado que ya saludó y la siguiente ve una respuesta sin saludo — o al
+    revés, según el orden en que se ejecuten.
+    """
+    pide.reiniciar_saludo()
+
+    yield
+
+    pide.reiniciar_saludo()
+
+
 def modelo(respuesta: dict | str):
     """Un intérprete falso que devuelve lo que se le diga."""
     proveedor = mock.Mock()
@@ -485,3 +500,94 @@ def test_un_comando_fallido_no_pinta_nada() -> None:
 
 def test_un_comando_sin_panel_no_inventa_uno() -> None:
     assert pide.panel("execute", {"success": True}) is None
+
+
+# --- Saludar una vez, no en cada frase --------------------------------------
+
+
+def test_solo_saluda_la_primera_vez(tmp_path: Path, con_perfil) -> None:
+    """ "Buenas tardes, Efraín" delante de cada respuesta cansa a la tercera."""
+    pide.reiniciar_saludo()
+
+    primera = pide.run(
+        str(tmp_path), "cuéntame algo", engine=modelo({"comando": "", "respuesta": "A"})
+    )
+    segunda = pide.run(
+        str(tmp_path), "y otra cosa", engine=modelo({"comando": "", "respuesta": "B"})
+    )
+
+    assert "Buenas" in primera["explanation"]
+    assert "Buenas" not in segunda["explanation"]
+
+
+def test_pero_siempre_ofrece_seguir(tmp_path: Path, con_perfil) -> None:
+    pide.reiniciar_saludo()
+
+    pide.run(str(tmp_path), "algo", engine=modelo({"comando": "", "respuesta": "A"}))
+    segunda = pide.run(
+        str(tmp_path), "otra", engine=modelo({"comando": "", "respuesta": "B"})
+    )
+
+    assert "te puedo ayudar ahora" in segunda["explanation"]
+
+
+def test_una_sesion_nueva_vuelve_a_saludar(tmp_path: Path, con_perfil) -> None:
+    pide.run(str(tmp_path), "algo", engine=modelo({"comando": "", "respuesta": "A"}))
+
+    pide.reiniciar_saludo()
+
+    otra = pide.run(
+        str(tmp_path), "algo", engine=modelo({"comando": "", "respuesta": "B"})
+    )
+
+    assert "Buenas" in otra["explanation"]
+
+
+# --- La carpeta que se dice hablando ----------------------------------------
+
+
+def test_una_carpeta_dicha_se_resuelve(tmp_path: Path, con_perfil) -> None:
+    destino = tmp_path / "autosgsst"
+    destino.mkdir()
+
+    with mock.patch(
+        "ai_architect.core.rutas.resolver", return_value=(destino, [])
+    ) as buscar:
+        with mock.patch(
+            "ai_architect.commands.review.run", return_value={"success": True}
+        ) as revisar:
+            pide.run(
+                str(tmp_path),
+                "revisa autosgsst",
+                engine=modelo({"comando": "review", "carpeta": "autosgsst"}),
+            )
+
+    buscar.assert_called_once()
+    assert revisar.call_args[0][0] == str(destino)
+
+
+def test_si_no_encuentra_la_carpeta_pregunta(tmp_path: Path, con_perfil) -> None:
+    """Ejecutar sobre la carpeta equivocada es peor que perder un segundo."""
+    parecidas = [tmp_path / "informes", tmp_path / "informes2"]
+
+    with mock.patch("ai_architect.core.rutas.resolver", return_value=(None, parecidas)):
+        with mock.patch("ai_architect.commands.review.run") as revisar:
+            resultado = pide.run(
+                str(tmp_path),
+                "revisa informe",
+                engine=modelo({"comando": "review", "carpeta": "informe"}),
+            )
+
+    revisar.assert_not_called()
+    assert "informes" in resultado["explanation"]
+    assert "No encuentro" in resultado["explanation"]
+
+
+def test_sin_carpeta_dicha_no_se_busca_nada(tmp_path: Path, con_perfil) -> None:
+    with mock.patch("ai_architect.core.rutas.resolver") as buscar:
+        with mock.patch(
+            "ai_architect.commands.review.run", return_value={"success": True}
+        ):
+            pide.run(str(tmp_path), "revisa", engine=modelo({"comando": "review"}))
+
+    buscar.assert_not_called()

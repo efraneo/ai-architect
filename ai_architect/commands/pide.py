@@ -62,6 +62,9 @@ COMANDOS DISPONIBLES
 
 ARGUMENTOS
   project        ruta del repositorio (por defecto ".")
+  carpeta        si nombra una carpeta hablando —"revisa autosgsst"— ponla
+                 aqui tal como la dijo, sin inventarte la ruta: se busca
+                 aqui y se resuelve. Nunca te inventes rutas de disco.
   instruction    para improve: qué mejora se pide, en una frase
   file           para improve: archivo concreto a modificar, si se nombra
   apply          para improve/auto: true SOLO si el usuario pide aplicar,
@@ -92,10 +95,24 @@ CUANDO NO ES UNA TAREA DEL REPOSITORIO
 - Responde {{"comando": "", "respuesta": "..."}} con lo que le dirías, en
   español, tuteando, en una o dos frases. Se va a leer en voz alta: nada de
   listas, rutas ni símbolos.
-- Sirve para saludos, cortesías, preguntas sobre ti o sobre lo que sabes
-  hacer, y para encargos que no puedes cumplir (recados a terceros,
-  recordatorios, cosas fuera del repositorio). En esos, dilo claro y con
-  naturalidad en vez de fingir que los haces.
+
+- **CONTESTA LA PREGUNTA.** Cualquier pregunta: historia, cocina, ciencia,
+  cuánto pesa algo, cómo se escribe una palabra, qué opinas. Si lo sabes,
+  lo dices. Mandar a alguien a buscarlo en otro sitio no es una respuesta,
+  y aquí es la peor de todas: {trato} te está hablando, no leyendo.
+
+- Si no lo sabes con certeza, di lo que sí sabes y hasta dónde llegas —"que
+  yo sepa son unos ocho mil, pero no te lo firmo"—. Eso es una respuesta;
+  "consúltalo en una web" no lo es.
+
+- Lo único que de verdad no puedes saber es lo que cambia hoy: cotizaciones
+  al minuto, el tiempo que hace ahora, resultados de esta tarde. Ahí dilo en
+  una frase y sigue. Sin sermón y sin mandar a nadie a ninguna parte.
+
+- Sirve también para saludos, cortesías, preguntas sobre ti, y encargos que
+  no puedes cumplir (recados a terceros, recordatorios). En esos, dilo claro
+  y con naturalidad en vez de fingir que los haces.
+
 - No lo uses para escaquearte de una tarea que sí puedes hacer con los
   comandos de arriba.
 - Si te pide algo del repositorio que ninguno resuelve, usa
@@ -299,6 +316,37 @@ def run(
 
     comando = tabla[nombre]
 
+    dicha = str(intencion.get("carpeta") or "").strip()
+
+    if dicha:
+        from ai_architect.core import rutas
+
+        elegida, parecidas = rutas.resolver(dicha, repositorio)
+
+        if elegida is None:
+            # Ante la duda se pregunta. Ejecutar algo sobre la carpeta
+            # equivocada es peor que perder un segundo confirmando.
+            sugerencia = (
+                f" Tengo estas cerca: {rutas.nombrar(parecidas)}." if parecidas else ""
+            )
+
+            return _decir_si_toca(
+                {
+                    "success": True,
+                    "executed": False,
+                    "command": "",
+                    "conversation": True,
+                    "explanation": _con_trato(
+                        f"No encuentro ninguna carpeta que se llame {dicha}."
+                        + sugerencia
+                    ),
+                },
+                decir,
+                cara,
+            )
+
+        repositorio = elegida
+
     args = _argumentos(intencion, str(repositorio))
 
     escribe = nombre in MODIFICAN or any(
@@ -378,13 +426,35 @@ def _decir_si_toca(
     return respuesta
 
 
+# Si ya saludó en esta sesión. "Buenas tardes, Efraín" delante de cada
+# respuesta cansa a la tercera: se saluda al empezar, como haría cualquiera,
+# y a partir de ahí se contesta y ya.
+_ya_saludo = False
+
+
+def reiniciar_saludo() -> None:
+    """Vuelve a saludar la próxima vez. Se llama al abrir una sesión."""
+    global _ya_saludo
+
+    _ya_saludo = False
+
+
 def _con_trato(cuerpo: str) -> str:
     """La respuesta, entre el saludo y la despedida del momento del día.
 
     Es lo que separa una herramienta de algo que se siente tuyo: que sepa a
     quién le habla y qué hora es.
     """
-    return "\n\n".join([perfil.encabezar(), cuerpo, perfil.cerrar()])
+    global _ya_saludo
+
+    partes = [] if _ya_saludo else [perfil.encabezar()]
+
+    _ya_saludo = True
+
+    partes.append(cuerpo)
+    partes.append(perfil.cerrar())
+
+    return "\n\n".join(partes)
 
 
 def explicar(nombre: str, resultado: Any) -> str:

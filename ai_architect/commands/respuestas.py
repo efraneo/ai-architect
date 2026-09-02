@@ -22,6 +22,7 @@ atajo que adivina mal es peor que tres segundos de espera.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any
 
@@ -93,24 +94,177 @@ QUE_SABES = (
 )
 
 
+# --- El cambio de divisas ---------------------------------------------------
+#
+# "¿A cuánto está el dólar?" es una pregunta razonable y el modelo no puede
+# contestarla: no sabe la cotización de hoy, y lo honrado por su parte es
+# decir que no. Pero mandar a alguien a buscarlo en una web cuando el dato
+# está a una petición de distancia tampoco sirve de nada.
+
+CAMBIO = ("a cuanto esta", "cuanto esta", "valor del", "cotizacion", "cambio del")
+
+MONEDAS = {
+    "dolar": "USD",
+    "dolares": "USD",
+    "euro": "EUR",
+    "euros": "EUR",
+    "libra": "GBP",
+    "libras": "GBP",
+    "real": "BRL",
+    "reales": "BRL",
+    "yen": "JPY",
+    "peso mexicano": "MXN",
+    "peso argentino": "ARS",
+    "peso chileno": "CLP",
+    "peso colombiano": "COP",
+}
+
+# Contra qué se compara si no lo dice. Se puede cambiar con la variable
+# `AI_ARCHITECT_MONEDA`; el valor por defecto es el peso colombiano porque
+# es la moneda de quien pregunta.
+DESTINOS = {
+    "peso colombiano": "COP",
+    "pesos colombianos": "COP",
+    "peso mexicano": "MXN",
+    "pesos mexicanos": "MXN",
+    "peso argentino": "ARS",
+    "peso chileno": "CLP",
+    "euro": "EUR",
+    "euros": "EUR",
+    "dolar": "USD",
+    "dolares": "USD",
+}
+
+FUENTE = "https://open.er-api.com/v6/latest/"
+
+# Si tarda más que esto, no compensa: se dice que no se pudo y a otra cosa.
+TIEMPO_LIMITE = 5
+
+
 def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | None:
     """La respuesta inmediata, o ``None`` si esto hay que pensarlo.
 
     Devolver ``None`` no es un fallo: es lo normal. Aquí solo caen las
-    preguntas cuya respuesta ya está en la máquina.
+    preguntas cuya respuesta ya está en la máquina o a una petición.
     """
     limpia = sin_adornos(frase)
 
     if not limpia:
         return None
 
-    for prueba in (_ventana, _hora, _fecha, _quien, _que_sabes, _cortesia):
+    for prueba in (
+        _ventana,
+        _hora,
+        _fecha,
+        _divisa,
+        _quien,
+        _que_sabes,
+        _cortesia,
+    ):
         salida = prueba(limpia, ahora)
 
         if salida is not None:
             return salida
 
     return None
+
+
+def _divisa(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    if not contiene(limpia, *CAMBIO):
+        return None
+
+    # La más larga primero: "peso mexicano" antes que "peso".
+    origen = next(
+        (
+            codigo
+            for nombre, codigo in sorted(MONEDAS.items(), key=lambda p: -len(p[0]))
+            if nombre in limpia
+        ),
+        "",
+    )
+
+    if not origen:
+        return None
+
+    destino = next(
+        (
+            codigo
+            for nombre, codigo in sorted(DESTINOS.items(), key=lambda p: -len(p[0]))
+            if f" en {nombre}" in f" {limpia}" or f"a {nombre}" in limpia
+        ),
+        os.getenv("AI_ARCHITECT_MONEDA", "COP"),
+    )
+
+    if destino == origen:
+        destino = "COP" if origen != "COP" else "USD"
+
+    valor, fecha = _cotizacion(origen, destino)
+
+    if valor is None:
+        # Sin red no se inventa una cifra. Una cotización inventada es peor
+        # que no contestar, porque parece buena.
+        return {
+            "respuesta": (
+                "No pude consultar la cotización ahora mismo. "
+                "Puede ser que no haya internet."
+            )
+        }
+
+    return {
+        "respuesta": f"Un {_como_se_dice(origen)} está en {_redondo(valor)} {destino}.",
+        "panel": {
+            "tipo": "cambio",
+            "titulo": f"{origen} → {destino}",
+            "valor": round(valor, 2),
+            "par": f"1 {origen} = {round(valor, 2)} {destino}",
+            "fecha": fecha,
+        },
+    }
+
+
+def _cotizacion(origen: str, destino: str) -> tuple[float | None, str]:
+    """La cotización de hoy. Sin clave y sin dependencias nuevas."""
+    import json
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(FUENTE + origen, timeout=TIEMPO_LIMITE) as red:
+            datos = json.loads(red.read().decode("utf-8"))
+
+    except Exception:  # noqa: BLE001 - sin red se dice, no se revienta
+        return (None, "")
+
+    tasa = (datos.get("rates") or {}).get(destino)
+
+    if not isinstance(tasa, (int, float)):
+        return (None, "")
+
+    return (float(tasa), str(datos.get("time_last_update_utc", ""))[:16])
+
+
+def _como_se_dice(codigo: str) -> str:
+    return {
+        "USD": "dólar",
+        "EUR": "euro",
+        "GBP": "libra",
+        "BRL": "real",
+        "JPY": "yen",
+        "MXN": "peso mexicano",
+        "COP": "peso colombiano",
+        "ARS": "peso argentino",
+        "CLP": "peso chileno",
+    }.get(codigo, codigo)
+
+
+def _redondo(valor: float) -> str:
+    """La cifra como se dice, no como se imprime.
+
+    "4109.5" en voz alta es un galimatías; "4.110" se entiende.
+    """
+    if valor >= 100:
+        return f"{valor:,.0f}".replace(",", ".")
+
+    return f"{valor:.2f}".replace(".", ",")
 
 
 # --- Cada atajo -------------------------------------------------------------

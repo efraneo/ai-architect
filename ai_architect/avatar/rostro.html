@@ -1022,6 +1022,12 @@ function pintarPanel(d) {
       '<div class="cifra" style="font-size:26px">' + escapar(d.estado) +
       "</div><ul>" + filas + "</ul>";
 
+  } else if (d.tipo === "cambio") {
+    cuerpo =
+      '<div class="cifra">' + escapar(d.valor) + "</div>" +
+      '<div class="pie-panel">' + escapar(d.par) + "</div>" +
+      '<div class="pie-panel">' + escapar(d.fecha) + "</div>";
+
   } else if (d.tipo === "estructura") {
     cuerpo =
       '<div class="cifra">' + escapar(d.archivos) + "<small>archivos</small></div>" +
