@@ -44,10 +44,17 @@ MODIFICAN = {"execute"}
 # Banderas que convierten un comando inofensivo en uno que escribe.
 BANDERAS_QUE_ESCRIBEN = ("apply", "write")
 
-INSTRUCCIONES = """Eres el despachador de QUANT AI Architect.
+INSTRUCCIONES = """Eres el arquitecto de QUANT AI Architect. Hablas con
+{trato}, que es quien te da las órdenes.
 
-El usuario escribe una frase en español. Tu único trabajo es decir cuál de
-estos comandos la resuelve, y con qué argumentos.
+Te llega una frase en español, y puede ser una de dos cosas:
+
+  a) Una tarea sobre el repositorio -> eliges el comando que la resuelve.
+  b) Cualquier otra cosa —un saludo, una pregunta sobre ti, un encargo que
+     no va del repositorio, una charla— -> **contestas tú**, sin comando.
+
+Lo segundo importa tanto como lo primero. Si {trato} te habla y le sueltas
+"no supe qué comando usar", pareces averiado.
 
 COMANDOS DISPONIBLES
 {catalogo}
@@ -79,10 +86,23 @@ REGLAS
 - "está todo bien configurado", "funciona", "tengo la clave" -> "doctor".
 - Pon apply/write en true SOLO si la frase lo pide de verdad. "dime",
   "muéstrame" y "revisa" NO lo piden; "arregla", "aplica" y "hazlo" sí.
-- Si no entiendes qué quiere, responde {{"comando": "", "motivo": "..."}}.
+
+CUANDO NO ES UNA TAREA DEL REPOSITORIO
+- Responde {{"comando": "", "respuesta": "..."}} con lo que le dirías, en
+  español, tuteando, en una o dos frases. Se va a leer en voz alta: nada de
+  listas, rutas ni símbolos.
+- Sirve para saludos, cortesías, preguntas sobre ti o sobre lo que sabes
+  hacer, y para encargos que no puedes cumplir (recados a terceros,
+  recordatorios, cosas fuera del repositorio). En esos, dilo claro y con
+  naturalidad en vez de fingir que los haces.
+- No lo uses para escaquearte de una tarea que sí puedes hacer con los
+  comandos de arriba.
+- Si te pide algo del repositorio que ninguno resuelve, usa
+  {{"comando": "", "motivo": "..."}} y di qué falta.
 
 FORMATO
 {{"comando": "agents", "project": ".", "razon": "pregunta por el estado"}}
+{{"comando": "", "respuesta": "Aquí sigo. ¿Miramos el proyecto?"}}
 
 LA FRASE
 {frase}
@@ -172,6 +192,25 @@ def run(
     nombre = str(intencion.get("comando", "")).strip()
 
     if not nombre:
+        # No toda frase es una orden. Un saludo, una pregunta sobre él o un
+        # encargo que no va del repositorio también merecen respuesta:
+        # contestar "no supe qué comando usar" a un "buenas tardes" es lo
+        # que hace que una herramienta no se sienta tuya.
+        charla = str(intencion.get("respuesta") or "").strip()
+
+        if charla:
+            return _decir_si_toca(
+                {
+                    "success": True,
+                    "executed": False,
+                    "command": "",
+                    "conversation": True,
+                    "explanation": _con_trato(charla),
+                },
+                decir,
+                cara,
+            )
+
         return _error(
             str(intencion.get("motivo") or "no supe qué comando usar"),
             frase=frase,
@@ -369,11 +408,19 @@ def _catalogo() -> tuple[str, dict[str, Any]]:
     arriba sería un ciclo. Y se toma de allí para que no haya dos listas que
     puedan desincronizarse.
     """
-    from ai_architect.cli import COMANDOS, POR_NOMBRE
+    from ai_architect.cli import COMANDOS
 
-    lineas = [f"  {c.nombre}: {c.ayuda}" for c in COMANDOS]
+    # Solo lo que responde algo del repositorio. `voz`, `avatar` y
+    # `conversar` son la interfaz —abren ventanas, encienden micrófonos— y
+    # dejárselos elegir acabó como tenía que acabar: a "saluda a Rafa de mi
+    # parte" respondió eligiendo `avatar`, que esperaba un argumento que
+    # `pide` no tiene, y reventó con un AttributeError en mitad de la
+    # conversación.
+    elegibles = [c for c in COMANDOS if c.elegible]
 
-    return "\n".join(lineas), POR_NOMBRE
+    lineas = [f"  {c.nombre}: {c.ayuda}" for c in elegibles]
+
+    return "\n".join(lineas), {c.nombre: c for c in elegibles}
 
 
 def _preguntar(engine: Any, catalogo: str, frase: str) -> str:
@@ -386,7 +433,11 @@ def _preguntar(engine: Any, catalogo: str, frase: str) -> str:
 
     return str(
         proveedor.generate(
-            INSTRUCCIONES.format(catalogo=catalogo, frase=frase),
+            INSTRUCCIONES.format(
+                catalogo=catalogo,
+                frase=frase,
+                trato=perfil.como_llamarte(),
+            ),
         )
     )
 

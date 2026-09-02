@@ -301,3 +301,51 @@ def test_lo_que_dice_se_recuerda_para_reconocerlo() -> None:
             conversar.atender("revisa", ".", si=False)
 
     assert conversar._ultimo_dicho == "Todo en orden, Efraín."
+
+
+# --- Un solo micrófono ------------------------------------------------------
+#
+# Abrir la cara dos veces dejaba dos pestañas escuchando. Mientras una
+# hablaba, la otra la oía por los altavoces y la devolvía como orden: en el
+# registro se veían los ecos por duplicado.
+
+
+def test_cada_pagina_se_lleva_su_turno() -> None:
+    primera = conversar._componer(".")
+    segunda = conversar._componer(".")
+
+    def turno(pagina: str) -> str:
+        return json.loads(pagina.split("window.DATOS_ARQUITECTO = ")[-1].split(";")[0])[
+            "turno"
+        ]
+
+    assert turno(primera) != turno(segunda)
+
+
+def test_manda_la_ultima_que_se_abrio() -> None:
+    conversar._componer(".")
+    ultima = conversar._componer(".")
+
+    esperado = json.loads(ultima.split("window.DATOS_ARQUITECTO = ")[-1].split(";")[0])[
+        "turno"
+    ]
+
+    assert conversar._turno == esperado
+
+
+# --- El registro tiene que servir de algo -----------------------------------
+
+
+def test_el_registro_no_repite_el_saludo() -> None:
+    """Imprimía la primera línea, y la primera línea siempre es el saludo."""
+    respuesta = "Buenas tardes, Efraín.\n\nPuntuación 99.26.\n\nBuena tarde, Efraín."
+
+    assert conversar._resumen(respuesta) == "Puntuación 99.26."
+
+
+def test_una_respuesta_de_una_sola_parte_se_deja_entera() -> None:
+    assert conversar._resumen("Aquí sigo.") == "Aquí sigo."
+
+
+def test_una_respuesta_vacia_no_revienta() -> None:
+    assert conversar._resumen("") == ""

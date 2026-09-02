@@ -58,6 +58,12 @@ class Comando:
 
     requiere: tuple[tuple[str, str], ...] = field(default=())
 
+    # Si `pide` puede elegirlo. La interfaz —abrir la cara, encender el
+    # microfono, listar voces— no responde nada del repositorio, y dejarla
+    # en el catalogo hizo que a "saluda a Rafa de mi parte" contestara
+    # eligiendo `avatar`, que espera argumentos que `pide` no construye.
+    elegible: bool = True
+
 
 # `pide` va aparte de la tabla: es quien la usa, no uno de sus miembros.
 # Meterlo dentro le dejaría elegirse a sí mismo.
@@ -66,16 +72,21 @@ COMANDOS: tuple[Comando, ...] = (
         "conversar",
         "Hablarle por el micrófono y que conteste (--si autoriza lo que escribe)",
         lambda a: conversar.run(a.project, si=a.si),
+        elegible=False,
     ),
     Comando(
         "avatar",
         "Abrir el rostro (--texto para que lo diga en voz alta)",
         lambda a: avatar.run(decir=a.texto),
+        elegible=False,
     ),
     Comando(
         "voz",
         "Ver qué voces hay y probarlas (--probar)",
-        lambda a: voz.run(probar=a.probar, motor=a.motor, usar=a.usar),
+        lambda a: voz.run(
+            probar=a.probar, motor=a.motor, usar=a.usar, voz_piper=a.voz_piper
+        ),
+        elegible=False,
     ),
     Comando(
         "doctor",
@@ -259,6 +270,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         choices=["", "piper", "openai", "windows"],
         help="For voz: which engine to use, to compare how they sound",
+    )
+
+    parser.add_argument(
+        "--voz-piper",
+        default="",
+        help="For voz: which Piper voice to keep (davefx, sharvard, ald, claude)",
     )
 
     parser.add_argument(

@@ -969,7 +969,13 @@ async function enviarAudio(audio) {
   try {
     const respuesta = await fetch("/oir", {
       method: "POST",
-      headers: { "Content-Type": "audio/webm" },
+      headers: {
+        "Content-Type": "audio/webm",
+        // Quien manda es la ultima pestana que se abrio. Con dos abiertas
+        // habia dos micros encendidos: mientras una hablaba, la otra la
+        // oia por los altavoces y la devolvia como si fuera una orden.
+        "X-Turno": AJUSTES.turno || "",
+      },
       body: audio,
     });
 
@@ -981,6 +987,15 @@ async function enviarAudio(audio) {
     ocupado = false;
 
     return;
+  }
+
+  if (datos.detener) {
+    // Se abrio la cara en otra pestana. Esta se calla en vez de pelearse
+    // por el microfono, y lo dice para que no parezca averiada.
+    rotulo.textContent = "en pausa";
+    mostrarOido("Hay otra ventana escuchando. Cierra esta.", true);
+
+    return;                                   // ocupado se queda en true
   }
 
   if (datos.oido) mostrarOido(datos.oido, true);

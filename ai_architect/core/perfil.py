@@ -158,3 +158,17 @@ def preferir_voz(motor: str, archivo: Path | None = None) -> bool:
     datos["voz"] = motor.strip()
 
     return guardar(datos, archivo)
+
+
+def preferir_voz_piper(nombre: str, archivo: Path | None = None) -> bool:
+    """Cuál de las voces de Piper, que hay varias y suenan muy distinto.
+
+    ``voz_preferida`` dice **qué motor**; esto dice **cuál dentro de él**.
+    Sin esto se leía el valor pero no lo escribía nadie, así que la
+    preferencia existía a medias: se podía respetar y no se podía elegir.
+    """
+    datos = cargar(archivo)
+
+    datos["voz_piper"] = nombre.strip()
+
+    return guardar(datos, archivo)

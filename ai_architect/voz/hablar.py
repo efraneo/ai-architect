@@ -39,11 +39,17 @@ TIEMPO_LIMITE = 60
 # Dónde se buscan las voces de Piper, si están.
 CARPETA_VOCES = Path.home() / ".ai_architect" / "voces"
 
-# Las voces masculinas de español latino que Piper publica de verdad. Se
-# comprobó contra el repositorio: `es_AR/daniel` no existe —la argentina es
-# `daniela`, femenina—, así que las dos opciones son mexicanas. La primera
-# que aparezca es la que se usa, salvo que el perfil diga otra.
+# Las voces masculinas en español que Piper publica de verdad, en el orden
+# en que se probaron. Se comprobó contra el repositorio: `es_AR/daniel` no
+# existe —la argentina es `daniela`, femenina—, así que las latinas son las
+# dos mexicanas y el resto son de España.
+#
+# El orden no es una opinión sobre cuál suena mejor: es el que quedó
+# después de escucharlas. La primera que esté descargada es la que se usa,
+# salvo que el perfil diga otra — y el perfil manda siempre.
 VOCES_PIPER = (
+    "es_ES-davefx-medium.onnx",
+    "es_ES-sharvard-medium.onnx",
     "es_MX-claude-high.onnx",
     "es_MX-ald-medium.onnx",
 )
@@ -86,7 +92,7 @@ def motores() -> dict[str, Any]:
             "disponible": bool(piper),
             "voz": piper.name if piper else None,
             "nota": (
-                "local, gratis, voz masculina latina"
+                f"local, gratis, sin internet — acento de {_de_donde(piper.name)}"
                 if piper
                 else f"no instalado. Baja una voz a {CARPETA_VOCES}"
             ),
@@ -102,6 +108,17 @@ def motores() -> dict[str, Any]:
             "nota": _nota_windows(),
         },
     }
+
+
+def _de_donde(voz: str) -> str:
+    """De dónde es el acento de una voz de Piper, por su nombre.
+
+    Decir "voz masculina latina" con una voz de España sonando sería
+    mentir en lo primero que se nota, y aquí ya pasó una vez.
+    """
+    return {"es_ES": "España", "es_MX": "México", "es_AR": "Argentina"}.get(
+        voz[:5], "español"
+    )
 
 
 def _asegurar_entorno() -> None:

@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import secrets
 import threading
 import unicodedata
 import webbrowser
@@ -115,10 +116,20 @@ def _quien_oye() -> str:
     return "el reconocedor de Chrome — gratis, peor en español, pasa por Google"
 
 
+# Quien tiene ahora mismo el microfono. Cada carga de la pagina se lleva
+# uno nuevo, y solo el ultimo vale.
+_turno = ""
+
+
 def _componer(project: str) -> str:
     from ai_architect.voz import escuchar
 
+    global _turno
+
+    _turno = secrets.token_hex(8)
+
     datos = {
+        "turno": _turno,
         "ms": 0,
         "texto": "",
         "modo": "conversacion",
@@ -275,7 +286,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                     target=motor_de_voz.emitir, args=(audio,), daemon=True
                 ).start()
 
-            print(f"  < {salida['respuesta'].splitlines()[0]}", flush=True)
+            print(f"  < {_resumen(salida['respuesta'])}", flush=True)
 
         def _oir(self) -> None:
             """Audio en crudo: se transcribe aquí y se trata como una orden."""
@@ -291,6 +302,18 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
             except OSError:
                 self.send_error(400)
+
+                return
+
+            # Solo escucha la ultima pestana que se abrio. Abrir la cara
+            # dos veces dejaba dos micros encendidos: mientras una hablaba,
+            # la otra la oia por los altavoces y la mandaba de vuelta como
+            # si fuera una orden. Se veian los ecos por duplicado.
+            if self.headers.get("X-Turno") and self.headers["X-Turno"] != _turno:
+                self._responder(
+                    json.dumps({"detener": True}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
 
                 return
 
@@ -346,7 +369,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                     target=motor_de_voz.emitir, args=(sonido,), daemon=True
                 ).start()
 
-            print(f"  < {salida['respuesta'].splitlines()[0]}", flush=True)
+            print(f"  < {_resumen(salida['respuesta'])}", flush=True)
 
         def _responder(self, cuerpo: bytes, tipo: str) -> None:
             self.send_response(200)
@@ -369,6 +392,18 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
     servidor.daemon_threads = True
 
     return (servidor, f"http://127.0.0.1:{avatar.PUERTO}/")
+
+
+def _resumen(respuesta: str) -> str:
+    """El meollo de la respuesta, sin el saludo ni la despedida.
+
+    Se imprimia la primera linea y la primera linea siempre es "Buenas
+    tardes, Efrain": el registro de una conversacion entera decia lo mismo
+    en todas las lineas y no servia para nada.
+    """
+    partes = [t.strip() for t in respuesta.split(chr(10) * 2) if t.strip()]
+
+    return partes[1] if len(partes) > 2 else (partes[0] if partes else "")
 
 
 def _apagar(servidor: Any) -> None:

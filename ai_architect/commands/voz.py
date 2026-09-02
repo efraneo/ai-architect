@@ -27,6 +27,7 @@ def run(
     texto: str = "",
     motor: str = "",
     usar: str = "",
+    voz_piper: str = "",
 ) -> dict:
     """Informa de las voces disponibles. Con ``probar``, dice una frase.
 
@@ -34,6 +35,9 @@ def run(
     antes de decidir cuál usar.
     """
     motores = motor_de_voz.motores()
+
+    if voz_piper:
+        return _elegir_voz_de_piper(voz_piper)
 
     if usar:
         if not motores.get(usar, {}).get("disponible"):
@@ -61,7 +65,12 @@ def run(
         marca = "->" if nombre == elegido else "  "
         estado = "sí" if datos["disponible"] else "no"
 
-        lineas.append(f"  {marca} {nombre:8} {estado:3} {datos['nota']}")
+        detalle = datos["nota"]
+
+        if nombre == "piper" and datos["voz"]:
+            detalle = f"{datos['voz']} — {detalle}"
+
+        lineas.append(f"  {marca} {nombre:8} {estado:3} {detalle}")
 
     if not elegido:
         lineas.append("")
@@ -86,3 +95,38 @@ def run(
         )
 
     return resultado
+
+
+def _elegir_voz_de_piper(nombre: str) -> dict:
+    """Cuál de las voces de Piper. Son cuatro y suenan muy distinto.
+
+    Se admite el nombre corto —`davefx`, `sharvard`, `ald`— porque nadie
+    quiere teclear `es_ES-davefx-medium.onnx` para cambiar de voz.
+    """
+    disponibles = [
+        v.name for v in sorted(motor_de_voz.CARPETA_VOCES.glob("*.onnx")) if v.is_file()
+    ]
+
+    elegida = next((v for v in disponibles if nombre.lower() in v.lower()), "")
+
+    if not elegida:
+        return {
+            "success": False,
+            "available": disponibles,
+            "explanation": (
+                f"No tengo ninguna voz que se llame '{nombre}'. "
+                "Tengo estas: " + ", ".join(disponibles or ["ninguna"])
+            ),
+        }
+
+    perfil.preferir_voz("piper")
+    perfil.preferir_voz_piper(elegida)
+
+    return {
+        "success": True,
+        "chosen": elegida,
+        "explanation": (
+            f"{perfil.encabezar()} Me quedo con {elegida}, de Piper. "
+            "Es local y no cuesta nada."
+        ),
+    }
