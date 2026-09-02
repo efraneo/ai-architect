@@ -437,22 +437,88 @@ def _proveedor(engine: Any) -> Any:
 
 
 def _json(texto: str) -> dict[str, Any] | None:
+    """El JSON de la respuesta, aunque venga a medias.
+
+    Una respuesta larga se corta al llegar al limite de la salida, y
+    entonces el JSON queda **sin cerrar**: `json.loads` falla y el regex
+    `{.*}` no encuentra nada porque no hay llave final. El texto crudo
+    acababa saliendo tal cual, con las vallas de markdown dentro, y eso es
+    lo que oye el usuario.
+
+    Se prueban tres cosas, de mas a menos exacta. Rescatar el resumen de un
+    JSON roto no es elegante, pero una frase util vale mas que un objeto
+    perfecto que no llego entero.
+    """
     if not texto:
         return None
 
-    try:
-        leido = json.loads(texto)
+    limpio = _sin_vallas(texto)
 
-    except (ValueError, TypeError):
-        hallado = re.search(r"\{.*\}", texto, re.DOTALL)
-
-        if hallado is None:
-            return None
+    for intento in (limpio, _entre_llaves(limpio)):
+        if not intento:
+            continue
 
         try:
-            leido = json.loads(hallado.group(0))
+            leido = json.loads(intento)
 
         except (ValueError, TypeError):
-            return None
+            continue
 
-    return dict(leido) if isinstance(leido, dict) else None
+        if isinstance(leido, dict):
+            return leido
+
+    return _rescatar(limpio)
+
+
+def _sin_vallas(texto: str) -> str:
+    """El texto sin las vallas de markdown que a veces envuelven el JSON."""
+    limpio = texto.strip()
+
+    if limpio.startswith("```"):
+        limpio = re.sub(r"^```[a-zA-Z]*\s*", "", limpio)
+        limpio = re.sub(r"```\s*$", "", limpio)
+
+    return limpio.strip()
+
+
+def _entre_llaves(texto: str) -> str:
+    hallado = re.search(r"\{.*\}", texto, re.DOTALL)
+
+    return hallado.group(0) if hallado else ""
+
+
+# `"resumen": "lo que sea"`, aunque lo de despues venga cortado.
+RESUMEN = re.compile(r'"resumen"\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+RESPUESTA = re.compile(r'"respuesta"\s*:\s*"((?:[^"\\]|\\.)*)')
+
+
+def _rescatar(texto: str) -> dict[str, Any] | None:
+    """Lo que se pueda salvar de un JSON que llego a medias."""
+    resumen = RESUMEN.search(texto)
+
+    if resumen is None:
+        return None
+
+    respuesta = RESPUESTA.search(texto)
+
+    return {
+        "resumen": _descomillar(resumen.group(1)),
+        "respuesta": _descomillar(respuesta.group(1)) if respuesta else "",
+    }
+
+
+def _descomillar(trozo: str) -> str:
+    """Deshace los escapes de JSON a mano.
+
+    El trozo viene de un JSON que no se pudo cargar, así que `json.loads`
+    no está disponible para desescaparlo: se hace aquí, y en este orden —
+    la barra doble al final, o desharía las que acaban de aparecer.
+    """
+    return (
+        trozo.replace('\\"', '"')
+        .replace("\\n", " ")
+        .replace("\\t", " ")
+        .replace("\\\\", "\\")
+        .strip()
+    )
