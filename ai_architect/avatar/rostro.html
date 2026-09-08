@@ -333,6 +333,14 @@
 
   .permiso button:hover { filter: brightness(1.25); }
 
+  /* En la ventana flotante (440 px) el pie derecho se montaba sobre el
+     rotulo de estado: ahi sobra. */
+  @media (max-width: 640px) {
+    .pie { display: none; }
+    .tarjetas { width: min(300px, 62vw); }
+    .oido { font-size: 13px; bottom: 58px; }
+  }
+
   .destello { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
 
   .destello.exito {
