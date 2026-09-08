@@ -23,3 +23,6 @@ select = [
 ignore = [
     "E501",
 ]
+
+[lint.per-file-ignores]
+"ai_architect/agente/*" = ["UP042"]   # enums str+Enum portados de OpenJarvis

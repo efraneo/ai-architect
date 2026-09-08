@@ -50,6 +50,7 @@ def test_estan_los_comandos() -> None:
         "voz",
         "conversar",
         "avatar",
+        "hacer",
     }
 
 

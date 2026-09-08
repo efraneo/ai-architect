@@ -35,6 +35,7 @@ from ai_architect.commands import (
     crear,
     doctor,
     execute,
+    hacer,
     improve,
     pide,
     review,
@@ -173,6 +174,19 @@ COMANDOS: tuple[Comando, ...] = (
             dry_run=a.dry_run,
         ),
         requiere=(("patch", "execute requires --patch <patch_file>"),),
+    ),
+    Comando(
+        "hacer",
+        "Una orden completa sobre el repositorio en lenguaje natural: examinar, probar, corregir, "
+        "proponer o aplicar cambios de punta a punta (sin --si solo examina y propone)",
+        lambda a: hacer.run(
+            a.project,
+            " ".join(a.frase or []) or (a.instruction or ""),
+            si=a.si,
+            decir=a.decir,
+            cara=a.cara,
+        ),
+        requiere=(("instruction", "qué quieres que haga"),),
     ),
 )
 
