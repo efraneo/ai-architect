@@ -108,6 +108,57 @@ def run(
 # --- La página --------------------------------------------------------------
 
 
+# --- La ventana flotante (fase 4) ---------------------------------------------
+#
+# El navegador sirve, pero una cara con barra de pestañas encima no es una
+# cara. pywebview abre la misma página en una ventana propia, sin marco y
+# siempre encima, como un widget de escritorio. Es opcional: `pip install
+# "ai-architect[rostro]"`; sin él, se sigue abriendo en el navegador.
+
+ANCHO_FLOTANTE = 440
+ALTO_FLOTANTE = 560
+
+SIN_VENTANA = (
+    "  (para la ventana flotante instala pywebview: pip install pywebview; "
+    "mientras, se abre en el navegador)"
+)
+
+
+def hay_ventana_flotante() -> bool:
+    try:
+        import webview  # noqa: F401
+
+    except ImportError:
+        return False
+
+    return True
+
+
+def ventana_flotante(url: str, titulo: str = "Architect") -> bool:
+    """Abre la página en una ventana sin marco, siempre encima. Bloquea hasta
+    que se cierra. Devuelve ``False`` si pywebview no está."""
+    try:
+        import webview
+
+    except ImportError:
+        return False
+
+    webview.create_window(
+        titulo,
+        url,
+        width=ANCHO_FLOTANTE,
+        height=ALTO_FLOTANTE,
+        frameless=True,
+        easy_drag=True,
+        on_top=True,
+        background_color="#04030c",
+    )
+
+    webview.start()
+
+    return True
+
+
 def _componer(decir: str, preparado: dict[str, Any] | None) -> str:
     """El HTML con los datos de esta sesión dentro.
 

@@ -43,11 +43,23 @@ def _leer_json(texto: str) -> dict[str, Any] | None:
         return None
 
 
-def _argumentos(intencion: dict[str, Any], repositorio: str) -> SimpleNamespace:
-    """Los argumentos que espera la tabla del CLI, con valores por defecto."""
+def _argumentos(
+    intencion: dict[str, Any], repositorio: str, si: bool = False
+) -> SimpleNamespace:
+    """Los argumentos que espera la tabla del CLI, con valores por defecto.
+
+    ``si`` viaja hasta aquí porque ``hacer`` lo lee del namespace: sin él, una
+    orden completa dicha por voz reventaba antes de empezar.
+    """
     instrucciones = intencion.get("instructions")
 
     return SimpleNamespace(
+        # Lo que `hacer` espera de la línea de órdenes (`--frase`, `--si`,
+        # `--decir`, `--cara`): aquí la frase ya viene en `instruction`.
+        frase=None,
+        si=bool(si),
+        decir=False,
+        cara=False,
         project=str(intencion.get("project") or repositorio),
         file=intencion.get("file") or None,
         instruction=str(intencion.get("instruction") or "Improve code quality"),

@@ -31,7 +31,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ai_architect.agente import caja, memoria
+from ai_architect.agente import caja, memoria, progreso
 from ai_architect.agente.agente_base import AgentContext
 from ai_architect.agente.eventos import Event, EventBus, EventType
 from ai_architect.agente.guion import prompt_sistema
@@ -67,6 +67,10 @@ def run(
     bitacora: list[dict[str, Any]] = []
     bus = bus or EventBus()
 
+    # Lo que va haciendo se cuenta en vivo (el rostro lo enseña en tarjetas).
+    progreso.enganchar(bus)
+    progreso.avisar("fase", fase="trabajando", orden=frase.strip()[:120])
+
     def confirmar(
         mensaje: str,
     ) -> bool:  # noqa: ARG001 - la política es la de la sesión, no la del mensaje
@@ -78,6 +82,7 @@ def run(
 
     # Lo que quiso escribir sin permiso va a la cola, con sus argumentos exactos.
     encoladas: list[str] = []
+    ids_encolados: list[str] = []
 
     def antes(nombre: str, argumentos: dict[str, Any]) -> bool:
         if si or nombre not in caja.ESCRIBEN:
@@ -85,6 +90,13 @@ def run(
         try:
             accion = pendientes.encolar(repositorio, nombre, argumentos, frase)
             encoladas.append(f"{accion.id[:8]} · {accion.description}")
+            ids_encolados.append(accion.id)
+            progreso.avisar(
+                "permiso",
+                id=accion.id,
+                herramienta=nombre,
+                descripcion=accion.description,
+            )
         except Exception:  # noqa: BLE001 - la cola es un extra; la negativa se mantiene
             pass
         return False
@@ -134,6 +146,7 @@ def run(
             AgentContext(metadata={"repositorio": str(repositorio), "permiso": si}),
         )
     except Exception as e:  # noqa: BLE001 - el agente falla, el comando informa
+        progreso.avisar("fase", fase="error", detalle=str(e)[:120])
         return _error(f"el agente falló: {e}")
 
     usadas = [r.tool_name for r in resultado.tool_results]
@@ -150,6 +163,12 @@ def run(
             + "\n\nPara aplicarlos: architect aprobar --frase todo (o el id de uno)."
         )
 
+    progreso.avisar(
+        "fase",
+        fase="permiso" if encoladas else "listo",
+        pendientes=len(encoladas),
+    )
+
     respuesta: dict[str, Any] = {
         "success": True,
         "executed": bool(escrituras) and si,
@@ -157,6 +176,7 @@ def run(
         "turns": resultado.turns,
         "tools": usadas,
         "pending": encoladas,
+        "pending_ids": ids_encolados,
         "written": informe,
         "explanation": informe,
         "panel": {

@@ -59,6 +59,11 @@ REGLAS
   -> "analyze".
 - "arregla", "mejora", "cambia", "añade", "extrae" -> "improve" con
   instruction en español, copiando lo que pidió.
+- Una orden de varios pasos sobre el repositorio —"examina X, corre las
+  pruebas y corrige lo que falle", "haz que…", "revisa y arregla",
+  "propón cómo simplificar"— -> "hacer" con instruction = la orden entera
+  tal como la dijo. "hacer" examina, prueba y propone; sin permiso no
+  escribe, así que no hace falta pedirlo.
 - "está todo bien configurado", "funciona", "tengo la clave" -> "doctor".
 - "hazme", "prepárame", "redacta", "resume", "una tabla de", "una gráfica
   de", "ayúdame con mi tarea", "un trabajo sobre" -> "crear", con `peticion`

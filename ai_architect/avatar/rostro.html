@@ -155,6 +155,195 @@
     text-transform: uppercase;
     color: rgba(150, 165, 220, .5);
   }
+
+  /* --- Las fases del rostro (fase 4) ----------------------------------
+     Reposo, escucha, pensando y hablando ya estaban. Se suman
+     **trabajando** (una reticula gira alrededor y cada herramienta deja
+     una tarjeta), **pidiendo permiso** (ambar, con dos botones) y el
+     destello de **exito/error**. Las animaciones van en CSS —se inspiran
+     en el HUD de OpenJarvis, Apache-2.0— para que no cuesten un solo
+     fotograma al canvas. */
+  @keyframes respirar {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(130, 150, 255, .28), 0 0 0 0 rgba(90, 120, 255, 0); }
+    50%      { box-shadow: 0 0 0 1px rgba(150, 170, 255, .5), 0 0 24px -4px rgba(90, 120, 255, .55); }
+  }
+
+  @keyframes barrido {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  @keyframes reticula {
+    0%   { transform: translate(-50%, -50%) rotate(0deg); opacity: .22; }
+    50%  { opacity: .55; }
+    100% { transform: translate(-50%, -50%) rotate(360deg); opacity: .22; }
+  }
+
+  @keyframes latido {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    40%      { transform: translate(-50%, -50%) scale(1.05); }
+  }
+
+  @keyframes latido-caja {
+    0%, 100% { box-shadow: 0 0 40px rgba(255, 170, 40, .22); }
+    40%      { box-shadow: 0 0 60px rgba(255, 170, 40, .45); }
+  }
+
+  @keyframes entrar {
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes destello {
+    0%   { opacity: .6; }
+    100% { opacity: 0; }
+  }
+
+  .reticula {
+    position: fixed;
+    left: 50%;
+    top: 51%;
+    width: min(64vh, 64vw);
+    height: min(64vh, 64vw);
+    border-radius: 50%;
+    border: 1px dashed rgba(120, 200, 255, .38);
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity .45s, border-color .45s;
+    pointer-events: none;
+  }
+
+  .reticula::before {
+    content: "";
+    position: absolute;
+    inset: -16px;
+    border-radius: 50%;
+    border: 1px solid rgba(120, 200, 255, .12);
+  }
+
+  body.trabajando .reticula { opacity: 1; animation: reticula 14s linear infinite; }
+
+  body.pidiendo .reticula {
+    opacity: 1;
+    border-color: rgba(255, 190, 70, .6);
+    animation: latido 1.8s ease-in-out infinite;
+  }
+
+  .tarjetas {
+    position: fixed;
+    left: 26px;
+    top: 26px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 9;
+  }
+
+  .tarjeta {
+    padding: 9px 12px;
+    border-radius: 10px;
+    background: rgba(12, 10, 30, .78);
+    border: 1px solid rgba(130, 150, 255, .22);
+    color: #dbe6ff;
+    font-size: 12px;
+    line-height: 1.4;
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    transform: translateX(-10px);
+    animation: entrar .25s forwards;
+    word-break: break-word;
+  }
+
+  .tarjeta b {
+    display: block;
+    font-size: 10px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: #8fa6ff;
+    margin-bottom: 3px;
+  }
+
+  .tarjeta small { color: #9fb0dd; display: block; }
+
+  .tarjeta.va {
+    background-image: linear-gradient(90deg, transparent 0%, rgba(120, 160, 255, .16) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: entrar .25s forwards, barrido 1.4s linear infinite, respirar 1.6s ease-in-out infinite;
+  }
+
+  .tarjeta.ok { border-color: rgba(90, 220, 140, .45); }
+  .tarjeta.ok b { color: #7de2a3; }
+  .tarjeta.mal { border-color: rgba(255, 110, 110, .5); }
+  .tarjeta.mal b { color: #ff8a8a; }
+  .tarjeta.ambar { border-color: rgba(255, 190, 70, .6); }
+  .tarjeta.ambar b { color: #ffc766; }
+
+  .permiso {
+    position: fixed;
+    left: 50%;
+    bottom: 118px;
+    transform: translateX(-50%);
+    width: min(520px, 80vw);
+    padding: 16px 20px;
+    border-radius: 14px;
+    background: rgba(40, 28, 8, .86);
+    border: 1px solid rgba(255, 190, 70, .55);
+    backdrop-filter: blur(12px);
+    color: #ffe9c2;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s;
+    z-index: 11;
+  }
+
+  .permiso.se-ve { opacity: 1; pointer-events: auto; animation: latido-caja 2.4s ease-in-out infinite; }
+
+  .permiso h4 {
+    margin: 0 0 8px;
+    font-size: 10px;
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    color: #ffc766;
+  }
+
+  .permiso ul { margin: 0 0 12px; padding-left: 18px; font-size: 13px; line-height: 1.5; }
+
+  .permiso .botones { display: flex; gap: 10px; }
+
+  .permiso button {
+    flex: 1;
+    padding: 9px 0;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 190, 70, .6);
+    background: rgba(255, 190, 70, .12);
+    color: #ffe9c2;
+    font: inherit;
+    font-size: 13px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .permiso button.si {
+    background: rgba(120, 220, 150, .18);
+    border-color: rgba(120, 220, 150, .6);
+    color: #d9ffe6;
+  }
+
+  .permiso button:hover { filter: brightness(1.25); }
+
+  .destello { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
+
+  .destello.exito {
+    background: radial-gradient(ellipse at 50% 50%, rgba(90, 230, 150, .55), transparent 65%);
+    animation: destello 1.1s ease-out forwards;
+  }
+
+  .destello.error {
+    background: radial-gradient(ellipse at 50% 50%, rgba(255, 90, 90, .55), transparent 65%);
+    animation: destello 1.1s ease-out forwards;
+  }
 </style>
 
 <canvas id="lienzo"></canvas>
@@ -166,6 +355,21 @@
 <div class="oido" id="oido"></div>
 
 <div class="panel" id="panel"></div>
+
+<div class="reticula"></div>
+
+<div class="tarjetas" id="tarjetas"></div>
+
+<div class="permiso" id="permiso">
+  <h4>Pide permiso</h4>
+  <ul id="permiso-lista"></ul>
+  <div class="botones">
+    <button class="si" id="permiso-si">S&iacute;, hazlo</button>
+    <button id="permiso-no">No</button>
+  </div>
+</div>
+
+<div class="destello" id="destello"></div>
 
 <div class="pie" id="pie">espacio &middot; hablar &nbsp;&nbsp; raton</div>
 
@@ -631,6 +835,17 @@ const estado = {
   guion: [],
   empezo: 0,
   hasta: 0,
+  // Fase 4: si esta esperando un permiso (ambar), y el tinte del rostro.
+  pidiendo: false,
+  tinte: { r: 255, g: 255, b: 255, k: 0 },
+  objetivoTinte: { r: 255, g: 255, b: 255, k: 0 },
+};
+
+// Los colores de cada fase. Se aplican multiplicando sobre lo dibujado:
+// trabajando tira a cian, pidiendo permiso a ambar; el resto, sin tinte.
+const TINTES = {
+  trabajando: { r: 110, g: 225, b: 255, k: 0.45 },
+  pidiendo: { r: 255, g: 185, b: 60, k: 0.75 },
 };
 
 window.addEventListener("pointermove", function (e) {
@@ -647,26 +862,194 @@ const arquitecto = {
     estado.hasta = estado.empezo + duracion;
     estado.guion = guion(texto || "", duracion);
 
+    document.body.classList.remove("trabajando");
     rotulo.textContent = "hablando";
   },
 
   escuchar: function () {
     estado.modo = "escuchando";
-    rotulo.textContent = "escuchando";
+    document.body.classList.remove("trabajando");
+    rotulo.textContent = estado.pidiendo ? "esperando tu permiso" : "escuchando";
   },
 
   pensar: function () {
     estado.modo = "pensando";
     estado.guion = [];
+    document.body.classList.remove("trabajando");
     rotulo.textContent = "pensando";
+    limpiarTarjetas();
   },
 
   reposo: function () {
     estado.modo = "reposo";
     estado.guion = [];
-    rotulo.textContent = "en reposo";
+    document.body.classList.remove("trabajando");
+    rotulo.textContent = estado.pidiendo ? "esperando tu permiso" : "en reposo";
   },
+
+  // Fase 4: con las manos en el repositorio. La cara se concentra —se
+  // deshace a medias, cejas bajas— y la reticula gira alrededor.
+  trabajar: function () {
+    estado.modo = "trabajando";
+    estado.guion = [];
+    document.body.classList.add("trabajando");
+    rotulo.textContent = "trabajando";
+  },
+
+  // Fase 4: quiso escribir y no tenia permiso. Ambar, y dos botones. Se
+  // contesta con la voz («si», «no») o pulsando.
+  permiso: function (lista) {
+    estado.pidiendo = true;
+    document.body.classList.add("pidiendo");
+
+    const ul = document.getElementById("permiso-lista");
+
+    ul.innerHTML = (lista || [])
+      .map(function (l) { return "<li>" + escapar(l) + "</li>"; })
+      .join("");
+
+    document.getElementById("permiso").classList.add("se-ve");
+  },
+
+  permisoResuelto: function (aprobado) {
+    estado.pidiendo = false;
+    document.body.classList.remove("pidiendo");
+    document.getElementById("permiso").classList.remove("se-ve");
+
+    if (aprobado) arquitecto.exito(); else arquitecto.reposo();
+  },
+
+  // Fase 4: un destello verde o rojo, y a lo que toque.
+  exito: function () { destellar("exito"); },
+
+  error: function () { destellar("error"); },
 };
+
+function destellar(clase) {
+  const capa = document.getElementById("destello");
+
+  capa.className = "destello";
+  void capa.offsetWidth;                       // reinicia la animacion
+  capa.classList.add(clase);
+
+  rotulo.textContent = clase === "exito" ? "hecho" : "fallo";
+}
+
+// --- Las tarjetas de lo que va haciendo ------------------------------------
+
+const MAXIMO_TARJETAS = 6;
+
+function limpiarTarjetas() {
+  document.getElementById("tarjetas").innerHTML = "";
+}
+
+function tarjeta(clase, titulo, cuerpo, detalle) {
+  const caja = document.getElementById("tarjetas");
+  const div = document.createElement("div");
+
+  div.className = "tarjeta " + clase;
+  div.innerHTML = "<b>" + escapar(titulo) + "</b>" + escapar(cuerpo || "") +
+                  (detalle ? "<small>" + escapar(detalle) + "</small>" : "");
+  div.dataset.titulo = titulo;
+
+  caja.appendChild(div);
+
+  while (caja.children.length > MAXIMO_TARJETAS) caja.removeChild(caja.firstChild);
+
+  return div;
+}
+
+function atenderAviso(a) {
+  if (a.tipo === "fase") {
+    if (a.fase === "trabajando") arquitecto.trabajar();
+    else if (a.fase === "error") arquitecto.error();
+    else if (a.fase === "listo" && estado.modo === "trabajando") arquitecto.exito();
+
+    return;
+  }
+
+  if (a.tipo === "herramienta_inicio") {
+    tarjeta("va", a.herramienta || "herramienta", a.argumentos || "");
+
+    return;
+  }
+
+  if (a.tipo === "herramienta_fin") {
+    const abiertas = document.querySelectorAll(".tarjeta.va");
+    let div = null;
+
+    for (const d of abiertas) if (d.dataset.titulo === a.herramienta) div = d;
+
+    if (!div) div = tarjeta("va", a.herramienta || "herramienta", "");
+
+    div.classList.remove("va");
+    div.classList.add(a.ok ? "ok" : "mal");
+
+    if (a.detalle) {
+      const s = document.createElement("small");
+
+      s.textContent = a.detalle;
+      div.appendChild(s);
+    }
+
+    return;
+  }
+
+  if (a.tipo === "permiso") {
+    tarjeta("ambar", "pide permiso", a.descripcion || a.herramienta || "");
+  }
+}
+
+// El servidor apunta lo que hace; esto lo va pidiendo. Es local y barato.
+let progresoDesde = 0;
+
+function vigilarProgreso() {
+  setInterval(async function () {
+    let datos;
+
+    try {
+      const r = await fetch("/progreso?desde=" + progresoDesde);
+
+      datos = await r.json();
+
+    } catch (e) {
+      return;
+    }
+
+    progresoDesde = datos.n || progresoDesde;
+
+    for (const a of datos.avisos || []) atenderAviso(a);
+  }, 500);
+}
+
+async function responderPermiso(decision) {
+  let datos;
+
+  try {
+    const r = await fetch("/permiso", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: decision }),
+    });
+
+    datos = await r.json();
+
+  } catch (e) {
+    mostrarOido("No pude hablar con el arquitecto: " + e.message, true);
+
+    return;
+  }
+
+  procesarRespuesta(datos, 700, true);
+}
+
+document.getElementById("permiso-si").addEventListener("click", function () {
+  responderPermiso("si");
+});
+
+document.getElementById("permiso-no").addEventListener("click", function () {
+  responderPermiso("no");
+});
 
 window.arquitecto = arquitecto;
 
@@ -949,7 +1332,9 @@ function conversar() {
 
     // Dos palabras minimo: un carraspeo o un "ya" suelto no es una orden.
     // Salvo su nombre, que es una sola y es llamarlo.
-    if (!interrumpe && orden.split(/\s+/).length < 2 && !esSuNombre(orden)) return;
+    // Esperando un permiso, un «si» solo es una respuesta entera.
+    if (!interrumpe && !estado.pidiendo &&
+        orden.split(/\s+/).length < 2 && !esSuNombre(orden)) return;
 
     if (!interrumpe) mostrarOido(orden, true);
 
@@ -1012,9 +1397,17 @@ async function enviarOrden(texto, interrumpe) {
     return;
   }
 
+  procesarRespuesta(datos, 700, true);
+}
+
+// Lo que se hace con una respuesta, venga de donde venga: la ventana, el
+// panel, el permiso (ambar) o su resolucion, y decirla.
+function procesarRespuesta(datos, margen, mostrar) {
   if (datos.ventana) ordenarVentana(datos.ventana);
 
   if (datos.panel) mostrarPanel(datos.panel);
+
+  if (datos.permiso_resuelto) arquitecto.permisoResuelto(datos.permiso_resuelto === "si");
 
   if (!datos.respuesta) {
     escucharDeNuevo();
@@ -1022,9 +1415,11 @@ async function enviarOrden(texto, interrumpe) {
     return;
   }
 
-  mostrarOido(datos.respuesta, true);
+  if (mostrar) mostrarOido(datos.respuesta, true);
 
-  decir(datos, 700);
+  decir(datos, margen);
+
+  if (datos.permiso && datos.permiso.length) arquitecto.permiso(datos.permiso);
 }
 
 // --- La ventana flotante -----------------------------------------------------
@@ -1372,7 +1767,7 @@ async function escucharConWhisper() {
     if (ahora - calladoDesde < SILENCIO_FINAL) return;
 
     // Se acabo la frase.
-    const suficiente = vozAcumulada >= VOZ_MINIMA;
+    const suficiente = vozAcumulada >= (estado.pidiendo ? 160 : VOZ_MINIMA);
     const trozos = grabando;
     const interrumpe = mientrasHablaba;
 
@@ -1482,22 +1877,9 @@ async function enviarAudio(audio, interrumpe) {
     }
   }
 
-  if (datos.ventana) ordenarVentana(datos.ventana);
-
-  if (datos.panel) mostrarPanel(datos.panel);
-
-  if (!datos.respuesta) {
-    // No entendio nada, o era su propio eco: se vuelve a escuchar sin
-    // decir una palabra, que es lo que haria alguien que no oyo bien y no
-    // quiere interrumpir.
-    escucharDeNuevo();
-
-    return;
-  }
-
   // Margen generoso al volver a escuchar: el servidor tiene su propio
   // guardia contra el eco, pero mas vale no darle trabajo.
-  decir(datos, 1400);
+  procesarRespuesta(datos, 1400, false);
 }
 
 const AJUSTES = window.DATOS_ARQUITECTO || {};
@@ -1512,6 +1894,8 @@ if (AJUSTES.modo === "conversacion") {
 
   if (AJUSTES.oido === "whisper") escucharConWhisper();
   else conversar();
+
+  vigilarProgreso();
 }
 
 // --- El bucle ----------------------------------------------------------------
@@ -1533,7 +1917,21 @@ function fotograma(ahora) {
   // —0.075—: costar recomponerse mas de lo que cuesta perderse se lee como
   // desgana, y lo que tiene que parecer es que vuelve porque tiene algo
   // que decir.
-  estado.objetivoDispersion = estado.modo === "pensando" ? 1 : 0;
+  estado.objetivoDispersion = estado.modo === "pensando" ? 1
+                            : estado.modo === "trabajando" ? 0.35 : 0;
+
+  // El tinte de la fase: ambar si espera permiso, cian trabajando.
+  const quiere = estado.pidiendo ? TINTES.pidiendo
+               : estado.modo === "trabajando" ? TINTES.trabajando
+               : { r: 255, g: 255, b: 255, k: 0 };
+
+  estado.tinte.k += (quiere.k - estado.tinte.k) * 0.06;
+
+  if (quiere.k > 0) {
+    estado.tinte.r += (quiere.r - estado.tinte.r) * 0.08;
+    estado.tinte.g += (quiere.g - estado.tinte.g) * 0.08;
+    estado.tinte.b += (quiere.b - estado.tinte.b) * 0.08;
+  }
 
   estado.dispersion += (estado.objetivoDispersion - estado.dispersion) *
                        (estado.objetivoDispersion > estado.dispersion ? 0.028 : 0.075);
@@ -1577,7 +1975,8 @@ function gesticular(ahora) {
     // Escuchando levanta las cejas —atencion—; pensando las baja y las
     // junta. Son dos gestos distintos y se leen sin explicarlos.
     estado.objetivoCejas = estado.modo === "escuchando" ? 0.35
-                         : estado.modo === "pensando" ? -0.30 : 0;
+                         : estado.modo === "pensando" ? -0.30
+                         : estado.modo === "trabajando" ? -0.15 : 0;
     estado.cabeceo *= 0.94;
 
     return;
@@ -1782,6 +2181,17 @@ function dibujar(reloj) {
               : PALETA[v.indice];
 
     ctx.drawImage(luz, v.px - radio * 2.2, v.py - radio * 2.2, radio * 4.4, radio * 4.4);
+  }
+
+  // El tinte de la fase, multiplicado sobre lo dibujado: sobre negro no
+  // se nota, sobre las particulas si. Es un solo rectangulo por fotograma.
+  if (estado.tinte.k > 0.01) {
+    const c = estado.tinte;
+
+    ctx.globalAlpha = Math.min(1, c.k);
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = "rgb(" + (c.r | 0) + "," + (c.g | 0) + "," + (c.b | 0) + ")";
+    ctx.fillRect(0, 0, ancho, alto);
   }
 
   ctx.globalAlpha = 1;

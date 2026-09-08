@@ -270,7 +270,9 @@ def test_cada_particula_sabe_a_donde_se_va() -> None:
 def test_pensando_se_deshace_y_contestando_se_rehace() -> None:
     pagina = rostro()
 
-    assert 'estado.modo === "pensando" ? 1 : 0' in pagina
+    assert 'estado.modo === "pensando" ? 1' in pagina
+    # Fase 4: trabajando se deshace solo a medias (concentrado, no ausente).
+    assert 'estado.modo === "trabajando" ? 0.35' in pagina
     assert "estado.dispersion" in pagina
 
 

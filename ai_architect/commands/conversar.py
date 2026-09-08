@@ -62,7 +62,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from ai_architect.commands import avatar
+from ai_architect.agente import progreso
+from ai_architect.commands import avatar, pendientes
 from ai_architect.core import perfil
 from ai_architect.core.texto import sin_adornos
 from ai_architect.voz import hablar as motor_de_voz
@@ -78,13 +79,19 @@ def run(
     si: bool = False,
     servir_para_siempre: bool = True,
     nombre: bool = True,
+    flotante: bool = False,
 ) -> dict[str, Any]:
     """Abre la cara en modo conversación y se queda escuchando.
 
     ``nombre``: si hay que llamarlo «Architect» para que atienda (lo normal), o
-    si atiende todo lo que oiga (``--sin-nombre``).
+    si atiende todo lo que oiga (``--sin-nombre``). ``flotante``: en una ventana
+    propia, sin marco y siempre encima (pywebview), en vez del navegador.
     """
     configurar_oido("nombre" if nombre else "libre")
+
+    # Lo que haga se cuenta en vivo y la página lo va pidiendo (`/progreso`).
+    progreso.suscribir(_bitacora.anotar)
+    _bitacora.limpiar()
 
     if not avatar.ROSTRO.is_file():
         return {"success": False, "error": f"no encuentro el rostro en {avatar.ROSTRO}"}
@@ -118,7 +125,15 @@ def run(
 
     pide.reiniciar_saludo()
 
-    webbrowser.open(url)
+    # La ventana flotante bloquea hasta que se cierra, así que el servidor va
+    # en un hilo. Si pywebview no está, se avisa y se abre el navegador.
+    en_ventana = flotante and avatar.hay_ventana_flotante()
+
+    if flotante and not en_ventana:
+        print(avatar.SIN_VENTANA, flush=True)
+
+    if not en_ventana:
+        webbrowser.open(url)
 
     aviso = (
         f"{perfil.encabezar()} Te escucho.\n\n"
@@ -134,7 +149,20 @@ def run(
 
     print(aviso, flush=True)
 
-    if servir_para_siempre:
+    if servir_para_siempre and en_ventana:
+        threading.Thread(target=servidor.serve_forever, daemon=True).start()
+
+        try:
+            avatar.ventana_flotante(url)
+
+        except KeyboardInterrupt:
+            pass
+
+        finally:
+            print(f"\n{perfil.despedir()}")
+            _apagar(servidor)
+
+    elif servir_para_siempre:
         try:
             servidor.serve_forever()
 
@@ -144,7 +172,190 @@ def run(
         finally:
             _apagar(servidor)
 
-    return {"success": True, "url": url, "authorised": si, "wake_word": nombre}
+    return {
+        "success": True,
+        "url": url,
+        "authorised": si,
+        "wake_word": nombre,
+        "floating": en_ventana,
+    }
+
+
+# --- Lo que va haciendo, y el permiso ---------------------------------------
+#
+# `hacer` cuenta cada herramienta y cada escritura que se le negó; la página lo
+# pide por `/progreso` y lo enseña en tarjetas. Cuando termina con cambios en
+# cola, la cara se pone en ámbar y pregunta; se contesta con la voz («sí», «no»)
+# o con los botones (`/permiso`), y los cambios se aplican o se descartan desde
+# la cola de aprobaciones de la fase 2.
+
+_bitacora = progreso.Bitacora()
+
+# Los cambios que están esperando un «sí»: id y descripción.
+_permiso_pendiente: list[dict[str, str]] = []
+
+AFIRMA = frozenset(
+    {
+        "si",
+        "si claro",
+        "claro",
+        "dale",
+        "hazlo",
+        "adelante",
+        "aprobado",
+        "aprueba",
+        "apruebalo",
+        "de acuerdo",
+        "ok",
+        "okey",
+        "vale",
+        "confirmo",
+        "procede",
+        "aplica",
+        "aplicalo",
+        "aplicalos",
+        "que si",
+        "si hazlo",
+        "si aplicalo",
+        "si adelante",
+        "si dale",
+    }
+)
+
+NIEGA = frozenset(
+    {
+        "no",
+        "que no",
+        "no lo hagas",
+        "no lo apliques",
+        "rechaza",
+        "rechazalo",
+        "rechazalos",
+        "cancela",
+        "cancelalo",
+        "dejalo",
+        "dejalo asi",
+        "nada",
+        "no gracias",
+        "mejor no",
+        "descarta",
+        "descartalo",
+        "descartalos",
+        "todavia no",
+        "aun no",
+    }
+)
+
+
+def progreso_desde(n: int) -> dict[str, Any]:
+    return _bitacora.desde(n)
+
+
+def hay_permiso_pendiente() -> bool:
+    return bool(_permiso_pendiente)
+
+
+def decidir_permiso(texto: str) -> str:
+    """``"si"``, ``"no"`` o ``""`` si eso no era una respuesta al permiso."""
+    plano = sin_adornos(texto)
+
+    if not plano:
+        return ""
+
+    if plano in AFIRMA:
+        return "si"
+
+    if plano in NIEGA:
+        return "no"
+
+    palabras = plano.split()
+
+    if len(palabras) <= 3 and palabras[0] == "si":
+        return "si"
+
+    if len(palabras) <= 3 and palabras[0] == "no":
+        return "no"
+
+    return ""
+
+
+def _anotar_permiso(resultado: dict[str, Any]) -> list[str]:
+    """Si el comando dejó cambios en cola, se recuerdan para el próximo «sí»."""
+    global _permiso_pendiente
+
+    fuente = (
+        resultado.get("result")
+        if isinstance(resultado.get("result"), dict)
+        else resultado
+    )
+    ids = list((fuente or {}).get("pending_ids") or [])
+    textos = list((fuente or {}).get("pending") or [])
+
+    if not ids:
+        return []
+
+    _permiso_pendiente = [
+        {"id": i, "descripcion": (textos[k] if k < len(textos) else i)}
+        for k, i in enumerate(ids)
+    ]
+
+    return [p["descripcion"] for p in _permiso_pendiente]
+
+
+def resolver_permiso(decision: str) -> dict[str, Any]:
+    """Aplica o descarta lo que esperaba permiso, y lo dice."""
+    global _permiso_pendiente
+
+    esperando = list(_permiso_pendiente)
+    _permiso_pendiente = []
+    trato = perfil.como_llamarte()
+
+    if not esperando:
+        respuesta = f"No tenía nada pendiente de tu permiso, {trato}."
+
+    elif decision == "si":
+        hechos = 0
+
+        for accion in esperando:
+            salida = pendientes.aprobar(accion["id"])
+
+            if salida.get("success") and all(
+                h.startswith("✓") for h in salida.get("done", [])
+            ):
+                hechos += 1
+
+        progreso.avisar("fase", fase="listo" if hechos == len(esperando) else "error")
+
+        if hechos == len(esperando):
+            respuesta = f"Listo, {trato}: apliqué {hechos} cambio(s)."
+        else:
+            respuesta = (
+                f"Apliqué {hechos} de {len(esperando)} cambio(s), {trato}; "
+                "el resto falló. Míralo con architect pendientes."
+            )
+
+    else:
+        for accion in esperando:
+            pendientes.rechazar(accion["id"])
+
+        progreso.avisar("fase", fase="descartado")
+
+        respuesta = f"Descartado, {trato}: no toqué nada."
+
+    print(f"  > (permiso: {decision})", flush=True)
+
+    preparado = motor_de_voz.preparar(respuesta)
+
+    _recordar_dicho(preparado, respuesta)
+
+    return {
+        "respuesta": respuesta,
+        "dicho": preparado.get("texto", respuesta),
+        "ms": int(float(preparado.get("segundos", 0) or 0) * 1000),
+        "instantanea": True,
+        "permiso_resuelto": decision,
+        "_audio": preparado,
+    }
 
 
 def _como_llamarlo() -> str:
@@ -610,9 +821,25 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
     if not orden:
         return {"respuesta": "No te entendí.", "dicho": "No te entendí.", "ms": 0}
 
+    # Si acaba de pedir permiso, un «sí» o un «no» es la respuesta a eso, no
+    # una orden nueva.
+    if _permiso_pendiente:
+        decision = decidir_permiso(orden)
+
+        if decision:
+            return resolver_permiso(decision)
+
     resultado = pide.run(project, frase=orden, si=si)
 
     respuesta = str(resultado.get("explanation") or resultado.get("error") or "")
+
+    permiso = _anotar_permiso(resultado)
+
+    if permiso:
+        respuesta = (
+            respuesta.rstrip()
+            + f"\n\nTengo {len(permiso)} cambio(s) esperando tu permiso. ¿Los aplico?"
+        )
 
     preparado = motor_de_voz.preparar(respuesta)
 
@@ -625,6 +852,7 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
         "panel": resultado.get("panel"),
         "ventana": resultado.get("window", ""),
         "instantanea": bool(resultado.get("instant")),
+        "permiso": permiso,
         "_audio": preparado,
     }
 
@@ -711,6 +939,29 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
+            if ruta == "/progreso":
+                desde = 0
+
+                if "?" in self.path:
+                    from urllib.parse import parse_qs
+
+                    try:
+                        desde = int(
+                            parse_qs(self.path.split("?", 1)[1]).get("desde", ["0"])[0]
+                        )
+
+                    except ValueError:
+                        desde = 0
+
+                self._responder(
+                    json.dumps(progreso_desde(desde), ensure_ascii=False).encode(
+                        "utf-8"
+                    ),
+                    "application/json; charset=utf-8",
+                )
+
+                return
+
             if ruta not in ("/", "/index.html", "/rostro.html"):
                 self.send_error(404)
 
@@ -723,6 +974,11 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
             if ruta == "/oir":
                 self._oir()
+
+                return
+
+            if ruta == "/permiso":
+                self._permiso()
 
                 return
 
@@ -762,6 +1018,34 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                 ).start()
 
             print(f"  < {_resumen(salida['respuesta'])}", flush=True)
+
+        def _permiso(self) -> None:
+            """Los botones «Sí, hazlo» / «No» de la cara."""
+            try:
+                largo = min(int(self.headers.get("Content-Length") or 0), 4096)
+
+                cuerpo = json.loads(self.rfile.read(largo) or b"{}")
+
+                decision = "si" if cuerpo.get("decision") == "si" else "no"
+
+            except (ValueError, OSError, AttributeError):
+                self.send_error(400)
+
+                return
+
+            salida = resolver_permiso(decision)
+
+            sonido = salida.pop("_audio", None)
+
+            self._responder(
+                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
+                "application/json; charset=utf-8",
+            )
+
+            if sonido:
+                threading.Thread(
+                    target=motor_de_voz.emitir, args=(sonido,), daemon=True
+                ).start()
 
         def _oir(self) -> None:
             """Audio en crudo: se transcribe aquí y se trata como una orden."""

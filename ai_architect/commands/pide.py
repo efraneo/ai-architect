@@ -499,7 +499,7 @@ def _ejecutar(
 
     comando = POR_NOMBRE[nombre]
 
-    args = _argumentos(intencion, str(repositorio))
+    args = _argumentos(intencion, str(repositorio), si=si)
 
     escribe = nombre in MODIFICAN or any(
         getattr(args, bandera, False) for bandera in BANDERAS_QUE_ESCRIBEN
