@@ -152,6 +152,13 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
     if not limpia:
         return None
 
+    # La memoria va antes y con la frase original: lo que se apunta se guarda
+    # tal como se dijo, con mayúsculas y tildes, no la versión limpia.
+    recordado = _memoria(limpia, frase)
+
+    if recordado is not None:
+        return recordado
+
     for prueba in (
         _ventana,
         _hora,
@@ -165,6 +172,59 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
 
         if salida is not None:
             return salida
+
+    return None
+
+
+# --- La memoria -------------------------------------------------------------
+
+RECUERDA = (
+    "recuerda que",
+    "recuerdame que",
+    "acuerdate de que",
+    "acuerdate que",
+    "anota que",
+    "apunta que",
+)
+QUE_SABES_DE_MI = (
+    "que sabes de mi",
+    "que recuerdas de mi",
+    "que recuerdas",
+    "que sabes sobre mi",
+    "tu memoria",
+)
+OLVIDA = ("olvida todo", "olvidalo todo", "borra tu memoria", "borra la memoria")
+
+
+def _memoria(limpia: str, original: str) -> dict[str, Any] | None:
+    """«Recuerda que…», «qué sabes de mí» y «olvida todo» se resuelven sin modelo.
+
+    Van a la memoria de hechos a largo plazo (``ai_architect.agente.memoria``): lo que se
+    dice con «recuerda que» entra como hecho de confianza y sale en los prompts siguientes.
+    """
+    from ai_architect.agente import memoria
+    from ai_architect.commands.memoria import run as memoria_run
+
+    if limpia.startswith(RECUERDA) or limpia in OLVIDA:
+        salida = memoria_run(original if limpia.startswith(RECUERDA) else limpia)
+        return {"respuesta": salida["explanation"], "panel": salida.get("panel")}
+
+    if limpia in QUE_SABES_DE_MI:
+        hechos = memoria.hechos()
+        if not hechos:
+            return {
+                "respuesta": "Todavía no sé nada de ti. Dime «recuerda que…» y lo apunto."
+            }
+        cuerpo = "\n".join(f"{i + 1}. {h.text}" for i, h in enumerate(hechos))
+        ultimos = "; ".join(h.text for h in hechos[-5:])
+        return {
+            "respuesta": f"Recuerdo {len(hechos)} cosa(s) de ti: {ultimos}.",
+            "panel": {
+                "tipo": "texto",
+                "titulo": "Memoria de Architect",
+                "cuerpo": cuerpo,
+            },
+        }
 
     return None
 

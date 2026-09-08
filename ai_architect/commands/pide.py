@@ -290,6 +290,7 @@ def run(
             dicho = experto.responder(frase, str(repositorio), engine=engine)
 
             if dicho.get("success"):
+                _aprender(frase, str(dicho.get("explanation", "")), engine)
                 return _decir_si_toca(
                     {
                         "success": True,
@@ -308,6 +309,7 @@ def run(
                 )
 
         if charla:
+            _aprender(frase, charla, engine)
             return _decir_si_toca(
                 {
                     "success": True,
@@ -425,6 +427,21 @@ def reiniciar_saludo() -> None:
     global _ya_saludo
 
     _ya_saludo = False
+
+
+def _aprender(frase: str, respuesta: str, engine: Any) -> None:
+    """Saca los hechos durables de la charla y los guarda, en segundo plano.
+
+    Solo cuando hay proveedor real (con un motor inyectado, en pruebas, no se aprende)
+    y salvo que ``ARCHITECT_MEMORIA_AUTO=0``. Nunca puede romper la respuesta.
+    """
+    try:
+        from ai_architect.agente import memoria
+
+        if memoria.auto_activa(engine):
+            memoria.aprender_de(frase, respuesta)
+    except Exception:  # noqa: BLE001 - la memoria es un extra
+        return
 
 
 def _recordado(frase: str, cuerpo: str, fuente: Any) -> str:

@@ -7,6 +7,7 @@ los decoradores solo apuntan el nombre y devuelven la clase intacta.
 
 from __future__ import annotations
 
+import builtins
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -31,7 +32,21 @@ class _Registro:
     def list(self) -> list[str]:
         return sorted(self.registrados)
 
+    def keys(self) -> builtins.list[str]:
+        return sorted(self.registrados)
+
+    def contains(self, nombre: str) -> bool:
+        return nombre in self.registrados
+
+    def register_value(self, nombre: str, valor: Any) -> None:
+        self.registrados[nombre] = valor
+
+    def create(self, nombre: str, *args: Any, **kwargs: Any) -> Any:
+        return self.registrados[nombre](*args, **kwargs)
+
 
 AgentRegistry = _Registro("agentes")
 ToolRegistry = _Registro("herramientas")
 EngineRegistry = _Registro("motores")
+FactStoreRegistry = _Registro("memoria")
+SkillRegistry = _Registro("skills")

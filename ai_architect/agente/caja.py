@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
+from typing import Any
 
 from ai_architect.agente.herramientas.escribir import FileWriteTool
 from ai_architect.agente.herramientas.git import (
@@ -52,9 +53,26 @@ class CommitConPermiso(_ConPermiso, GitCommitTool):
     pass
 
 
-def herramientas_para(repositorio: Path) -> list[BaseTool]:
+# Los clientes MCP vivos: si se recogen como basura se cierran las conexiones.
+_clientes_mcp: list[Any] = []
+
+
+def herramientas_para(
+    repositorio: Path,
+    *,
+    con_skills: bool = False,
+    con_mcp: bool = False,
+    confirmar: Any = None,
+    bus: Any = None,
+) -> list[BaseTool]:
+    """La caja base y, si se pide, las skills en carpeta y las herramientas MCP.
+
+    Las skills corren sus pasos con un ejecutor sobre la caja base, con la misma política
+    de permisos (``confirmar``). Un fallo al descubrir skills o servidores MCP no puede
+    dejar al agente sin su caja: se ignora y se sigue con lo básico.
+    """
     raiz = str(Path(repositorio).resolve())
-    return [
+    base: list[BaseTool] = [
         FileReadTool(allowed_dirs=[raiz]),
         EscribirConPermiso(allowed_dirs=[raiz]),
         ParcheConPermiso(),
@@ -64,6 +82,34 @@ def herramientas_para(repositorio: Path) -> list[BaseTool]:
         GitLogTool(),
         CommitConPermiso(),
     ]
+    if not con_skills and not con_mcp:
+        return base
+
+    extra: list[BaseTool] = []
+    if con_skills:
+        try:
+            from ai_architect.agente import skills
+            from ai_architect.agente.herramientas_base import ToolExecutor
+
+            ejecutor = ToolExecutor(
+                base,
+                bus,
+                interactive=True,
+                confirm_callback=confirmar or (lambda _m: False),
+            )
+            extra.extend(skills.herramientas_skills(Path(raiz), ejecutor, bus))
+        except Exception:  # noqa: BLE001 - sin skills se sigue igual
+            pass
+    if con_mcp:
+        try:
+            from ai_architect.agente import mcp
+
+            remotas, clientes = mcp.herramientas_mcp()
+            _clientes_mcp.extend(clientes)
+            extra.extend(remotas)
+        except Exception:  # noqa: BLE001 - sin MCP se sigue igual
+            pass
+    return base + extra
 
 
 def nombres(herramientas: list[BaseTool]) -> list[str]:

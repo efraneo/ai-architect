@@ -37,8 +37,12 @@ from ai_architect.commands import (
     execute,
     hacer,
     improve,
+    mcp,
+    memoria,
+    pendientes,
     pide,
     review,
+    skills,
     tareas,
     voz,
 )
@@ -187,6 +191,44 @@ COMANDOS: tuple[Comando, ...] = (
             cara=a.cara,
         ),
         requiere=(("instruction", "qué quieres que haga"),),
+    ),
+    Comando(
+        "memoria",
+        'Lo que Architect recuerda de ti (--frase "recuerda que…" / "olvida todo")',
+        lambda a: memoria.run(" ".join(a.frase or [])),
+        elegible=False,
+    ),
+    Comando(
+        "skills",
+        "Listar las skills (recetas en carpeta) del proyecto y las tuyas",
+        lambda a: skills.run(a.project),
+        elegible=False,
+    ),
+    Comando(
+        "mcp",
+        "Listar los servidores MCP configurados y sus herramientas",
+        lambda a: mcp.run(),
+        elegible=False,
+    ),
+    Comando(
+        "pendientes",
+        "Los cambios que Architect quiso hacer y esperan tu permiso",
+        lambda a: pendientes.run("listar"),
+        elegible=False,
+    ),
+    Comando(
+        "aprobar",
+        "Ejecutar un cambio pendiente (--frase <id> o --frase todo)",
+        lambda a: pendientes.run("aprobar", " ".join(a.frase or [])),
+        requiere=(("frase", "aprobar requires --frase <id|todo>"),),
+        elegible=False,
+    ),
+    Comando(
+        "rechazar",
+        "Descartar un cambio pendiente (--frase <id>)",
+        lambda a: pendientes.run("rechazar", " ".join(a.frase or [])),
+        requiere=(("frase", "rechazar requires --frase <id>"),),
+        elegible=False,
     ),
 )
 

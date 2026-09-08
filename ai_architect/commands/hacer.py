@@ -19,6 +19,11 @@ Dos reglas, las mismas de siempre:
    parche en su informe. Cada intento de escribir se le niega y se le pide que proponga.
 2. **Con ``--si`` escribe, pero deja rastro.** Cada herramienta que modifica algo queda en la
    bitácora de la respuesta, y las pruebas se corren después de cada cambio.
+
+Y una tercera, de la fase 2: **lo que se le niega no se pierde.** Cada escritura que intentó
+sin ``--si`` queda en la cola de aprobaciones (``architect pendientes``) con sus argumentos
+exactos, para autorizarla después desde la consola, el rostro o el celular
+(``architect aprobar --frase <id>`` o ``todo``).
 """
 
 from __future__ import annotations
@@ -26,11 +31,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ai_architect.agente import caja
+from ai_architect.agente import caja, memoria
 from ai_architect.agente.agente_base import AgentContext
 from ai_architect.agente.eventos import Event, EventBus, EventType
 from ai_architect.agente.guion import prompt_sistema
 from ai_architect.agente.motor import InferenceEngine, MotorArquitecto
+from ai_architect.commands import pendientes
 from ai_architect.core import perfil
 
 MAX_TURNOS = 24
@@ -58,9 +64,30 @@ def run(
         return _error("No dijiste qué quieres que haga.")
 
     motor = motor or MotorArquitecto(engine)
-    herramientas = caja.herramientas_para(repositorio)
     bitacora: list[dict[str, Any]] = []
     bus = bus or EventBus()
+
+    def confirmar(
+        mensaje: str,
+    ) -> bool:  # noqa: ARG001 - la política es la de la sesión, no la del mensaje
+        return si
+
+    herramientas = caja.herramientas_para(
+        repositorio, con_skills=True, con_mcp=True, confirmar=confirmar, bus=bus
+    )
+
+    # Lo que quiso escribir sin permiso va a la cola, con sus argumentos exactos.
+    encoladas: list[str] = []
+
+    def antes(nombre: str, argumentos: dict[str, Any]) -> bool:
+        if si or nombre not in caja.ESCRIBEN:
+            return True
+        try:
+            accion = pendientes.encolar(repositorio, nombre, argumentos, frase)
+            encoladas.append(f"{accion.id[:8]} · {accion.description}")
+        except Exception:  # noqa: BLE001 - la cola es un extra; la negativa se mantiene
+            pass
+        return False
 
     def anotar(evento: Event) -> None:
         datos = evento.data
@@ -78,11 +105,6 @@ def run(
     except Exception:  # noqa: BLE001 - sin bitácora fina se sigue igual
         pass
 
-    def confirmar(
-        mensaje: str,
-    ) -> bool:  # noqa: ARG001 - la política es la de la sesión, no la del mensaje
-        return si
-
     from ai_architect.agente.orquestador import OrchestratorAgent
 
     modo = (
@@ -97,10 +119,13 @@ def run(
         bus=bus,
         max_turns=MAX_TURNOS,
         mode=modo,
-        system_prompt=prompt_sistema(repositorio, perfil.como_llamarte(), si),
+        system_prompt=prompt_sistema(
+            repositorio, perfil.como_llamarte(), si, _memoria_segura()
+        ),
         parallel_tools=False,
         interactive=True,
         confirm_callback=confirmar,
+        before_tool_call=antes,
     )
 
     try:
@@ -118,6 +143,12 @@ def run(
     ).strip() or "Terminé, pero no tengo nada que contar."
     if not si and any(n in caja.ESCRIBEN for n in usadas):
         informe += "\n\n(No modifiqué nada: sin --si solo examino y propongo.)"
+    if encoladas:
+        informe += (
+            f"\n\nDejé {len(encoladas)} cambio(s) en la cola de aprobaciones:\n- "
+            + "\n- ".join(encoladas)
+            + "\n\nPara aplicarlos: architect aprobar --frase todo (o el id de uno)."
+        )
 
     respuesta: dict[str, Any] = {
         "success": True,
@@ -125,6 +156,7 @@ def run(
         "command": "hacer",
         "turns": resultado.turns,
         "tools": usadas,
+        "pending": encoladas,
         "written": informe,
         "explanation": informe,
         "panel": {
@@ -138,6 +170,13 @@ def run(
 
         return _decir_si_toca(respuesta, decir, cara)
     return respuesta
+
+
+def _memoria_segura() -> str:
+    try:
+        return memoria.para_prompt()
+    except Exception:  # noqa: BLE001 - sin memoria se trabaja igual
+        return ""
 
 
 def _cuerpo_bitacora(resultados: list[Any], informe: str) -> str:

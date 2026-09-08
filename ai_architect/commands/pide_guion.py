@@ -9,6 +9,7 @@ from datetime import datetime
 
 INSTRUCCIONES = """Eres el arquitecto de QUANT AI Architect. Hablas con
 {trato}, que es quien te da las órdenes.
+{memoria}
 
 Te llega una frase en español, y puede ser una de dos cosas:
 

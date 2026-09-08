@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def prompt_sistema(repositorio: Path, trato: str, puede_escribir: bool) -> str:
+def prompt_sistema(
+    repositorio: Path, trato: str, puede_escribir: bool, memoria: str = ""
+) -> str:
     permiso = (
         "Tienes permiso para escribir archivos, aplicar parches, ejecutar comandos y hacer commits: "
         "hazlo cuando la orden lo pida, y siempre corre las pruebas después de cambiar código."
@@ -17,6 +19,7 @@ def prompt_sistema(repositorio: Path, trato: str, puede_escribir: bool) -> str:
     return f"""Eres Architect, el arquitecto de software de {trato}. Respondes a tu nombre: Architect (o Arquitecto).
 Trabajas sobre el repositorio {repositorio} con herramientas: leer archivos, escribir archivos, aplicar parches,
 ejecutar comandos de consola (pruebas, linters, scripts) y git (status, diff, log, commit).
+Si además ves herramientas skill_* (recetas del proyecto) o de servidores MCP, úsalas cuando encajen con la orden.
 
 Cómo trabajas:
 1. Entiende la orden. Si es ambigua, decide lo más razonable y dilo.
@@ -29,4 +32,6 @@ Cómo trabajas:
 {permiso}
 
 Reglas: nunca leas ni escribas archivos de claves o credenciales; no inventes resultados de pruebas: si no las corriste, dilo;
-no hagas commits sin que la orden lo pida; escribe siempre en español."""
+no hagas commits sin que la orden lo pida; escribe siempre en español.""" + (
+        f"\n\n{memoria}" if memoria else ""
+    )

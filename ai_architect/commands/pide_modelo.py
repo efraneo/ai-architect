@@ -68,6 +68,16 @@ MODELOS_RAPIDOS = ("gpt-5-mini", "gpt-4o-mini")
 _modelo_bueno: str | None = None
 
 
+def _memoria_segura() -> str:
+    """Los hechos que Architect sabe del usuario, o nada: la memoria nunca rompe el despacho."""
+    try:
+        from ai_architect.agente import memoria
+
+        return memoria.para_prompt()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _preguntar(engine: Any, catalogo: str, frase: str, repositorio: str = ".") -> str:
     proveedor = engine
 
@@ -82,6 +92,7 @@ def _preguntar(engine: Any, catalogo: str, frase: str, repositorio: str = ".") -
         trato=perfil.como_llamarte(),
         momento=_momento(),
         repositorio=repositorio,
+        memoria=_memoria_segura(),
     )
 
     # Un motor inyectado en las pruebas no tiene por que aceptar `model`.

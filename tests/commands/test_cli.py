@@ -51,6 +51,12 @@ def test_estan_los_comandos() -> None:
         "conversar",
         "avatar",
         "hacer",
+        "memoria",
+        "skills",
+        "mcp",
+        "pendientes",
+        "aprobar",
+        "rechazar",
     }
 
 
