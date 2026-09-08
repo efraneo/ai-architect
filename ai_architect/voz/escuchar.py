@@ -42,8 +42,9 @@ LIMITE_BYTES = 24 * 1024 * 1024
 # repositorio". Sin esto el error más común son justo los nombres de los
 # comandos, que es lo único que de verdad hay que acertar.
 CONTEXTO = (
-    "Órdenes habladas a un asistente de programación en español. "
-    "Vocabulario probable: revisa, analiza, agentes, mejora, ejecuta, "
+    "Órdenes habladas a Architect, un asistente de programación en español, "
+    "al que se llama por su nombre: Architect, Arquitecto. "
+    "Vocabulario probable: Architect, revisa, analiza, agentes, mejora, ejecuta, "
     "changelog, doctor, parche, diff, repositorio, commit, rama, pruebas, "
     "cobertura, dependencias, seguridad, secretos, complejidad, refactor, "
     "puntuación, incidencias, entorno, arquitecto, pásalo a Word, "

@@ -36,6 +36,22 @@ __all__ = [
 _MAX_HECHOS = 1000
 _ARCHIVO = "memoria.json"
 
+# Lo que se le pide al modelo al aprender solo. El de OpenJarvis estaba en inglés
+# y, en la primera prueba real, lo único que sacó fue «el usuario habla español»
+# —dos veces, en dos idiomas—. Aquí se dice qué vale y qué no.
+PROMPT_EXTRACTOR = (
+    "Extraes hechos DURABLES sobre el usuario a partir de un intercambio: nombre, "
+    "empresa, rol, proyectos en los que trabaja, herramientas y preferencias "
+    "explícitas, decisiones que pidió recordar. Responde SOLO con una lista JSON "
+    'de frases cortas en español, en tercera persona ("Trabaja en Xentris Tech"). '
+    "NO incluyas: el idioma en que habla, saludos, lo que pidió en esta orden "
+    "concreta, opiniones tuyas, ni nada que ya esté implícito en ser un "
+    "programador que usa este asistente. Si no hay nada durable, responde []."
+)
+
+# Aunque el modelo se despiste, esto no entra: no aporta nada.
+_TRIVIAL = ("español", "espanol", "spanish", "idioma", "language", "saluda", "greets")
+
 
 def ruta() -> Path:
     return get_memory_dir() / _ARCHIVO
@@ -112,11 +128,19 @@ def _extraer_y_guardar(usuario: str, asistente: str, motor: Any) -> None:
 
         motor = MotorArquitecto()
     modelo = getattr(motor, "modelo", "") or ""
-    nuevos = FactExtractor(motor, modelo).extract(usuario, asistente or "")
+    nuevos = FactExtractor(motor, modelo, system_prompt=PROMPT_EXTRACTOR).extract(
+        usuario, asistente or ""
+    )
     if not nuevos:
         return
     tienda = almacen()
     conocidos = {f.text.strip().lower() for f in tienda.list()}
-    frescos = [n for n in nuevos if n.strip() and n.strip().lower() not in conocidos]
+    frescos = [
+        n
+        for n in nuevos
+        if n.strip()
+        and n.strip().lower() not in conocidos
+        and not any(t in n.lower() for t in _TRIVIAL)
+    ]
     if frescos:
         tienda.add_many_with_trust(frescos, source="auto", trust="auto")

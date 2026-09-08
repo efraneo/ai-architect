@@ -1294,6 +1294,13 @@ function tratarInterrupcion(datos) {
 }
 
 // Su nombre, aunque llegue recortado o con muletilla.
+// Cuando algo no iba para el, decir por que: sin la pista parece sordo.
+function noEraParaMi(texto) {
+  const pista = AJUSTES.modo_oido === "nombre" ? " (di \u00abArchitect\u00bb primero)" : "";
+
+  return "<i>" + escapar(texto || "") + "</i> \u2014 no era para mi" + pista;
+}
+
 function esSuNombre(texto) {
   return /^(oye |hey |hola |ey )?ar(qu|ch|k)itec/i.test(texto.trim());
 }
@@ -1399,7 +1406,7 @@ async function enviarOrden(texto, interrumpe) {
   } else if (datos.ajeno) {
     // No era para el: alguien hablando cerca, la tele. Se vuelve a
     // escuchar sin decir nada.
-    mostrarOido("<i>" + escapar(datos.oido || texto) + "</i> — no era para mi", true);
+    mostrarOido(noEraParaMi(datos.oido || texto), true);
     escucharDeNuevo();
 
     return;
@@ -1843,7 +1850,7 @@ async function enviarAudio(audio, interrumpe) {
   // No era para el: alguien hablando cerca, la tele, el telefono. Ni se
   // ejecuta ni se contesta, y se vuelve a escuchar sin decir nada.
   if (datos.ajeno) {
-    mostrarOido("<i>" + escapar(datos.oido) + "</i> — no era para mi", true);
+    mostrarOido(noEraParaMi(datos.oido), true);
     escucharDeNuevo();
 
     return;

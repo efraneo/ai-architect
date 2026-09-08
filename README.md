@@ -360,6 +360,44 @@ architect analyze . --json | jq '.summary.average_complexity'
 
 ---
 
+## Architect, el agente
+
+Desde septiembre de 2026 el arquitecto no solo elige comandos: **trabaja**
+sobre el repositorio con herramientas (leer, escribir, parchear, consola y
+git), en varios turnos, hasta terminar y contarlo. El núcleo del agente viene
+de [OpenJarvis](https://github.com/openjarvis) (Apache-2.0; licencia en
+`ai_architect/agente/LICENCIA-OpenJarvis.txt`), fusionado en
+`ai_architect/agente/`. Responde a su nombre: **Architect**.
+
+```bash
+architect hacer "examina el módulo de pagos, corre las pruebas y corrige lo que falle"
+architect hacer "…" --si        # con permiso para escribir
+architect pendientes            # lo que quiso escribir sin permiso, esperando tu sí
+architect aprobar --frase todo  # o el id de uno; rechazar --frase <id>
+architect memoria --frase "recuerda que prefiero pytest"
+architect skills                # recetas en <repo>/.architect/skills y ~/.ai_architect/skills
+architect mcp                   # servidores MCP de ~/.ai_architect/mcp.json
+```
+
+Sin `--si`, `hacer` examina, prueba y **propone**: cada escritura que intentó
+queda en la cola de aprobaciones con sus argumentos exactos. Con la cara
+abierta, la cola se contesta de viva voz.
+
+**Hablando.** `hablar` (o `architect conversar`) abre el rostro y el
+micrófono. Se le llama por su nombre —«Architect, revisa el proyecto»— y
+después sigue oyendo 90 s sin repetirlo; `--sin-nombre` para que atienda
+todo. Se le puede cortar hablándole encima («Architect, calla»). Cuando
+`hacer` trabaja, la cara enseña una tarjeta por herramienta; si pidió
+permiso, se pone en ámbar y espera un «sí» o un «no» (o los botones).
+`--flotante` la abre en una ventana propia, sin marco y siempre encima
+(`pip install pywebview`). Lo que oye y contesta queda en
+`~/.ai_architect/conversacion.log`.
+
+**Memoria.** «Recuerda que…» guarda un hecho; «¿qué sabes de mí?» los lista;
+«olvida todo» los borra. Además aprende solo de cada charla
+(`ARCHITECT_MEMORIA_AUTO=0` lo apaga). Todo lo suyo vive en
+`~/.ai_architect` (`ARCHITECT_HOME`).
+
 ## Arquitectura
 
 Motores independientes que se coordinan entre sí:
@@ -408,8 +446,8 @@ pre-commit install
 
 | | |
 |---|---|
-| Tests | 269 |
-| Cobertura | 50 % |
+| Tests | 1 229 |
+| Cobertura | 73 % |
 | Errores de tipo | 0 |
 
 > La cobertura sigue siendo baja para un proyecto de este tamaño y es el

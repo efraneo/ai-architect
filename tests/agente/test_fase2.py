@@ -273,3 +273,18 @@ def test_con_permiso_no_encola_nada(tmp_path: Path):
     salida = hacer.run(str(tmp_path), "cambia", si=True, motor=motor)
     assert salida["executed"] and salida["pending"] == []
     assert pendientes.run("listar")["pending"] == []
+
+
+def test_lo_trivial_no_entra_en_la_memoria():
+    """En la primera prueba real solo aprendió «el usuario habla español», dos veces."""
+    motor = MotorGuionado(
+        [
+            {
+                "content": '["El usuario se comunica en español", "Trabaja en Xentris Tech"]'
+            }
+        ]
+    )
+    memoria.aprender_de("hola", "Hola.", motor, en_hilo=False)
+    assert [h.text for h in memoria.hechos()] == ["Trabaja en Xentris Tech"]
+    # y el extractor recibe el guion en español, no el de OpenJarvis
+    assert "DURABLES" in str(motor.recibido[0][0].content)

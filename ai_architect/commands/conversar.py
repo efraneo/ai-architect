@@ -73,6 +73,29 @@ from ai_architect.voz import nombre as oido_nombre
 # más de esto no es una frase, es un micro abierto en una reunión.
 LIMITE = 4000
 
+# Lo que se oye y lo que se contesta queda también en disco. La consola se
+# cierra con la ventana, y «a veces me dice que hay código mal» no se puede
+# mirar sin saber qué se dijo exactamente.
+REGISTRO = "conversacion.log"
+
+
+def ruta_registro() -> Path:
+    from ai_architect.agente.rutas_agente import get_config_dir
+
+    return get_config_dir() / REGISTRO
+
+
+def _registro(linea: str) -> None:
+    """A la consola y al registro. Nunca lanza: es un extra."""
+    print(linea, flush=True)
+
+    try:
+        with ruta_registro().open("a", encoding="utf-8") as archivo:
+            archivo.write(time.strftime("%Y-%m-%d %H:%M:%S ") + linea.strip() + "\n")
+
+    except OSError:
+        pass
+
 
 def run(
     project: str = ".",
@@ -342,7 +365,7 @@ def resolver_permiso(decision: str) -> dict[str, Any]:
 
         respuesta = f"Descartado, {trato}: no toqué nada."
 
-    print(f"  > (permiso: {decision})", flush=True)
+    _registro(f"  > (permiso: {decision})")
 
     preparado = motor_de_voz.preparar(respuesta)
 
@@ -702,14 +725,14 @@ def atender_lo_dicho(
     para_mi, orden = dirigido_a_mi(limpio)
 
     if limpio and not para_mi:
-        print(f"  · (no era para mí) {limpio}", flush=True)
+        _registro(f"  · (no era para mí) {limpio}")
 
         return {"respuesta": "", "dicho": "", "ms": 0, "ajeno": True, "oido": limpio}
 
     cortado = motor_de_voz.callar() if interrumpe else False
 
     if cortado:
-        print("  ! (interrumpido)", flush=True)
+        _registro("  ! (interrumpido)")
 
     if interrumpe and es_orden_de_parar(orden):
         _olvidar_lo_dicho()
@@ -721,7 +744,7 @@ def atender_lo_dicho(
     if nombrado and not resto:
         return {**responder_al_nombre(), "oido": limpio, "interrumpido": cortado}
 
-    print(f"  > {orden}", flush=True)
+    _registro(f"  > {orden}")
 
     return {**atender(orden, project, si), "interrumpido": cortado}
 
@@ -748,7 +771,7 @@ def atender_lo_oido(
     # voz llegando a cachos: con menos de tres palabras `es_eco` no puede
     # juzgar, así que aquí se descarta directamente.
     if interrumpe and not nombrado and len(sin_adornos(dicho).split()) < 3:
-        print(f"  ~ (eco descartado) {dicho}", flush=True)
+        _registro(f"  ~ (eco descartado) {dicho}")
 
         return {"oido": "", "respuesta": "", "ms": 0, "error": "eco"}
 
@@ -756,7 +779,7 @@ def atender_lo_oido(
         # Se oyó a sí mismo por los altavoces. Ni se ejecuta ni se
         # contesta: contestar sería empezar una conversación consigo
         # mismo que no para hasta que alguien cierre la pestaña.
-        print(f"  ~ (eco descartado) {dicho}", flush=True)
+        _registro(f"  ~ (eco descartado) {dicho}")
 
         return {"oido": "", "respuesta": "", "ms": 0, "error": "eco"}
 
@@ -765,28 +788,28 @@ def atender_lo_oido(
     para_mi, orden = dirigido_a_mi(dicho)
 
     if not para_mi:
-        print(f"  · (no era para mí) {dicho}", flush=True)
+        _registro(f"  · (no era para mí) {dicho}")
 
         return {"oido": dicho, "ajeno": True, "respuesta": "", "ms": 0}
 
     cortado = motor_de_voz.callar() if interrumpe else False
 
     if cortado:
-        print("  ! (interrumpido)", flush=True)
+        _registro("  ! (interrumpido)")
 
     if interrumpe and es_orden_de_parar(orden):
         _olvidar_lo_dicho()
 
-        print("  > (calla)", flush=True)
+        _registro("  > (calla)")
 
         return {"oido": dicho, "callado": True, "respuesta": "", "ms": 0}
 
     if nombrado and not resto:
-        print("  > (me llamó)", flush=True)
+        _registro("  > (me llamó)")
 
         return {**responder_al_nombre(), "oido": dicho, "interrumpido": cortado}
 
-    print(f"  > {orden}", flush=True)
+    _registro(f"  > {orden}")
 
     # Se contesta ya, con un resguardo, y el trabajo se hace aparte.
     # Antes esta respuesta tardaba lo que tardara el comando entero
@@ -887,7 +910,7 @@ def _trabajar(buzon: queue.Queue, dicho: str, project: str, si: bool) -> None:
         muletilla = soltar_relleno()
 
         if muletilla:
-            print(f"  · {muletilla.get('texto', '')}", flush=True)
+            _registro(f"  · {muletilla.get('texto', '')}")
 
     faena.join(ESPERA_TRABAJO)
 
@@ -1017,7 +1040,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                     target=motor_de_voz.emitir, args=(audio,), daemon=True
                 ).start()
 
-            print(f"  < {_resumen(salida['respuesta'])}", flush=True)
+            _registro(f"  < {_resumen(salida['respuesta'])}")
 
         def _permiso(self) -> None:
             """Los botones «Sí, hazlo» / «No» de la cara."""
@@ -1133,7 +1156,7 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                 "application/json; charset=utf-8",
             )
 
-            print(f"  < {_resumen(salida.get('respuesta', ''))}", flush=True)
+            _registro(f"  < {_resumen(salida.get('respuesta', ''))}")
 
             if sonido:
                 threading.Thread(
