@@ -1,6 +1,7 @@
 """El guion del despachador: las instrucciones al modelo y la fecha en español.
 
-Separado de ``pide`` para que el flujo de ``run`` se lea de una vez; ``pide`` reexporta estos nombres."""
+Separado de ``pide`` para que el flujo de ``run`` se lea de una vez; ``pide`` reexporta estos nombres.
+"""
 
 from __future__ import annotations
 

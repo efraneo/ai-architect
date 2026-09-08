@@ -17,7 +17,9 @@ def _componer(datos: dict[str, Any]) -> tuple[str, str]:
     cuerpo = {
         "tabla": _tabla,
         "grafica": _grafica,
-    }.get(tipo, _documento)(datos)
+    }.get(
+        tipo, _documento
+    )(datos)
 
     return (_pagina(str(datos.get("titulo") or "Documento"), cuerpo), ".html")
 

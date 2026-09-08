@@ -1,6 +1,7 @@
 """Cómo se cuenta el resultado de un comando: la frase que se lee y el panel que se enseña.
 
-Sin llamadas al modelo: los resultados son diccionarios conocidos. ``pide`` reexporta estos nombres."""
+Sin llamadas al modelo: los resultados son diccionarios conocidos. ``pide`` reexporta estos nombres.
+"""
 
 from __future__ import annotations
 
