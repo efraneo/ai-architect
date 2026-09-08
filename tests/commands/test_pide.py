@@ -131,7 +131,12 @@ def test_un_proveedor_caido_no_revienta(tmp_path: Path, con_perfil) -> None:
     proveedor = mock.Mock()
     proveedor.generate = mock.Mock(side_effect=RuntimeError("sin cuota"))
 
-    resultado = pide.run(str(tmp_path), "algo", engine=proveedor)
+    # Con la clave puesta: sin ella la respuesta es "me falta la clave", que es
+    # otra prueba. En el CI no hay clave y esta se rompía por eso.
+    with mock.patch(
+        "ai_architect.commands.configurar.esta_configurado", return_value=True
+    ):
+        resultado = pide.run(str(tmp_path), "algo", engine=proveedor)
 
     assert resultado["success"] is False
     assert "sin cuota" in resultado["error"]

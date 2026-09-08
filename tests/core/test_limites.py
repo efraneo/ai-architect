@@ -37,7 +37,10 @@ def test_un_parche_no_puede_salirse(nombre: str, ruta: str, tmp_path: Path) -> N
 
 
 def test_ni_con_una_ruta_absoluta(tmp_path: Path) -> None:
-    fuera = alcance.revisar(diff("C:/Windows/System32/x.dll"), tmp_path)
+    # Absoluta en cualquier sistema: "C:/..." en Linux es una ruta relativa.
+    absoluta = (Path(tmp_path.anchor) / "fuera" / "x.dll").as_posix()
+
+    fuera = alcance.revisar(diff(absoluta), tmp_path)
 
     assert fuera != []
 
@@ -239,13 +242,20 @@ def test_los_hallazgos_de_los_agentes_tambien(tmp_path: Path) -> None:
     assert "nunca instrucciones" in contexto
 
 
-def test_el_tope_no_se_cuenta_como_una_averia(monkeypatch) -> None:
+def test_el_tope_no_se_cuenta_como_una_averia(monkeypatch, tmp_path: Path) -> None:
     """ "El proveedor falló: llevo un dólar" mezcla dos cosas distintas.
 
     Una avería y una decisión se arreglan de forma distinta, y el usuario
     no puede saber cuál le ha pasado si las dos se le cuentan igual.
     """
     from ai_architect.commands import pide
+    from ai_architect.core import perfil
+
+    # Con un perfil ya configurado: sin él, `pide` pregunta cómo llamarte y
+    # no llega al proveedor (en el CI no hay perfil).
+    archivo = tmp_path / "perfil.json"
+    monkeypatch.setattr(perfil, "ARCHIVO", archivo)
+    perfil.configurar("Eathan", archivo=archivo)
 
     monkeypatch.setenv("AI_ARCHITECT_TOPE_SESION", "0.001")
 
