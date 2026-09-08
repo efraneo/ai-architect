@@ -30,7 +30,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import wave
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -142,6 +145,39 @@ def _asegurar_entorno() -> None:
     cargar_todo()
 
 
+# Motores que fallaron hace poco, y cuándo. Un motor que revienta se aparta un
+# rato y se usa el siguiente, en vez de quedarse mudo hasta reiniciar. Es la
+# «sesión de voz» de OpenJarvis: se recuerda qué funciona y qué no.
+CUARENTENA = 300.0
+
+_caidos: dict[str, float] = {}
+
+
+def descartar(motor: str) -> None:
+    """Aparta un motor que acaba de fallar durante ``CUARENTENA`` segundos."""
+    if motor:
+        _caidos[motor] = time.monotonic()
+
+
+def reanimar() -> None:
+    """Olvida los fallos: vuelven a probarse todos."""
+    _caidos.clear()
+
+
+def caido(motor: str) -> bool:
+    desde = _caidos.get(motor)
+
+    if desde is None:
+        return False
+
+    if time.monotonic() - desde > CUARENTENA:
+        _caidos.pop(motor, None)
+
+        return False
+
+    return True
+
+
 def elegir(preferido: str = "") -> str:
     """El motor que se va a usar. Vacío si no hay ninguno.
 
@@ -149,9 +185,13 @@ def elegir(preferido: str = "") -> str:
     cuesta dinero, luego el que cuesta, y de último el que suena distinto a
     lo que se quería.
     """
-    disponibles = motores()
+    disponibles = {
+        nombre: datos
+        for nombre, datos in motores().items()
+        if datos.get("disponible") and not caido(nombre)
+    }
 
-    if preferido and disponibles.get(preferido, {}).get("disponible"):
+    if preferido and preferido in disponibles:
         return preferido
 
     # Lo que eligió el usuario manda sobre el orden por defecto: escuchó las
@@ -160,11 +200,11 @@ def elegir(preferido: str = "") -> str:
 
     suya = voz_preferida()
 
-    if suya and disponibles.get(suya, {}).get("disponible"):
+    if suya and suya in disponibles:
         return suya
 
     for nombre in ("piper", "openai", "windows"):
-        if disponibles[nombre]["disponible"]:
+        if nombre in disponibles:
             return nombre
 
     return ""
@@ -194,15 +234,31 @@ def hablar(texto: str, motor: str = "") -> dict[str, Any]:
             ),
         }
 
-    try:
-        {"piper": _con_piper, "openai": _con_openai, "windows": _con_windows}[elegido](
-            limpio
-        )
+    motivo = ""
 
-    except Exception as e:  # noqa: BLE001 - sin voz se sigue trabajando
-        return {"hablado": False, "motor": elegido, "motivo": str(e)}
+    # Si el elegido revienta se aparta y se prueba el siguiente: quedarse
+    # mudo porque Piper no arrancó, teniendo OpenAI al lado, es lo que pasaba.
+    for _ in range(3):
+        try:
+            {"piper": _con_piper, "openai": _con_openai, "windows": _con_windows}[
+                elegido
+            ](limpio)
 
-    return {"hablado": True, "motor": elegido, "motivo": ""}
+        except Exception as e:  # noqa: BLE001 - sin voz se sigue trabajando
+            motivo = str(e)
+            descartar(elegido)
+            siguiente = elegir()
+
+            if not siguiente or siguiente == elegido:
+                break
+
+            elegido = siguiente
+
+            continue
+
+        return {"hablado": True, "motor": elegido, "motivo": ""}
+
+    return {"hablado": False, "motor": elegido, "motivo": motivo}
 
 
 def _para_decir(texto: str) -> str:
@@ -340,30 +396,44 @@ def preparar(texto: str, motor: str = "") -> dict[str, Any]:
     if not elegido:
         return {"archivo": None, "motor": "", "segundos": 0.0, "motivo": "sin voz"}
 
-    # Las voces de Windows hablan por SAPI directamente: no dejan archivo,
-    # así que ahí la duración sí hay que estimarla.
-    if elegido == "windows":
+    motivo = ""
+
+    for _ in range(3):
+        # Las voces de Windows hablan por SAPI directamente: no dejan archivo,
+        # así que ahí la duración sí hay que estimarla.
+        if elegido == "windows":
+            return {
+                "archivo": None,
+                "motor": elegido,
+                "segundos": _estimar(limpio),
+                "motivo": "",
+                "texto": limpio,
+            }
+
+        try:
+            archivo = {"piper": _wav_piper, "openai": _wav_openai}[elegido](limpio)
+
+        except Exception as e:  # noqa: BLE001 - se aparta y se prueba el siguiente
+            motivo = str(e)
+            descartar(elegido)
+            siguiente = elegir()
+
+            if not siguiente or siguiente == elegido:
+                break
+
+            elegido = siguiente
+
+            continue
+
         return {
-            "archivo": None,
+            "archivo": archivo,
             "motor": elegido,
-            "segundos": _estimar(limpio),
+            "segundos": duracion(archivo),
             "motivo": "",
             "texto": limpio,
         }
 
-    try:
-        archivo = {"piper": _wav_piper, "openai": _wav_openai}[elegido](limpio)
-
-    except Exception as e:  # noqa: BLE001 - sin voz se sigue trabajando
-        return {"archivo": None, "motor": elegido, "segundos": 0.0, "motivo": str(e)}
-
-    return {
-        "archivo": archivo,
-        "motor": elegido,
-        "segundos": duracion(archivo),
-        "motivo": "",
-        "texto": limpio,
-    }
+    return {"archivo": None, "motor": elegido, "segundos": 0.0, "motivo": motivo}
 
 
 def emitir(preparado: dict[str, Any]) -> bool:
@@ -465,7 +535,7 @@ def _nota_windows() -> str:
 def _con_windows(texto: str) -> None:
     escapado = texto.replace("'", "''")
 
-    _powershell(
+    orden = (
         "Add-Type -AssemblyName System.Speech; "
         "$v = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
         "$es = $v.GetInstalledVoices() | Where-Object "
@@ -473,6 +543,88 @@ def _con_windows(texto: str) -> None:
         "if ($es) { $v.SelectVoice($es.VoiceInfo.Name) }; "
         f"$v.Speak('{escapado}')"
     )
+
+    with _sonando():
+        _esperar(subprocess.Popen(["powershell", "-NoProfile", "-Command", orden]))
+
+
+# --- Cortarlo a media frase ---------------------------------------------------
+#
+# Para poder interrumpirlo hablándole encima hace falta saber si está sonando
+# y tener con qué pararlo. Windows reproduce en segundo plano y se purga;
+# lo que va por un proceso aparte (aplay, PowerShell) se mata.
+
+_hablando = threading.Event()
+_tope = threading.Event()
+_proceso: subprocess.Popen[bytes] | None = None
+
+
+def esta_hablando() -> bool:
+    return _hablando.is_set()
+
+
+def callar() -> bool:
+    """Corta lo que esté sonando. Devuelve si había algo que cortar."""
+    global _proceso
+
+    if not _hablando.is_set():
+        return False
+
+    _tope.set()
+
+    if sys.platform == "win32":
+        try:
+            import winsound
+
+            winsound.PlaySound(None, winsound.SND_PURGE)
+
+        except Exception:  # noqa: BLE001 - si no se puede purgar, se mata el proceso
+            pass
+
+    proceso = _proceso
+
+    if proceso is not None:
+        try:
+            proceso.kill()
+
+        except OSError:
+            pass
+
+    return True
+
+
+@contextmanager
+def _sonando():
+    global _proceso
+
+    _tope.clear()
+    _hablando.set()
+
+    try:
+        yield
+
+    finally:
+        _hablando.clear()
+        _proceso = None
+
+
+def _esperar(proceso: subprocess.Popen[bytes]) -> None:
+    """Espera a que termine el proceso, o a que alguien diga «calla»."""
+    global _proceso
+
+    _proceso = proceso
+    limite = time.monotonic() + TIEMPO_LIMITE
+
+    while proceso.poll() is None:
+        if _tope.wait(0.1) or time.monotonic() > limite:
+            try:
+                proceso.kill()
+                proceso.wait(timeout=2)
+
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+            break
 
 
 def _powershell(orden: str) -> str | None:
@@ -494,24 +646,32 @@ def _powershell(orden: str) -> str | None:
 
 
 def _reproducir(archivo: Path) -> None:
-    """Suena el archivo. En Windows sin abrir ninguna ventana."""
+    """Suena el archivo. En Windows sin abrir ninguna ventana, y en ambos se
+    puede cortar con ``callar()``."""
     # `sys.platform` y no `os.name`: mypy entiende el primero como guarda de
     # plataforma, y en Linux `winsound` no existe.
     if sys.platform == "win32":
         import winsound
 
-        winsound.PlaySound(str(archivo), winsound.SND_FILENAME)
+        with _sonando():
+            # En segundo plano, y se espera lo que dura: así `callar` puede
+            # purgarlo a mitad. El modo síncrono no se podía interrumpir.
+            winsound.PlaySound(str(archivo), winsound.SND_FILENAME | winsound.SND_ASYNC)
+
+            _tope.wait(timeout=max(0.1, duracion(archivo)) + 0.2)
 
         return
 
     for reproductor in ("aplay", "afplay", "paplay"):
         if shutil.which(reproductor):
-            subprocess.run(
-                [reproductor, str(archivo)],
-                capture_output=True,
-                check=False,
-                timeout=TIEMPO_LIMITE,
-            )
+            with _sonando():
+                _esperar(
+                    subprocess.Popen(
+                        [reproductor, str(archivo)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                )
 
             return
 

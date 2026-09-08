@@ -548,11 +548,18 @@ def test_la_respuesta_llega_aunque_ya_se_haya_pedido() -> None:
 
 @pytest.fixture(autouse=True)
 def conversacion_fria():
+    """Cada prueba empieza sin ventana abierta y oyéndolo todo (modo libre).
+
+    `run` deja el modo en «nombre», y sin esto las pruebas de después dependían
+    del orden en que se ejecutaran.
+    """
     conversar._ultima_vez = 0.0
+    conversar.configurar_oido("libre")
 
     yield
 
     conversar._ultima_vez = 0.0
+    conversar.configurar_oido("libre")
 
 
 @pytest.mark.parametrize(

@@ -160,7 +160,7 @@
 <canvas id="lienzo"></canvas>
 
 <div class="hud">
-  <b>ARQUITECTO</b> &nbsp;&middot;&nbsp; <span class="estado" id="estado">en reposo</span>
+  <b>ARCHITECT</b> &nbsp;&middot;&nbsp; <span class="estado" id="estado">en reposo</span>
 </div>
 
 <div class="oido" id="oido"></div>
@@ -841,6 +841,10 @@ const oido = document.getElementById("oido");
 let escuchando = null;
 let ocupado = false;
 
+// El temporizador que devuelve la escucha cuando termina de hablar. Se
+// guarda para poder cancelarlo si se le corta a media frase.
+let volverAEscuchar = null;
+
 function mostrarOido(texto, seguro) {
   if (!texto) {
     oido.classList.remove("se-ve");
@@ -850,6 +854,57 @@ function mostrarOido(texto, seguro) {
 
   oido.innerHTML = seguro ? texto : "<i>" + texto + "</i>";
   oido.classList.add("se-ve");
+}
+
+function hablando() {
+  return estado.modo === "hablando";
+}
+
+// Lo que se hace al terminar de hablar, o al cortarlo.
+function escucharDeNuevo() {
+  clearTimeout(volverAEscuchar);
+  volverAEscuchar = null;
+  ocupado = false;
+  arquitecto.escuchar();
+
+  if (escuchando) { try { escuchando.start(); } catch (e) { /* ya estaba */ } }
+}
+
+// Dice la respuesta y programa la vuelta a escuchar. `margen` son los
+// milisegundos de mas que se esperan: el reloj de aqui y el del audio
+// —que lo pone Python— no van a la par, y quedarse corto es oir el final
+// de la propia frase y contestarse solo.
+function decir(datos, margen) {
+  ocupado = true;
+  arquitecto.hablar(datos.ms || 1200, datos.dicho || datos.respuesta || "");
+
+  clearTimeout(volverAEscuchar);
+  volverAEscuchar = setTimeout(escucharDeNuevo, (datos.ms || 1200) + margen);
+}
+
+// Que hacer con lo que llego mientras el hablaba. Lo decide el servidor:
+// si era su propia voz por los altavoces la descarta; si eras tu, corta el
+// audio y te atiende. Aqui solo se sabe si aquello llego a algo.
+function tratarInterrupcion(datos) {
+  if (datos.error === "eco" || datos.ajeno) return false;
+
+  if (datos.callado) {
+    escucharDeNuevo();
+
+    return false;
+  }
+
+  // Le cortaste con una orden nueva: deja de gesticular y se pone a pensar.
+  clearTimeout(volverAEscuchar);
+  ocupado = true;
+  arquitecto.pensar();
+
+  return true;
+}
+
+// Su nombre, aunque llegue recortado o con muletilla.
+function esSuNombre(texto) {
+  return /^(oye |hey |hola |ey )?ar(qu|ch|k)itec/i.test(texto.trim());
 }
 
 function conversar() {
@@ -880,17 +935,25 @@ function conversar() {
       else suelto += e.results[i][0].transcript;
     }
 
-    if (suelto) mostrarOido(suelto, false);
+    if (suelto && !ocupado) mostrarOido(suelto, false);
 
     const orden = firme.trim();
 
-    if (!orden || ocupado) return;
+    if (!orden) return;
+
+    // Pensando no se oye: lo que llegue ahora es la orden anterior
+    // repetida o ruido. Hablando si, para poder cortarlo.
+    if (ocupado && !hablando()) return;
+
+    const interrumpe = hablando();
 
     // Dos palabras minimo: un carraspeo o un "ya" suelto no es una orden.
-    if (orden.split(/\s+/).length < 2) return;
+    // Salvo su nombre, que es una sola y es llamarlo.
+    if (!interrumpe && orden.split(/\s+/).length < 2 && !esSuNombre(orden)) return;
 
-    mostrarOido(orden, true);
-    enviarOrden(orden);
+    if (!interrumpe) mostrarOido(orden, true);
+
+    enviarOrden(orden, interrumpe);
   };
 
   escuchando.onerror = function (e) {
@@ -900,23 +963,20 @@ function conversar() {
     }
   };
 
-  // Chrome corta la escucha sola cada cierto tiempo. Sin volver a
-  // arrancarla, deja de oir a los pocos minutos y parece averiada.
+  // Chrome corta la escucha sola cada cierto tiempo, y ahora tampoco se
+  // para mientras habla —para poder cortarlo—. Siempre se vuelve a arrancar.
   escuchando.onend = function () {
-    if (ocupado) return;
-
     try { escuchando.start(); } catch (e) { /* ya estaba */ }
   };
 
   try { escuchando.start(); } catch (e) { /* ya estaba */ }
 }
 
-async function enviarOrden(texto) {
-  ocupado = true;
-
-  try { escuchando.stop(); } catch (e) { /* ya parada */ }
-
-  arquitecto.pensar();
+async function enviarOrden(texto, interrumpe) {
+  if (!interrumpe) {
+    ocupado = true;
+    arquitecto.pensar();
+  }
 
   let datos;
 
@@ -924,32 +984,47 @@ async function enviarOrden(texto) {
     const respuesta = await fetch("/orden", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texto: texto }),
+      body: JSON.stringify({ texto: texto, interrumpe: !!interrumpe }),
     });
 
     datos = await respuesta.json();
 
   } catch (e) {
-    mostrarOido("No pude hablar con el arquitecto: " + e.message, true);
-    arquitecto.reposo();
-    ocupado = false;
+    if (interrumpe) return;
 
-    try { escuchando.start(); } catch (e2) { /* ya estaba */ }
+    mostrarOido("No pude hablar con el arquitecto: " + e.message, true);
+    escucharDeNuevo();
 
     return;
   }
 
-  mostrarOido(datos.respuesta || texto, true);
+  if (interrumpe) {
+    if (!tratarInterrupcion(datos)) return;
 
-  arquitecto.hablar(datos.ms || 1200, datos.dicho || datos.respuesta || "");
+    mostrarOido(texto, true);
 
-  // No se vuelve a escuchar hasta que termina de hablar: si no, se oye a
-  // si mismo por los altavoces y se contesta solo.
-  setTimeout(function () {
-    ocupado = false;
+  } else if (datos.ajeno) {
+    // No era para el: alguien hablando cerca, la tele. Se vuelve a
+    // escuchar sin decir nada.
+    mostrarOido("<i>" + escapar(datos.oido || texto) + "</i> — no era para mi", true);
+    escucharDeNuevo();
 
-    try { escuchando.start(); } catch (e) { /* ya estaba */ }
-  }, (datos.ms || 1200) + 700);
+    return;
+  }
+
+  if (datos.ventana) ordenarVentana(datos.ventana);
+
+  if (datos.panel) mostrarPanel(datos.panel);
+
+  if (!datos.respuesta) {
+    escucharDeNuevo();
+
+    return;
+  }
+
+  mostrarOido(datos.respuesta, true);
+
+  decir(datos, 700);
 }
 
 // --- La ventana flotante -----------------------------------------------------
@@ -1115,12 +1190,62 @@ panel.addEventListener("dblclick", function () {
 // por debajo; lo tuyo, no.
 const UMBRAL_VOZ = 0.045;
 
+// Mientras el habla, sus altavoces entran por el microfono. Para cortarlo
+// hay que hablarle mas alto que eso: el doble. Lo que quede por debajo ni
+// se manda; lo que pase por encima lo juzga el servidor, que sabe que
+// acaba de decir y descarta su propio eco.
+const UMBRAL_INTERRUPCION = 0.09;
+
 // Cuanto silencio cierra la frase. Menos corta las pausas al pensar;
 // mas y hay que esperar mirando la pantalla.
 const SILENCIO_FINAL = 900;
 
 // Voz sostenida minima para que cuente como orden, y no una tos.
 const VOZ_MINIMA = 280;
+
+// Cuanto audio anterior al primer sonido se conserva. Sin esto la primera
+// palabra llegaba cortada —"arquitect"— y la palabra de activacion nunca
+// entraba entera.
+const PREVIO = 450;
+
+// A lo que se graba. Whisper trabaja a 16 kHz; mandar mas es pagar por nada.
+const HERCIOS = 16000;
+
+// Trozos de Int16 -> un WAV mono de 16 bits, que OpenAI entiende tal cual.
+function aWav(trozos) {
+  let total = 0;
+
+  for (const t of trozos) total += t.length;
+
+  const buffer = new ArrayBuffer(44 + total * 2);
+  const vista = new DataView(buffer);
+
+  const texto = function (pos, s) {
+    for (let i = 0; i < s.length; i++) vista.setUint8(pos + i, s.charCodeAt(i));
+  };
+
+  texto(0, "RIFF");
+  vista.setUint32(4, 36 + total * 2, true);
+  texto(8, "WAVE");
+  texto(12, "fmt ");
+  vista.setUint32(16, 16, true);
+  vista.setUint16(20, 1, true);
+  vista.setUint16(22, 1, true);
+  vista.setUint32(24, HERCIOS, true);
+  vista.setUint32(28, HERCIOS * 2, true);
+  vista.setUint16(32, 2, true);
+  vista.setUint16(34, 16, true);
+  texto(36, "data");
+  vista.setUint32(40, total * 2, true);
+
+  let pos = 44;
+
+  for (const t of trozos) {
+    for (let i = 0; i < t.length; i++, pos += 2) vista.setInt16(pos, t[i], true);
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
 
 async function escucharConWhisper() {
   let flujo;
@@ -1146,15 +1271,74 @@ async function escucharConWhisper() {
 
   const muestras = new Float32Array(medidor.fftSize);
 
-  let grabadora = null;
-  let trozos = [];
+  // Grabadora propia, en PCM crudo. MediaRecorder no vale para guardar lo
+  // de antes de que empieces a hablar: sus trozos solo se entienden a
+  // partir del primero, asi que no se puede empezar "medio segundo atras".
+  const paso = sonido.sampleRate / HERCIOS;
+  const previos = [];            // lo ultimo oido, por si empieza una frase
+  let previosMuestras = 0;
+  let grabando = null;           // los trozos de la frase en curso
+  let mientrasHablaba = false;   // si la frase empezo con el hablando
+
+  const captura = sonido.createScriptProcessor(4096, 1, 1);
+
+  captura.onaudioprocess = function (e) {
+    const entrada = e.inputBuffer.getChannelData(0);
+    const salida = new Int16Array(Math.floor(entrada.length / paso));
+
+    for (let i = 0; i < salida.length; i++) {
+      // Promedio del tramo, no una muestra suelta: decimar sin promediar
+      // mete ruido.
+      const desde = Math.floor(i * paso);
+      const hasta = Math.max(desde + 1, Math.floor((i + 1) * paso));
+
+      let s = 0;
+
+      for (let j = desde; j < hasta; j++) s += entrada[j];
+
+      const v = Math.max(-1, Math.min(1, s / (hasta - desde)));
+
+      salida[i] = v < 0 ? v * 0x8000 : v * 0x7FFF;
+    }
+
+    if (grabando) {
+      grabando.push(salida);
+
+      return;
+    }
+
+    previos.push(salida);
+    previosMuestras += salida.length;
+
+    while (previosMuestras > HERCIOS * PREVIO / 1000 && previos.length > 1) {
+      previosMuestras -= previos.shift().length;
+    }
+  };
+
+  // El procesador solo corre conectado a la salida; se conecta en silencio
+  // para no oirte a ti mismo por los altavoces.
+  const mudo = sonido.createGain();
+
+  mudo.gain.value = 0;
+  fuente.connect(captura);
+  captura.connect(mudo);
+  mudo.connect(sonido.destination);
+
   let vozAcumulada = 0;
   let calladoDesde = 0;
 
   arquitecto.escuchar();
 
   setInterval(function () {
-    if (ocupado) return;
+    // Pensando o esperando la respuesta no se oye: lo que llegue es ruido.
+    // Hablando si, para poder cortarlo.
+    if (ocupado && !hablando()) {
+      grabando = null;
+      vozAcumulada = 0;
+      calladoDesde = 0;
+
+      return;
+    }
 
     medidor.getFloatTimeDomainData(muestras);
 
@@ -1164,26 +1348,24 @@ async function escucharConWhisper() {
 
     const volumen = Math.sqrt(suma / muestras.length);
     const ahora = performance.now();
+    const umbral = hablando() ? UMBRAL_INTERRUPCION : UMBRAL_VOZ;
 
-    if (volumen > UMBRAL_VOZ) {
+    if (volumen > umbral) {
       calladoDesde = 0;
       vozAcumulada += 60;
 
-      if (!grabadora) {
-        trozos = [];
+      if (!grabando) {
+        // Se empieza con lo que ya estaba sonando: la primera silaba entera.
+        grabando = previos.splice(0);
+        previosMuestras = 0;
         vozAcumulada = 60;
-
-        grabadora = new MediaRecorder(flujo);
-        grabadora.ondataavailable = function (e) {
-          if (e.data.size) trozos.push(e.data);
-        };
-        grabadora.start(200);
+        mientrasHablaba = hablando();
       }
 
       return;
     }
 
-    if (!grabadora) return;
+    if (!grabando) return;
 
     if (!calladoDesde) calladoDesde = ahora;
 
@@ -1191,27 +1373,25 @@ async function escucharConWhisper() {
 
     // Se acabo la frase.
     const suficiente = vozAcumulada >= VOZ_MINIMA;
-    const cerrando = grabadora;
+    const trozos = grabando;
+    const interrumpe = mientrasHablaba;
 
-    grabadora = null;
+    grabando = null;
     calladoDesde = 0;
     vozAcumulada = 0;
 
-    cerrando.onstop = function () {
-      if (!suficiente || !trozos.length) return;      // una tos, un golpe
+    if (!suficiente || !trozos.length) return;      // una tos, un golpe
 
-      enviarAudio(new Blob(trozos, { type: "audio/webm" }));
-    };
-
-    cerrando.stop();
+    enviarAudio(aWav(trozos), interrumpe);
   }, 60);
 }
 
-async function enviarAudio(audio) {
-  ocupado = true;
-
-  arquitecto.pensar();
-  mostrarOido("...", false);
+async function enviarAudio(audio, interrumpe) {
+  if (!interrumpe) {
+    ocupado = true;
+    arquitecto.pensar();
+    mostrarOido("...", false);
+  }
 
   let datos;
 
@@ -1219,11 +1399,14 @@ async function enviarAudio(audio) {
     const respuesta = await fetch("/oir", {
       method: "POST",
       headers: {
-        "Content-Type": "audio/webm",
+        "Content-Type": "audio/wav",
         // Quien manda es la ultima pestana que se abrio. Con dos abiertas
         // habia dos micros encendidos: mientras una hablaba, la otra la
         // oia por los altavoces y la devolvia como si fuera una orden.
         "X-Turno": AJUSTES.turno || "",
+        // Si llego mientras el hablaba: el servidor decide si era su eco
+        // o si eras tu cortandolo.
+        "X-Interrumpe": interrumpe ? "1" : "0",
       },
       body: audio,
     });
@@ -1231,9 +1414,10 @@ async function enviarAudio(audio) {
     datos = await respuesta.json();
 
   } catch (e) {
+    if (interrumpe) return;
+
     mostrarOido("No pude hablar con el arquitecto: " + e.message, true);
-    arquitecto.escuchar();
-    ocupado = false;
+    escucharDeNuevo();
 
     return;
   }
@@ -1241,29 +1425,32 @@ async function enviarAudio(audio) {
   if (datos.detener) {
     // Se abrio la cara en otra pestana. Esta se calla en vez de pelearse
     // por el microfono, y lo dice para que no parezca averiada.
+    clearTimeout(volverAEscuchar);
+    ocupado = true;
     rotulo.textContent = "en pausa";
     mostrarOido("Hay otra ventana escuchando. Cierra esta.", true);
 
     return;                                   // ocupado se queda en true
   }
 
+  if (interrumpe && !tratarInterrupcion(datos)) return;
+
   if (datos.oido) mostrarOido(datos.oido, true);
+
+  // No era para el: alguien hablando cerca, la tele, el telefono. Ni se
+  // ejecuta ni se contesta, y se vuelve a escuchar sin decir nada.
+  if (datos.ajeno) {
+    mostrarOido("<i>" + escapar(datos.oido) + "</i> — no era para mi", true);
+    escucharDeNuevo();
+
+    return;
+  }
 
   // El servidor contesta al momento con un resguardo y hace la faena
   // aparte. Antes esta peticion tardaba lo que tardara el comando —hasta
   // medio minuto con los agentes— y en todo ese rato la cara no decia ni
   // hacia nada. Ahora se sabe enseguida que se te oyo, y la respuesta se
   // recoge cuando esta.
-  // No era para el: alguien hablando cerca, la tele, el telefono. Ni se
-  // ejecuta ni se contesta, y se vuelve a escuchar sin decir nada.
-  if (datos.ajeno) {
-    mostrarOido("<i>" + escapar(datos.oido) + "</i> — no era para mi", true);
-    arquitecto.escuchar();
-    ocupado = false;
-
-    return;
-  }
-
   if (datos.resguardo) {
     // Con tope. Una espera sin limite es como se quedo colgado: la pagina
     // pidiendo una respuesta que ya no iba a llegar, y sin forma de salir
@@ -1286,8 +1473,7 @@ async function enviarAudio(audio) {
         true
       );
 
-      arquitecto.escuchar();
-      ocupado = false;
+      escucharDeNuevo();
 
       return;
 
@@ -1301,29 +1487,29 @@ async function enviarAudio(audio) {
   if (datos.panel) mostrarPanel(datos.panel);
 
   if (!datos.respuesta) {
-    // No entendio nada: se vuelve a escuchar sin decir una palabra, que
-    // es lo que haria alguien que no oyo bien y no quiere interrumpir.
-    arquitecto.escuchar();
-    ocupado = false;
+    // No entendio nada, o era su propio eco: se vuelve a escuchar sin
+    // decir una palabra, que es lo que haria alguien que no oyo bien y no
+    // quiere interrumpir.
+    escucharDeNuevo();
 
     return;
   }
 
-  arquitecto.hablar(datos.ms || 1200, datos.dicho || datos.respuesta);
-
-  // Margen generoso al volver a escuchar. El reloj de aqui y el del audio
-  // —que lo pone Python— no van a la par, y quedarse corto significa oir
-  // el final de la propia frase y contestarse solo. El servidor tiene su
-  // propio guardia contra el eco, pero mas vale no darle trabajo.
-  setTimeout(function () {
-    ocupado = false;
-    arquitecto.escuchar();
-  }, (datos.ms || 1200) + 1400);
+  // Margen generoso al volver a escuchar: el servidor tiene su propio
+  // guardia contra el eco, pero mas vale no darle trabajo.
+  decir(datos, 1400);
 }
 
 const AJUSTES = window.DATOS_ARQUITECTO || {};
 
 if (AJUSTES.modo === "conversacion") {
+  if (AJUSTES.modo_oido === "nombre") {
+    mostrarOido(
+      "Di \u00abArchitect\u00bb y lo que quieras. Si habla, c\u00f3rtalo habl\u00e1ndole encima.",
+      true
+    );
+  }
+
   if (AJUSTES.oido === "whisper") escucharConWhisper();
   else conversar();
 }

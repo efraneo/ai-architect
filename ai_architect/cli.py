@@ -78,8 +78,9 @@ class Comando:
 COMANDOS: tuple[Comando, ...] = (
     Comando(
         "conversar",
-        "Hablarle por el micrófono y que conteste (--si autoriza lo que escribe)",
-        lambda a: conversar.run(a.project, si=a.si),
+        "Hablarle por el micrófono y que conteste (--si autoriza lo que escribe, "
+        "--sin-nombre para no tener que llamarlo «Architect»)",
+        lambda a: conversar.run(a.project, si=a.si, nombre=not a.sin_nombre),
         elegible=False,
     ),
     Comando(
@@ -424,6 +425,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--si",
         action="store_true",
         help="For pide/conversar: authorise the commands that modify your files",
+    )
+
+    parser.add_argument(
+        "--sin-nombre",
+        action="store_true",
+        help="For conversar: attend everything it hears, without saying 'Architect' first",
     )
 
     parser.add_argument(

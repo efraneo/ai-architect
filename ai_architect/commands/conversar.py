@@ -30,6 +30,17 @@ Sin clave se usa el reconocedor del propio Chrome: gratis, peor en español,
 y manda el audio a los servidores de Google. Se dice cuál de los dos está
 en uso al arrancar, porque no es un detalle.
 
+**Se le llama por su nombre.** «Architect, revisa el proyecto». Nombrado una
+vez, sigue oyendo ``SEGUIMIENTO`` segundos sin que se repita, y cada respuesta
+suya reabre la ventana. Con ``--sin-nombre`` atiende todo lo que oiga, como
+antes. La palabra de activación tolera recortes («arquitect») y muletillas
+(«oye Architect»); ver ``ai_architect.voz.nombre``.
+
+**Se le puede cortar.** Mientras habla, el micrófono sigue abierto. Lo que
+llega en ese rato pasa por dos filtros: si es su propia voz por los altavoces
+se descarta (``es_eco``); si eres tú, se corta el audio (``hablar.callar``) y
+se atiende lo nuevo. «Architect, calla» lo calla sin más.
+
 **Lo que toca archivos sigue pidiendo permiso.** Que una orden llegue por
 voz no la autoriza: ``pide`` responde con lo que haría y espera. Por voz
 no hay forma de teclear ``--si``, así que se arranca con ``--si`` o no se
@@ -55,6 +66,7 @@ from ai_architect.commands import avatar
 from ai_architect.core import perfil
 from ai_architect.core.texto import sin_adornos
 from ai_architect.voz import hablar as motor_de_voz
+from ai_architect.voz import nombre as oido_nombre
 
 # Lo que se espera del navegador en una sola orden. Una transcripción de
 # más de esto no es una frase, es un micro abierto en una reunión.
@@ -65,8 +77,15 @@ def run(
     project: str = ".",
     si: bool = False,
     servir_para_siempre: bool = True,
+    nombre: bool = True,
 ) -> dict[str, Any]:
-    """Abre la cara en modo conversación y se queda escuchando."""
+    """Abre la cara en modo conversación y se queda escuchando.
+
+    ``nombre``: si hay que llamarlo «Architect» para que atienda (lo normal), o
+    si atiende todo lo que oiga (``--sin-nombre``).
+    """
+    configurar_oido("nombre" if nombre else "libre")
+
     if not avatar.ROSTRO.is_file():
         return {"success": False, "error": f"no encuentro el rostro en {avatar.ROSTRO}"}
 
@@ -109,7 +128,7 @@ def run(
         f"{'' if si else ' (arranca con --si para permitirlas)'}.\n"
         f"  Te oye: {_quien_oye()}\n"
         f"  Muletillas listas: {listas} (dice algo mientras trabaja)\n\n"
-        f"  Háblale sin más: no hace falta llamarlo por su nombre.\n\n"
+        f"{_como_llamarlo()}\n\n"
         f"  Ctrl+C para terminar.\n"
     )
 
@@ -125,7 +144,22 @@ def run(
         finally:
             _apagar(servidor)
 
-    return {"success": True, "url": url, "authorised": si}
+    return {"success": True, "url": url, "authorised": si, "wake_word": nombre}
+
+
+def _como_llamarlo() -> str:
+    if _modo_oido == "nombre":
+        return (
+            "  Llámalo por su nombre: «Architect, revisa el proyecto». Después de\n"
+            f"  nombrarlo te sigue oyendo {int(SEGUIMIENTO)} s sin que lo repitas.\n"
+            "  Si está hablando y quieres cortarlo, háblale encima: «Architect, calla».\n"
+            "  (--sin-nombre para que atienda todo lo que oiga)"
+        )
+
+    return (
+        "  Háblale sin más: no hace falta llamarlo por su nombre.\n"
+        "  Si está hablando y quieres cortarlo, háblale encima."
+    )
 
 
 # Cada cuanto se mira si toca alguna. Un minuto: mas seguido es gastar
@@ -189,6 +223,8 @@ def _componer(project: str) -> str:
         # Sin clave no hay Whisper, y callarlo sería peor: se notaría que
         # entiende peor y no habría forma de saber por qué.
         "oido": "whisper" if escuchar.disponible() else "navegador",
+        "modo_oido": _modo_oido,
+        "nombre": "Architect",
     }
 
     return avatar.ROSTRO.read_text(encoding="utf-8").replace(
@@ -304,60 +340,261 @@ def soltar_relleno() -> dict[str, Any] | None:
     return elegido
 
 
-# Cómo se le llama, si es que se le llama. Ya no hace falta.
-NOMBRES = ("arquitecto", "arquitecta", "architect", "oye arquitecto")
+# Cómo se le llama. La lógica vive en ``ai_architect.voz.nombre``; aquí queda
+# el estado de la sesión: el modo y cuándo se le habló por última vez.
+NOMBRES = oido_nombre.NOMBRES
 
-# Sin uso desde que se quitó la palabra clave. Se mantiene porque la
-# conversación sigue teniendo un "hace poco que hablamos" del que dependen
-# otras cosas.
-SEGUIMIENTO = 90.0
+# Cuánto dura la ventana tras nombrarlo o tras contestar.
+SEGUIMIENTO = oido_nombre.SEGUIMIENTO
+
+# "nombre": hay que llamarlo (salvo dentro de la ventana). "libre": todo va para él.
+_modo_oido = "libre"
 
 _ultima_vez = 0.0
+
+
+def configurar_oido(modo: str) -> None:
+    """Cómo decide a quién atiende. ``"nombre"`` o ``"libre"``."""
+    global _modo_oido
+
+    if modo not in oido_nombre.MODOS:
+        raise ValueError(f"modo de oído desconocido: {modo}")
+
+    _modo_oido = modo
 
 
 def dirigido_a_mi(texto: str, ahora: float | None = None) -> tuple[bool, str]:
     """Si eso iba para él, y qué queda al quitarle el nombre.
 
-    **Antes exigía que se le llamara por su nombre, y fue un error.** El
-    registro de la primera sesión real lo enseña entero:
-
-        · (no era para mí) arquitect
-        · (no era para mí) revisa las dependencias
-        · (no era para mí) pásalo a word
-
-    Whisper transcribió "arquitect", cortado — el detector de voz recorta
-    el arranque de la frase y la palabra clave nunca llegaba entera. Y como
-    no llegó a contestar ni una vez, la ventana de conversación no se abrió
-    nunca: todo rechazado, en un círculo del que no se sale hablando.
-
-    El ruido de fondo no era el problema que parecía. Lo que de verdad se
-    colaba era su propia voz por los altavoces, y de eso ya se encarga
-    ``es_eco``, que compara con lo que acaba de decir en vez de exigir una
-    contraseña. Quien habla delante del micrófono es el usuario.
-
-    Así que ahora se acepta lo que llegue. Si viene el nombre delante, se
-    quita —"arquitecto, revisa" es "revisa"— y ya está.
+    En modo ``libre`` se acepta lo que llegue (la primera versión con palabra
+    clave falló porque el micrófono recortaba «arquitecto» a «arquitect»; de
+    la propia voz por los altavoces se encarga ``es_eco``). En modo ``nombre``
+    hay que llamarlo, con tolerancia al recorte y con ventana de seguimiento.
+    Si viene el nombre delante, se quita: «arquitecto, revisa» es «revisa».
     """
+    global _ultima_vez
+
+    decision = oido_nombre.decidir(
+        texto,
+        modo=_modo_oido,
+        ultima_vez=_ultima_vez,
+        ahora=ahora,
+        seguimiento=SEGUIMIENTO,
+    )
+
+    if decision.nombrado:
+        # Nombrarlo abre la ventana: lo que venga después ya no necesita el nombre.
+        _ultima_vez = time.monotonic() if ahora is None else ahora
+
+    return (decision.para_mi, decision.orden)
+
+
+# --- Cortarlo a media frase ---------------------------------------------------
+
+# Lo que se dice para que se calle. Solo cuenta mientras está hablando: un
+# «para» a secas en silencio sigue siendo una orden normal.
+PARAR = frozenset(
+    {
+        "calla",
+        "callate",
+        "calla ya",
+        "callate ya",
+        "para",
+        "para ya",
+        "para de hablar",
+        "deja de hablar",
+        "basta",
+        "basta ya",
+        "silencio",
+        "espera",
+        "espera un momento",
+        "un momento",
+        "stop",
+        "alto",
+        "chito",
+        "shh",
+        "ya",
+        "no sigas",
+        "cierra el pico",
+    }
+)
+
+
+def es_orden_de_parar(texto: str) -> bool:
+    plano = sin_adornos(texto)
+
+    if not plano:
+        return False
+
+    if plano in PARAR:
+        return True
+
+    palabras = plano.split()
+
+    return (
+        palabras[0] in ("calla", "callate", "basta", "silencio") and len(palabras) <= 4
+    )
+
+
+def _olvidar_lo_dicho() -> None:
+    """Lo cortaron: lo que iba a decir ya no puede volver como eco."""
+    global _ultimo_dicho
+
+    _ultimo_dicho = ""
+
+
+def _recordar_dicho(preparado: dict[str, Any], respuesta: str) -> None:
+    """Deja apuntado lo que va a decir (para el eco) y cuándo termina (ventana)."""
+    global _ultimo_dicho, _ultima_vez
+
+    _ultimo_dicho = str(preparado.get("texto", "") or respuesta)
+
+    # La cuenta empieza cuando **acaba de hablar**, no cuando prepara la
+    # respuesta. Sumarle la duración del audio es exactamente eso: si va a
+    # hablar treinta segundos, la ventana no se abre hasta el final.
+    #
+    # Sin esto, una respuesta larga se comía la ventana entera y la
+    # siguiente frase —la de verdad, la del usuario— se descartaba con un
+    # "no era para mí". Que es justo lo contrario de lo que hace falta.
+    _ultima_vez = time.monotonic() + float(preparado.get("segundos", 0) or 0)
+
+
+def responder_al_nombre() -> dict[str, Any]:
+    """«Architect» a secas: es llamarlo. Se contesta corto y se abre la ventana."""
+    dicho = f"Dime, {perfil.como_llamarte()}."
+
+    preparado = motor_de_voz.preparar(dicho)
+
+    _recordar_dicho(preparado, dicho)
+
+    return {
+        "respuesta": dicho,
+        "dicho": preparado.get("texto", dicho),
+        "ms": int(float(preparado.get("segundos", 0) or 0) * 1000),
+        "instantanea": True,
+        "_audio": preparado,
+    }
+
+
+def atender_lo_dicho(
+    texto: str, project: str, si: bool, *, interrumpe: bool = False
+) -> dict[str, Any]:
+    """La vía del reconocedor del navegador: texto ya transcrito, respuesta en la
+    misma petición. ``interrumpe`` es que llegó mientras él hablaba."""
     limpio = (texto or "").strip()
 
-    if not limpio:
-        return (False, "")
+    if interrumpe and (
+        es_eco(limpio, _ultimo_dicho) or len(sin_adornos(limpio).split()) < 2
+    ):
+        return {"respuesta": "", "dicho": "", "ms": 0, "error": "eco"}
 
-    plano = sin_adornos(limpio)
+    para_mi, orden = dirigido_a_mi(limpio)
 
-    for nombre in NOMBRES:
-        clave = sin_adornos(nombre)
+    if limpio and not para_mi:
+        print(f"  · (no era para mí) {limpio}", flush=True)
 
-        # `startswith` con el nombre entero fallaba con "arquitect": se
-        # comprueba también el nombre recortado, que es como llega cuando
-        # el micro se enciende a media palabra.
-        for variante in (clave, clave[:-1], clave[:-2]):
-            if len(variante) >= 7 and plano.startswith(variante):
-                resto = plano[len(variante) :].strip(" ,.:;")
+        return {"respuesta": "", "dicho": "", "ms": 0, "ajeno": True, "oido": limpio}
 
-                return (True, resto or limpio)
+    cortado = motor_de_voz.callar() if interrumpe else False
 
-    return (True, limpio)
+    if cortado:
+        print("  ! (interrumpido)", flush=True)
+
+    if interrumpe and es_orden_de_parar(orden):
+        _olvidar_lo_dicho()
+
+        return {"respuesta": "", "dicho": "", "ms": 0, "callado": True, "oido": limpio}
+
+    nombrado, resto = oido_nombre.separar(limpio)
+
+    if nombrado and not resto:
+        return {**responder_al_nombre(), "oido": limpio, "interrumpido": cortado}
+
+    print(f"  > {orden}", flush=True)
+
+    return {**atender(orden, project, si), "interrumpido": cortado}
+
+
+def atender_lo_oido(
+    dicho: str,
+    project: str,
+    si: bool,
+    *,
+    interrumpe: bool = False,
+    error: str = "",
+) -> dict[str, Any]:
+    """La vía de Whisper: decide qué hacer con una frase oída y, si es una
+    orden, la lanza aparte y devuelve un resguardo."""
+    if not dicho:
+        # Ni se ejecuta ni se contesta. Lo que no se entendió no se
+        # adivina, y soltar "no te entendí" a cada ruido de la
+        # habitación acabaría siendo insoportable.
+        return {"oido": "", "respuesta": "", "ms": 0, "error": error or "nada"}
+
+    nombrado, resto = oido_nombre.separar(dicho)
+
+    # Mientras habla, un trozo corto sin su nombre es casi seguro su propia
+    # voz llegando a cachos: con menos de tres palabras `es_eco` no puede
+    # juzgar, así que aquí se descarta directamente.
+    if interrumpe and not nombrado and len(sin_adornos(dicho).split()) < 3:
+        print(f"  ~ (eco descartado) {dicho}", flush=True)
+
+        return {"oido": "", "respuesta": "", "ms": 0, "error": "eco"}
+
+    if es_eco(dicho, _ultimo_dicho):
+        # Se oyó a sí mismo por los altavoces. Ni se ejecuta ni se
+        # contesta: contestar sería empezar una conversación consigo
+        # mismo que no para hasta que alguien cierre la pestaña.
+        print(f"  ~ (eco descartado) {dicho}", flush=True)
+
+        return {"oido": "", "respuesta": "", "ms": 0, "error": "eco"}
+
+    # Solo lo que va dirigido a él. Un micrófono abierto oye la tele, a
+    # quien pasa por detrás y a quien habla por teléfono al lado.
+    para_mi, orden = dirigido_a_mi(dicho)
+
+    if not para_mi:
+        print(f"  · (no era para mí) {dicho}", flush=True)
+
+        return {"oido": dicho, "ajeno": True, "respuesta": "", "ms": 0}
+
+    cortado = motor_de_voz.callar() if interrumpe else False
+
+    if cortado:
+        print("  ! (interrumpido)", flush=True)
+
+    if interrumpe and es_orden_de_parar(orden):
+        _olvidar_lo_dicho()
+
+        print("  > (calla)", flush=True)
+
+        return {"oido": dicho, "callado": True, "respuesta": "", "ms": 0}
+
+    if nombrado and not resto:
+        print("  > (me llamó)", flush=True)
+
+        return {**responder_al_nombre(), "oido": dicho, "interrumpido": cortado}
+
+    print(f"  > {orden}", flush=True)
+
+    # Se contesta ya, con un resguardo, y el trabajo se hace aparte.
+    # Antes esta respuesta tardaba lo que tardara el comando entero
+    # —hasta medio minuto con los agentes— y en todo ese rato la
+    # cara no decía ni hacía nada. Ahora la página sabe al instante
+    # que se le oyó, y va a buscar la respuesta cuando esté.
+    resguardo = secrets.token_hex(6)
+
+    buzon: queue.Queue = queue.Queue(maxsize=1)
+
+    _pendientes[resguardo] = buzon
+
+    threading.Thread(
+        target=_trabajar,
+        args=(buzon, orden, project, si),
+        daemon=True,
+    ).start()
+
+    return {"oido": orden, "resguardo": resguardo, "interrumpido": cortado}
 
 
 def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
@@ -379,18 +616,7 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
 
     preparado = motor_de_voz.preparar(respuesta)
 
-    global _ultimo_dicho, _ultima_vez
-
-    _ultimo_dicho = str(preparado.get("texto", "") or respuesta)
-
-    # La cuenta empieza cuando **acaba de hablar**, no cuando prepara la
-    # respuesta. Sumarle la duración del audio es exactamente eso: si va a
-    # hablar treinta segundos, la ventana no se abre hasta el final.
-    #
-    # Sin esto, una respuesta larga se comía la ventana entera y la
-    # siguiente frase —la de verdad, la del usuario— se descartaba con un
-    # "no era para mí". Que es justo lo contrario de lo que hace falta.
-    _ultima_vez = time.monotonic() + float(preparado.get("segundos", 0) or 0)
+    _recordar_dicho(preparado, respuesta)
 
     return {
         "respuesta": respuesta,
@@ -508,16 +734,18 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
             try:
                 largo = min(int(self.headers.get("Content-Length") or 0), LIMITE * 4)
 
-                dicho = json.loads(self.rfile.read(largo) or b"{}").get("texto", "")
+                cuerpo = json.loads(self.rfile.read(largo) or b"{}")
 
-            except (ValueError, OSError):
+                dicho = cuerpo.get("texto", "")
+
+            except (ValueError, OSError, AttributeError):
                 self.send_error(400)
 
                 return
 
-            print(f"  > {dicho}", flush=True)
-
-            salida = atender(str(dicho), project, si)
+            salida = atender_lo_dicho(
+                str(dicho), project, si, interrumpe=bool(cuerpo.get("interrumpe"))
+            )
 
             audio = salida.pop("_audio", None)
 
@@ -564,85 +792,29 @@ def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
-            oido = escuchar.transcribir(audio)
+            tipo = self.headers.get("Content-Type", "")
 
-            dicho = oido["texto"]
+            oido = escuchar.transcribir(audio, ".wav" if "wav" in tipo else ".webm")
 
-            if dicho and es_eco(dicho, _ultimo_dicho):
-                # Se oyó a sí mismo por los altavoces. Ni se ejecuta ni se
-                # contesta: contestar sería empezar una conversación consigo
-                # mismo que no para hasta que alguien cierre la pestaña.
-                print(f"  ~ (eco descartado) {dicho}", flush=True)
+            salida = atender_lo_oido(
+                oido["texto"],
+                project,
+                si,
+                interrumpe=self.headers.get("X-Interrumpe") == "1",
+                error=oido["error"],
+            )
 
-                self._responder(
-                    json.dumps(
-                        {"oido": "", "respuesta": "", "ms": 0, "error": "eco"},
-                        ensure_ascii=False,
-                    ).encode("utf-8"),
-                    "application/json; charset=utf-8",
-                )
-
-                return
-
-            if not dicho:
-                # Ni se ejecuta ni se contesta. Lo que no se entendió no se
-                # adivina, y soltar "no te entendí" a cada ruido de la
-                # habitación acabaría siendo insoportable.
-                self._responder(
-                    json.dumps(
-                        {"oido": "", "respuesta": "", "ms": 0, "error": oido["error"]},
-                        ensure_ascii=False,
-                    ).encode("utf-8"),
-                    "application/json; charset=utf-8",
-                )
-
-                return
-
-            # Solo lo que va dirigido a él. Un micrófono abierto oye la
-            # tele, a quien pasa por detrás y a quien habla por teléfono al
-            # lado, y todo eso llegaba como órdenes.
-            para_mi, orden = dirigido_a_mi(dicho)
-
-            if not para_mi:
-                print(f"  · (no era para mí) {dicho}", flush=True)
-
-                self._responder(
-                    json.dumps(
-                        {"oido": dicho, "ajeno": True, "respuesta": "", "ms": 0},
-                        ensure_ascii=False,
-                    ).encode("utf-8"),
-                    "application/json; charset=utf-8",
-                )
-
-                return
-
-            dicho = orden
-
-            print(f"  > {dicho}", flush=True)
-
-            # Se contesta ya, con un resguardo, y el trabajo se hace aparte.
-            # Antes esta respuesta tardaba lo que tardara el comando entero
-            # —hasta medio minuto con los agentes— y en todo ese rato la
-            # cara no decía ni hacía nada. Ahora la página sabe al instante
-            # que se le oyó, y va a buscar la respuesta cuando esté.
-            resguardo = secrets.token_hex(6)
-
-            buzon: queue.Queue = queue.Queue(maxsize=1)
-
-            _pendientes[resguardo] = buzon
-
-            threading.Thread(
-                target=_trabajar,
-                args=(buzon, dicho, project, si),
-                daemon=True,
-            ).start()
+            sonido = salida.pop("_audio", None)
 
             self._responder(
-                json.dumps(
-                    {"oido": dicho, "resguardo": resguardo}, ensure_ascii=False
-                ).encode("utf-8"),
+                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
                 "application/json; charset=utf-8",
             )
+
+            if sonido:
+                threading.Thread(
+                    target=motor_de_voz.emitir, args=(sonido,), daemon=True
+                ).start()
 
         def _recoger(self) -> None:
             """La respuesta, cuando esté. La página espera aquí colgada."""
