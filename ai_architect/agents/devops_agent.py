@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_agent import BaseAgent
+from .herramientas_externas import correr_json, hay
 
 
 class DevOpsAgent(BaseAgent):
@@ -59,7 +60,18 @@ class DevOpsAgent(BaseAgent):
                 }
             )
 
+        ci_github = self._ci_en_github(Path(project))
+
+        if ci_github and ci_github.get("conclusion") == "failure":
+            findings.append(
+                {
+                    "type": "ci",
+                    "issue": f"el último run de GitHub Actions falló: {ci_github.get('displayTitle', '')[:80]}",
+                }
+            )
+
         return {
+            "ci_github": ci_github,
             "agent": self.name,
             "docker": docker,
             "continuous_integration": ci,
@@ -67,6 +79,30 @@ class DevOpsAgent(BaseAgent):
             "findings": findings,
             "status": "OK",
         }
+
+    def _ci_en_github(self, raiz: Path) -> dict[str, Any] | None:
+        """El último run de GitHub Actions, si `gh` está y el repo tiene remoto."""
+        if not hay("gh"):
+            return None
+
+        datos = correr_json(
+            [
+                "gh",
+                "run",
+                "list",
+                "--limit",
+                "1",
+                "--json",
+                "conclusion,status,displayTitle,createdAt",
+            ],
+            raiz,
+            60,
+        )
+
+        if not isinstance(datos, list) or not datos:
+            return None
+
+        return dict(datos[0])
 
     def capabilities(
         self,
@@ -76,4 +112,5 @@ class DevOpsAgent(BaseAgent):
             "Docker Detection",
             "CI Detection",
             "Packaging Detection",
+            "ultimo resultado de GitHub Actions (gh)",
         ]

@@ -57,12 +57,14 @@ def test_inspecciona_el_proyecto(proyecto: Path) -> None:
     assert resultado["repository"] == str(proyecto.resolve())
 
 
-def test_reporta_los_once_agentes_estaticos(proyecto: Path) -> None:
+def test_reporta_los_trece_agentes_estaticos(proyecto: Path) -> None:
     assert agents.run(str(proyecto))["agents"] == [
         "architecture",
         "bugs",
+        "calidad",
         "dependencies",
         "devops",
+        "empaquetado",
         "git",
         "licenses",
         "metrics",

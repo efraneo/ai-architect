@@ -62,10 +62,35 @@ class ReleaseAgent(BaseAgent):
                 }
             )
 
+        # La versión declarada y si el changelog habla de ella.
+        declarada = _version_declarada(root)
+
+        if declarada and changelog:
+            for nombre in self.CHANGELOGS:
+                archivo = root / nombre
+
+                if archivo.exists():
+                    try:
+                        texto = archivo.read_text(encoding="utf-8", errors="replace")
+
+                    except OSError:
+                        texto = ""
+
+                    if declarada not in texto:
+                        findings.append(
+                            {
+                                "type": "changelog_atrasado",
+                                "issue": f"el CHANGELOG no menciona la versión {declarada}",
+                            }
+                        )
+
+                    break
+
         return {
             "agent": self.name,
             "changelog": changelog,
             "version": version,
+            "version_declarada": declarada,
             "release_ready": not findings,
             "findings": findings,
             "status": "OK",
@@ -80,3 +105,28 @@ class ReleaseAgent(BaseAgent):
             "Version Detection",
             "Release Readiness",
         ]
+
+
+def _version_declarada(root: Path) -> str:
+    import re
+
+    for nombre in ("pyproject.toml", "VERSION", "VERSION.txt"):
+        archivo = root / nombre
+
+        if not archivo.exists():
+            continue
+
+        try:
+            texto = archivo.read_text(encoding="utf-8", errors="replace")
+
+        except OSError:
+            continue
+
+        if nombre == "pyproject.toml":
+            m = re.search(r'^version\s*=\s*"([^"]+)"', texto, re.M)
+
+            return m.group(1) if m else ""
+
+        return texto.strip().splitlines()[0].strip() if texto.strip() else ""
+
+    return ""

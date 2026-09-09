@@ -69,3 +69,32 @@ def _pide_sin_estado_de_otra_prueba():
     yield
 
     pide.conciso(False)
+
+
+@pytest.fixture(autouse=True)
+def _agentes_sin_herramientas_externas(monkeypatch: pytest.MonkeyPatch):
+    """Dentro de la batería ningún agente corre pip, pytest, gh, ruff o mypy de
+    verdad: tardan, dependen de la máquina y una prueba que lanza pytest dentro
+    de pytest se muerde la cola. Cada módulo de agente ve las herramientas
+    externas como ausentes; la prueba que necesite una, la dobla encima."""
+    import importlib
+    import pkgutil
+
+    from ai_architect import agents
+
+    dobles = {
+        "correr": lambda orden, cwd, timeout=120: (-1, "", "no disponible en pruebas"),
+        "correr_json": lambda orden, cwd, timeout=120: None,
+        "hay": lambda programa: False,
+        "modulo_disponible": lambda raiz, modulo: False,
+    }
+
+    for info in pkgutil.iter_modules(agents.__path__):
+        if info.name == "herramientas_externas":
+            continue
+
+        modulo = importlib.import_module(f"ai_architect.agents.{info.name}")
+
+        for nombre, doble in dobles.items():
+            if hasattr(modulo, nombre):
+                monkeypatch.setattr(modulo, nombre, doble)

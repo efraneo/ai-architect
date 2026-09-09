@@ -97,6 +97,13 @@ def herramientas_para(
         # Procurarse lo que falte (paquetes, skills) pide permiso.
         InstalarTool(requisitos=str(Path(raiz) / "requirements.txt")),
     ]
+    # El equipo de agentes: Architect reparte, ellos analizan con sus herramientas.
+    try:
+        from ai_architect.agente.herramientas.equipo import herramientas_del_equipo
+
+        base.extend(herramientas_del_equipo(raiz))
+    except Exception:  # noqa: BLE001 - sin equipo se sigue con lo básico
+        pass
     # Los canales configurados (celular, correo, WhatsApp) entran como herramientas.
     try:
         from ai_architect.agente.herramientas.canales import herramientas_de_canales

@@ -4,10 +4,40 @@ from pathlib import Path
 from typing import Any
 
 from .base_agent import BaseAgent
+from .herramientas_externas import correr_json, python_de
 
 
 class DependencyAgent(BaseAgent):
     name = "Dependency Agent"
+
+    def _desactualizados(self, raiz: Path) -> list[dict[str, Any]]:
+        """``pip list --outdated`` en el intérprete del proyecto (los diez primeros)."""
+        datos = correr_json(
+            [
+                python_de(raiz),
+                "-m",
+                "pip",
+                "list",
+                "--outdated",
+                "--format",
+                "json",
+                "--disable-pip-version-check",
+            ],
+            raiz,
+            90,
+        )
+
+        if not isinstance(datos, list):
+            return []
+
+        return [
+            {
+                "type": "desactualizado",
+                "issue": f"{d.get('name')} {d.get('version')} → hay {d.get('latest_version')}",
+            }
+            for d in datos[:10]
+            if isinstance(d, dict)
+        ]
 
     def capabilities(self) -> list[str]:
         """Lo que sabe hacer, dicho para que el director reparta solo.
@@ -21,6 +51,7 @@ class DependencyAgent(BaseAgent):
             "librerias y versiones",
             "vulnerabilidades conocidas de los paquetes",
             "licencias",
+            "paquetes desactualizados (pip list --outdated)",
         ]
 
     DEPENDENCY_FILES = [
@@ -90,9 +121,13 @@ class DependencyAgent(BaseAgent):
             "vulnerabilities": vulnerabilidades["vulnerables"],
             "vulnerability_detail": vulnerabilidades.get("detalle", []),
             "vulnerability_note": vulnerabilidades["nota"],
+            "desactualizados": self._desactualizados(project_path),
             "findings": [
-                f"{v['paquete']} {v['version']}: {', '.join(v['fallos'][:3])}"
-                for v in vulnerabilidades["vulnerables"]
+                *self._desactualizados(project_path),
+                *(
+                    f"{v['paquete']} {v['version']}: {', '.join(v['fallos'][:3])}"
+                    for v in vulnerabilidades["vulnerables"]
+                ),
             ],
             "status": "OK" if dependency_files else "NOT_FOUND",
         }

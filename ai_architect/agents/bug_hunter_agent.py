@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_agent import BaseAgent
+from .herramientas_externas import correr_json, modulo_disponible, python_de
 from .scope import archivos_py
 
 # It matched substrings on the whole lowercased file, so ``"pass"`` fired on
@@ -90,6 +91,7 @@ class BugHunterAgent(BaseAgent):
             "agent": self.name,
             "findings": findings,
             "total": len(findings),
+            "ruff": self._con_ruff(Path(project), findings),
             "status": "OK",
         }
 
@@ -144,6 +146,42 @@ class BugHunterAgent(BaseAgent):
 
         return encontrados
 
+    def _con_ruff(self, raiz: Path, findings: list[dict[str, Any]]) -> dict[str, Any]:
+        """Los errores de verdad que ruff sabe ver: nombres sin definir, imports sin
+        usar, comparaciones imposibles, bugbear. Sin ruff, nada."""
+        if not modulo_disponible(raiz, "ruff"):
+            return {"disponible": False}
+
+        avisos = correr_json(
+            [
+                python_de(raiz),
+                "-m",
+                "ruff",
+                "check",
+                "--select",
+                "F,B,PLE",
+                "--output-format",
+                "json",
+                ".",
+            ],
+            raiz,
+        )
+
+        if not isinstance(avisos, list):
+            return {"disponible": True, "avisos": 0}
+
+        for aviso in avisos[:30]:
+            findings.append(
+                {
+                    "type": f"ruff {aviso.get('code', '')}",
+                    "file": str(aviso.get("filename", "")),
+                    "line": (aviso.get("location") or {}).get("row"),
+                    "issue": str(aviso.get("message", ""))[:140],
+                }
+            )
+
+        return {"disponible": True, "avisos": len(avisos)}
+
     def capabilities(
         self,
     ) -> list[str]:
@@ -153,4 +191,5 @@ class BugHunterAgent(BaseAgent):
             "Silent Exception Detection",
             "Pending Marker Detection",
             "Mutable Default Detection",
+            "ruff F, B y PLE (nombres sin definir, imports sin usar, bugbear)",
         ]

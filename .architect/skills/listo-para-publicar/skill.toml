@@ -1,0 +1,20 @@
+[skill]
+name = "listo-para-publicar"
+description = "Antes de empaquetar: calidad, empaquetado y publicación revisados por sus agentes."
+version = "1.0.0"
+author = "Architect"
+
+[[skill.steps]]
+tool_name = "agente_calidad"
+arguments_template = '{}'
+output_key = "calidad"
+
+[[skill.steps]]
+tool_name = "agente_empaquetado"
+arguments_template = '{}'
+output_key = "empaquetado"
+
+[[skill.steps]]
+tool_name = "agente_publicacion"
+arguments_template = '{}'
+output_key = "publicacion"

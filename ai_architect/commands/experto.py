@@ -50,6 +50,12 @@ POR_DEFECTO_PROYECTO = {
     "dependencias": "librerías, versiones, licencias, vulnerabilidades",
     "documentacion": "docstrings, README, lo que no está explicado",
     "arquitectura": "estructura, acoplamiento, módulos, complejidad",
+    "calidad": "formato, lint, tipos, docstrings, README al día",
+    "git": "estado del repositorio, commits sin subir, cambios de hoy",
+    "devops": "Docker, CI, GitHub Actions, empaquetado",
+    "publicacion": "changelog, versión, listo para publicar",
+    "voz": "oído, voces, ventana, canales, Word, averías pendientes",
+    "empaquetado": "versión coherente, spec, instalador al día",
 }
 
 

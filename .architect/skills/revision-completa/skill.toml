@@ -1,0 +1,15 @@
+[skill]
+name = "revision-completa"
+description = "Corre a todo el equipo de agentes y después la suite de pruebas; resume qué hay que arreglar."
+version = "1.0.0"
+author = "Architect"
+
+[[skill.steps]]
+tool_name = "equipo"
+arguments_template = '{}'
+output_key = "equipo"
+
+[[skill.steps]]
+tool_name = "shell_exec"
+arguments_template = '{"command": "python -m pytest -q -x -p no:cacheprovider"}'
+output_key = "pruebas"

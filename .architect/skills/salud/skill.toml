@@ -1,0 +1,15 @@
+[skill]
+name = "salud"
+description = "Estado de Architect: voz, canales, Word, memoria y averías pendientes, más git."
+version = "1.0.0"
+author = "Architect"
+
+[[skill.steps]]
+tool_name = "agente_voz"
+arguments_template = '{}'
+output_key = "voz"
+
+[[skill.steps]]
+tool_name = "agente_git"
+arguments_template = '{}'
+output_key = "git"

@@ -60,6 +60,8 @@ def test_estan_los_once_agentes_estaticos(
         "performance",
         "devops",
         "release",
+        "calidad",
+        "empaquetado",
     }
 
 
@@ -311,7 +313,7 @@ def test_el_veredicto_resume_la_inspeccion(
     """Una lista de hallazgos no es una conclusión."""
     veredicto = manager.veredicto(manager.inspect(str(proyecto)))
 
-    assert veredicto["total_agents"] == 11
+    assert veredicto["total_agents"] == 13
     assert veredicto["approved"] is True
 
 

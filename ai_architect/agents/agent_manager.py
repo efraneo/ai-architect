@@ -12,10 +12,12 @@ from ai_architect.agents.agent_context import AgentContext
 from ai_architect.agents.architect_agent import ArchitectAgent
 from ai_architect.agents.architecture_agent import ArchitectureAgent
 from ai_architect.agents.bug_hunter_agent import BugHunterAgent
+from ai_architect.agents.calidad_agent import CalidadAgent
 from ai_architect.agents.code_reviewer_agent import CodeReviewerAgent
 from ai_architect.agents.dependency_agent import DependencyAgent
 from ai_architect.agents.devops_agent import DevOpsAgent
 from ai_architect.agents.documentation_agent import DocumentationAgent
+from ai_architect.agents.empaquetado_agent import EmpaquetadoAgent
 from ai_architect.agents.git_agent import GitAgent
 from ai_architect.agents.license_agent import LicenseAgent
 from ai_architect.agents.performance_agent import PerformanceAgent
@@ -26,6 +28,7 @@ from ai_architect.agents.scope import recorrido_compartido
 from ai_architect.agents.security_agent import SecurityAgent
 from ai_architect.agents.test_agent import TestAgent
 from ai_architect.agents.testing_agent import TestingAgent
+from ai_architect.agents.voz_agent import VozAgent
 from ai_architect.swarm.consensus_engine import ConsensusEngine
 from ai_architect.swarm.task_dispatcher import TaskDispatcher
 
@@ -57,6 +60,9 @@ class AgentManager:
         self.performance = PerformanceAgent()
         self.devops = DevOpsAgent()
         self.release = ReleaseAgent()
+        self.calidad = CalidadAgent()
+        self.voz = VozAgent()
+        self.empaquetado = EmpaquetadoAgent()
 
         # AI agents
         self.architect = ArchitectAgent()
@@ -97,6 +103,8 @@ class AgentManager:
             "performance": self.performance,
             "devops": self.devops,
             "release": self.release,
+            "calidad": self.calidad,
+            "empaquetado": self.empaquetado,
         }
 
         salida: dict[str, Any] = {}

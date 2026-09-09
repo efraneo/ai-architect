@@ -71,17 +71,52 @@ class GitAgent(BaseAgent):
             "status": "OK",
         }
 
+        findings: list[dict[str, Any]] = []
+
         # Un conflicto sin resolver no es una estadística: es algo que hay que
         # arreglar antes de que nadie genere un parche encima.
-        if estado.conflicted:
-            informe["findings"] = [
+        for ruta in estado.conflicted:
+            findings.append(
                 {
                     "type": "conflicto",
                     "file": ruta,
                     "issue": "conflicto de fusión sin resolver",
                 }
-                for ruta in estado.conflicted
-            ]
+            )
+
+        # Lo que un ingeniero mira antes de irse: qué no está subido y qué
+        # cambió hoy.
+        adelante = informe.get("ahead") or 0
+        atras = informe.get("behind") or 0
+        hoy = self._git(project_path, "log", "--since=midnight", "--format=%h %s")
+        informe["commits_hoy"] = [ln for ln in hoy.splitlines() if ln.strip()]
+
+        if isinstance(adelante, int) and adelante > 0:
+            findings.append(
+                {
+                    "type": "sin_subir",
+                    "issue": f"{adelante} commit(s) sin subir al remoto",
+                }
+            )
+
+        if isinstance(atras, int) and atras > 0:
+            findings.append(
+                {
+                    "type": "atrasado",
+                    "issue": f"el remoto tiene {atras} commit(s) que aquí no están",
+                }
+            )
+
+        if estado.total:
+            findings.append(
+                {
+                    "type": "sin_commit",
+                    "issue": f"{estado.total} archivo(s) con cambios sin commit",
+                }
+            )
+
+        if findings:
+            informe["findings"] = findings
 
         return informe
 
@@ -188,4 +223,5 @@ class GitAgent(BaseAgent):
             "Tag Detection",
             "Commit History",
             "Ahead/Behind Analysis",
+            "commits de hoy y cambios sin subir",
         ]
