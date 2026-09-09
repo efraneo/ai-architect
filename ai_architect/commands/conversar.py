@@ -132,6 +132,10 @@ def run(
 
     servidor, url = _levantar(pagina, project, si)
 
+    global _servidor_activo
+
+    _servidor_activo = servidor
+
     if servidor is None:
         return {
             "success": False,
@@ -242,6 +246,35 @@ _bitacora = progreso.Bitacora()
 
 # El hilo que atiende el celular, si lo hay (para poder pararlo).
 _celular: threading.Event | None = None
+
+# El servidor de la sesión, para poder cerrarlo por una orden de voz.
+_servidor_activo: Any = None
+
+# La última orden atendida, para «eso está mal».
+_ultima_orden = ""
+
+
+def ultimo_intercambio() -> tuple[str, str]:
+    return _ultima_orden, _ultimo_dicho
+
+
+def cerrar_sesion(retraso: float = 1.0) -> None:
+    """«Cierra Architect»: cuando termine de despedirse, se apaga todo."""
+
+    def _apagarlo() -> None:
+        try:
+            avatar.cerrar_ventana_flotante()
+
+        except Exception as _error:  # noqa: BLE001 - sin ventana, no pasa nada
+            logger.debug("se ignora: %s", _error)
+
+        servidor = _servidor_activo
+
+        if servidor is not None:
+            threading.Thread(target=servidor.shutdown, daemon=True).start()
+
+    threading.Timer(max(0.2, retraso), _apagarlo).start()
+
 
 # Los cambios que están esperando un «sí»: id y descripción.
 _permiso_pendiente: list[dict[str, str]] = []
@@ -950,6 +983,10 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
         if decision:
             return resolver_permiso(decision)
 
+    global _ultima_orden
+
+    _ultima_orden = orden
+
     resultado = pide.run(project, frase=orden, si=si)
 
     respuesta = str(resultado.get("explanation") or resultado.get("error") or "")
@@ -975,6 +1012,10 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
 
         asistente.descubrir_chat_id(avisar=decir_proactivo)
 
+    if resultado.get("cerrar"):
+        # Se apaga cuando termine de despedirse, no antes.
+        cerrar_sesion(float(preparado.get("segundos", 0) or 0) + 1.5)
+
     return {
         "respuesta": respuesta,
         "dicho": preparado.get("texto", respuesta),
@@ -984,6 +1025,8 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
         "instantanea": bool(resultado.get("instant")),
         "permiso": permiso,
         "pedir": resultado.get("pedir"),
+        "rostro": resultado.get("rostro", ""),
+        "cerrar": bool(resultado.get("cerrar")),
         "_audio": preparado,
     }
 

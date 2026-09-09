@@ -174,6 +174,9 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
 
     for prueba in (
         _ventana,
+        _cerrar,
+        _reposo,
+        _queja,
         _hora,
         _fecha,
         _divisa,
@@ -567,6 +570,101 @@ def _ventana(limpia: str, _: datetime | None) -> dict[str, Any] | None:
         return {"respuesta": "Listo.", "ventana": "reducir"}
 
     return None
+
+
+CERRARSE = (
+    "cierra architect",
+    "cierra arquitecto",
+    "cierrate",
+    "apagate",
+    "apaga architect",
+    "termina tu ejecucion",
+    "termina la ejecucion",
+    "termina",
+    "cierra",
+    "cierra la sesion",
+    "cierra el programa",
+    "adios",
+    "hasta luego",
+    "hasta manana",
+    "chao",
+    "nos vemos",
+    "buenas noches architect",
+)
+
+REPOSO = (
+    "quedate en reposo",
+    "ponte en reposo",
+    "reposo",
+    "descansa",
+    "duerme",
+    "duermete",
+    "transformate en nebulosa",
+    "vuelve a la nebulosa",
+    "hazte nebulosa",
+    "deshazte",
+)
+
+QUEJA = (
+    "eso esta mal",
+    "esta mal",
+    "no lo hiciste",
+    "no lo haces",
+    "no lo has hecho",
+    "te equivocaste",
+    "te has equivocado",
+    "no funciona",
+    "no me hiciste caso",
+    "lo hiciste mal",
+    "no era eso",
+    "eso no es lo que te pedi",
+    "no me entendiste",
+    "mal hecho",
+)
+
+
+def _cerrar(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    """«Cierra Architect» se cumple: se despide y se apaga. En la prueba real
+    contestaba «aquí sigo» y se quedaba."""
+    if limpia not in CERRARSE:
+        return None
+
+    return {"respuesta": f"Hasta luego, {perfil.como_llamarte()}.", "cerrar": True}
+
+
+def _reposo(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    if limpia not in REPOSO:
+        return None
+
+    return {"respuesta": "Descanso. Llámame cuando quieras.", "rostro": "reposo"}
+
+
+def _queja(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    """Cuando el usuario dice que lo hizo mal, se apunta como avería con la
+    última orden y la última respuesta, y queda a la espera del «adelante»."""
+    if limpia not in QUEJA:
+        return None
+
+    from ai_architect import autoreparacion
+    from ai_architect.commands import conversar
+
+    orden, dicho = conversar.ultimo_intercambio()
+
+    if not orden:
+        return {"respuesta": "Dime qué hice mal y lo apunto."}
+
+    autoreparacion.registrar(
+        "conversacion",
+        orden,
+        f"el usuario dice que la respuesta fue incorrecta. Respondí: {dicho[:300]}",
+    )
+
+    return {
+        "respuesta": (
+            f"Apuntado: a «{orden[:80]}» contesté mal. Si dices «adelante», reviso "
+            "por qué y lo corrijo; sin tu orden no lo toco."
+        )
+    }
 
 
 def _quien(limpia: str, _: datetime | None) -> dict[str, Any] | None:

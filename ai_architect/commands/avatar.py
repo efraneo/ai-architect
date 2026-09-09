@@ -159,6 +159,26 @@ def ventana_flotante(url: str, titulo: str = "Architect") -> bool:
     return True
 
 
+def cerrar_ventana_flotante() -> bool:
+    """Cierra la ventana de pywebview, si la hay. Vale desde cualquier hilo."""
+    try:
+        import webview
+
+    except ImportError:
+        return False
+
+    ventanas = list(getattr(webview, "windows", []) or [])
+
+    for ventana in ventanas:
+        try:
+            ventana.destroy()
+
+        except Exception:  # noqa: BLE001 - ya estaba cerrada
+            continue
+
+    return bool(ventanas)
+
+
 def _componer(decir: str, preparado: dict[str, Any] | None) -> str:
     """El HTML con los datos de esta sesión dentro.
 

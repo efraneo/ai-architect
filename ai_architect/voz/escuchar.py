@@ -92,6 +92,26 @@ CONTEXTO = (
 )
 
 
+def es_alucinacion(texto: str) -> bool:
+    """Si lo «oído» es en realidad el contexto que se le dio al transcriptor."""
+    from difflib import SequenceMatcher
+
+    plano = " ".join((texto or "").lower().split())
+
+    if not plano:
+        return False
+
+    if plano.startswith("órdenes habladas") or plano.startswith("ordenes habladas"):
+        return True
+
+    if "vocabulario probable" in plano:
+        return True
+
+    contexto = " ".join(CONTEXTO.lower().split())
+
+    return len(plano) > 40 and SequenceMatcher(None, plano, contexto).ratio() > 0.5
+
+
 def transcribir(datos: bytes, sufijo: str = ".webm") -> dict[str, Any]:
     """Convierte el audio en texto. Nunca lanza."""
     if not datos:
@@ -135,11 +155,16 @@ def transcribir(datos: bytes, sufijo: str = ".webm") -> dict[str, Any]:
 
             continue
 
-        return {
-            "texto": str(getattr(respuesta, "text", "") or "").strip(),
-            "modelo": modelo,
-            "error": "",
-        }
+        texto = str(getattr(respuesta, "text", "") or "").strip()
+
+        if es_alucinacion(texto):
+            # Con solo ruido, el transcriptor devuelve su propio contexto
+            # («Órdenes habladas a Architect… Vocabulario probable…») como si
+            # alguien lo hubiera dicho. En la prueba real eso llegó cinco veces
+            # seguidas y, como traía «pásalo a Word», cada vez creaba un Word.
+            return {"texto": "", "modelo": modelo, "error": "ruido"}
+
+        return {"texto": texto, "modelo": modelo, "error": ""}
 
     return {"texto": "", "modelo": "", "error": ultimo or "no pude transcribir"}
 

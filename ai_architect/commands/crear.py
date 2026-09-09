@@ -163,6 +163,16 @@ def run(peticion: str, engine: Any = None) -> dict[str, Any]:
 
     resumen = str(datos.get("resumen") or "").strip()
 
+    # «…y guárdalo en el escritorio»: ya dijo dónde, no se pregunta.
+    for nombre in DESTINOS:
+        if nombre in sin_adornos(peticion):
+            hecho = guardar_en(carpeta_de(nombre))
+
+            return {
+                **hecho,
+                "explanation": f"{resumen} " + str(hecho.get("explanation", "")),
+            }
+
     return {
         "success": True,
         "executed": True,

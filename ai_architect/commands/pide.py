@@ -59,6 +59,7 @@ from ai_architect.commands.pide_respuesta import (  # noqa: F401 - la API del m�
     panel,
 )
 from ai_architect.core import gasto, perfil
+from ai_architect.core.texto import sin_adornos
 
 
 def run(
@@ -107,6 +108,15 @@ def run(
 
     if not frase.strip():
         return _error("No dijiste qué quieres que haga.")
+
+    # Varias órdenes en una frase («guárdalo en Word y ponlo en el escritorio»,
+    # «revisa el proyecto y luego cierra la ventana») se atienden una tras otra.
+    from ai_architect.commands import ordenes
+
+    partes = ordenes.separar(frase)
+
+    if len(partes) > 1:
+        return _varias(partes, project, si, decir, cara, engine)
 
     # La primera vez no sabe a quién le habla. Se pregunta una sola vez y se
     # recuerda: preguntarlo cada sesión sería peor que no preguntarlo.
@@ -242,6 +252,8 @@ def run(
                 "pregunta_permiso": bool(rapida.get("pregunta_permiso")),
                 "pedir": rapida.get("pedir"),
                 "descubrir": rapida.get("descubrir", ""),
+                "cerrar": bool(rapida.get("cerrar")),
+                "rostro": rapida.get("rostro", ""),
                 "explanation": _con_trato(rapida["respuesta"]),
             },
             decir,
@@ -389,6 +401,62 @@ def run(
     return _ejecutar(nombre, intencion, repositorio, frase, si, decir, cara)
 
 
+def _varias(
+    partes: list[str],
+    project: str,
+    si: bool,
+    decir: bool,
+    cara: bool,
+    engine: Any,
+) -> dict[str, Any]:
+    """Cada orden por su cuenta, en orden, y una sola respuesta con todas.
+
+    Si una deja algo pendiente (dónde guardar, permiso), la siguiente puede ser
+    la respuesta: «guárdalo en Word» + «ponlo en el escritorio».
+    """
+    resultados: list[dict[str, Any]] = []
+
+    for parte in partes:
+        resultados.append(run(project, frase=parte, si=si, engine=engine))
+
+        if resultados[-1].get("cerrar"):
+            break
+
+    dichos = [
+        str(r.get("explanation") or r.get("error") or "").strip() for r in resultados
+    ]
+    ultimo = resultados[-1] if resultados else {}
+    pendientes_ = [p for r in resultados for p in (r.get("pending") or [])]
+    ids = [i for r in resultados for i in (r.get("pending_ids") or [])]
+
+    salida: dict[str, Any] = {
+        "success": all(r.get("success", False) for r in resultados),
+        "executed": any(r.get("executed", False) for r in resultados),
+        "command": "varias",
+        "parts": partes,
+        "results": resultados,
+        "explanation": "\n\n".join(d for d in dichos if d),
+        "panel": next(
+            (r.get("panel") for r in reversed(resultados) if r.get("panel")), None
+        ),
+        "window": ultimo.get("window", ""),
+        "instant": all(r.get("instant") for r in resultados),
+        "pending": pendientes_,
+        "pending_ids": ids,
+        "pregunta_permiso": any(r.get("pregunta_permiso") for r in resultados),
+        "pedir": next((r.get("pedir") for r in resultados if r.get("pedir")), None),
+        "descubrir": next(
+            (r.get("descubrir") for r in resultados if r.get("descubrir")), ""
+        ),
+        "cerrar": any(r.get("cerrar") for r in resultados),
+        "rostro": next(
+            (r.get("rostro") for r in reversed(resultados) if r.get("rostro")), ""
+        ),
+    }
+
+    return _decir_si_toca(salida, decir, cara)
+
+
 def _decir_si_toca(
     respuesta: dict[str, Any],
     decir: bool,
@@ -520,6 +588,13 @@ def _ejecutar(
     comando = POR_NOMBRE[nombre]
 
     args = _argumentos(intencion, str(repositorio), si=si)
+
+    # Para crear, si la frase dice dónde («…y guárdalo en el escritorio») la
+    # petición va entera: el modelo la resumía sin el sitio y volvía a preguntar.
+    if nombre == "crear" and any(
+        d in sin_adornos(frase) for d in ("escritorio", "documentos")
+    ):
+        args.peticion = frase
 
     escribe = nombre in MODIFICAN or any(
         getattr(args, bandera, False) for bandera in BANDERAS_QUE_ESCRIBEN

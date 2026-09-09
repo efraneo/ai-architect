@@ -1339,7 +1339,9 @@ function hablando() {
 }
 
 // Lo que se hace al terminar de hablar, o al cortarlo.
-function escucharDeNuevo() {
+let escucharDeNuevo = function () {
+  if (cerrando) return;
+
   clearTimeout(volverAEscuchar);
   volverAEscuchar = null;
   ocupado = false;
@@ -1355,7 +1357,7 @@ function escucharDeNuevo() {
   }
 
   if (escuchando) { try { escuchando.start(); } catch (e) { /* ya estaba */ } }
-}
+};
 
 // Dice la respuesta y programa la vuelta a escuchar. `margen` son los
 // milisegundos de mas que se esperan: el reloj de aqui y el del audio
@@ -1657,8 +1659,37 @@ document.getElementById("dato-valor").addEventListener("keydown", function (e) {
   if (e.key === "Enter") entregarDato();
 });
 
+// «Cierra Architect»: se deja de escuchar y, cuando termina de despedirse,
+// la pagina se cierra (el servidor se apaga solo). Si el navegador no deja
+// cerrar la pestana, queda en pausa y lo dice.
+let cerrando = false;
+
+function cerrarSesion() {
+  cerrando = true;
+  ocupado = true;
+
+  if (escuchando) { try { escuchando.stop(); escuchando.onend = null; } catch (e) { /* ya */ } }
+
+  rotulo.textContent = "cerrado";
+  mostrarOido("Sesi\u00f3n cerrada. Puedes cerrar esta ventana.", true);
+
+  setTimeout(function () { try { window.close(); } catch (e) { /* no deja */ } }, 400);
+}
+
 function procesarRespuesta(datos, margen, mostrar) {
   if (datos.pedir && datos.pedir.clave) pedirDato(datos.pedir);
+
+  if (datos.rostro === "reposo") {
+    estado.formado = false;
+    estado.ultimaInteraccion = 0;
+  }
+
+  if (datos.cerrar) {
+    // Se despide primero; al terminar el audio, se cierra en vez de escuchar.
+    const original = escucharDeNuevo;
+
+    escucharDeNuevo = function () { escucharDeNuevo = original; cerrarSesion(); };
+  }
 
   if (datos.ventana) ordenarVentana(datos.ventana);
 
