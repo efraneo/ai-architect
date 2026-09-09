@@ -720,6 +720,34 @@ def _recordar_dicho(preparado: dict[str, Any], respuesta: str) -> None:
     _ultima_vez = time.monotonic() + float(preparado.get("segundos", 0) or 0)
 
 
+def _instantanea(hecho: dict[str, Any]) -> dict[str, Any]:
+    """Una respuesta ya resuelta (dictado): se dice si hay algo que decir."""
+    respuesta = str(hecho.get("respuesta") or "")
+
+    if not respuesta:
+        # Escrito en silencio: la página vuelve a escuchar sin decir nada.
+        return {
+            "respuesta": "",
+            "dicho": "",
+            "ms": 0,
+            "instantanea": True,
+            **{k: v for k, v in hecho.items() if k != "respuesta"},
+        }
+
+    preparado = motor_de_voz.preparar(respuesta)
+
+    _recordar_dicho(preparado, respuesta)
+
+    return {
+        "respuesta": respuesta,
+        "dicho": preparado.get("texto", respuesta),
+        "ms": int(float(preparado.get("segundos", 0) or 0) * 1000),
+        "instantanea": True,
+        "dictando": hecho.get("dictando"),
+        "_audio": preparado,
+    }
+
+
 def responder_al_nombre() -> dict[str, Any]:
     """«Architect» a secas: es llamarlo. Se contesta corto y se abre la ventana."""
     dicho = f"Dime, {perfil.como_llamarte()}."
@@ -984,6 +1012,16 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
 
     if not orden:
         return {"respuesta": "No te entendí.", "dicho": "No te entendí.", "ms": 0}
+
+    # Dictando a Word, lo que se oye es texto para el documento (salvo las
+    # órdenes que no lo son: cerrar, la hora, terminar el dictado).
+    from ai_architect.commands import dictado
+
+    if dictado.activo():
+        hecho = dictado.atender(orden)
+
+        if hecho is not None:
+            return _instantanea(hecho)
 
     # Si acaba de pedir permiso, un «sí» o un «no» es la respuesta a eso, no
     # una orden nueva.

@@ -166,6 +166,12 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
     if maestra is not None:
         return maestra
 
+    # «Escribe lo siguiente en Word»: el dictado arranca con la frase original.
+    dictado_ = _dictar(limpia, frase)
+
+    if dictado_ is not None:
+        return dictado_
+
     # «Llama a Juan», «pon música», «bloquea el celular»: al teléfono, ya.
     telefono = _celular(limpia, frase)
 
@@ -727,6 +733,16 @@ def _calculo(limpia: str, _: datetime | None) -> dict[str, Any] | None:
     salida = calcular.calcular(limpia)
 
     return {"respuesta": salida["respuesta"]} if salida else None
+
+
+def _dictar(limpia: str, original: str) -> dict[str, Any] | None:
+    """«Escribe lo siguiente en Word», «te voy a dictar»: abre Word y empieza el dictado."""
+    from ai_architect.commands import dictado
+
+    if not dictado.quiere_empezar(original):
+        return None
+
+    return dictado.empezar(original)
 
 
 def _abrir(limpia: str, _: datetime | None) -> dict[str, Any] | None:

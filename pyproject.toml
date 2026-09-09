@@ -44,6 +44,8 @@ dependencies = [
     "anthropic>=0.34.0",
     "pyyaml>=6.0",
     "requests>=2.34.2",
+    # Dictar a Word y abrir programas por COM: solo en Windows.
+    "pywin32>=306; sys_platform == 'win32'",
 ]
 
 # Proveedores que no todo el mundo usa. Quien quiera Gemini o un modelo

@@ -31,3 +31,23 @@ def _casa_de_architect_aislada(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for variable in list(os.environ):
         if variable.startswith(("TELEGRAM_", "CORREO_", "WHATSAPP_")):
             monkeypatch.delenv(variable, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _sin_ventanas_ni_programas(monkeypatch: pytest.MonkeyPatch):
+    """Una prueba nunca abre el navegador, Chrome en modo aplicación, un
+    programa del PC ni Word: en la máquina de Efraín la batería dejó abiertas
+    varias ventanas de Chrome con el aviso de «línea de comandos no admitida».
+    Las pruebas que quieran comprobar esas llamadas las doblan ellas mismas."""
+    import webbrowser
+
+    from ai_architect.commands import abrir, avatar
+    from ai_architect.office import word
+
+    monkeypatch.setattr(webbrowser, "open", lambda *a, **k: True)
+    monkeypatch.setattr(avatar, "abrir_en_navegador", lambda url: "prueba")
+    monkeypatch.setattr(avatar, "ventana_flotante", lambda *a, **k: True)
+    monkeypatch.setattr(abrir, "_lanzar", lambda objetivo: None)
+    monkeypatch.setattr(
+        word, "_app", lambda: (_ for _ in ()).throw(RuntimeError("sin Word en pruebas"))
+    )
