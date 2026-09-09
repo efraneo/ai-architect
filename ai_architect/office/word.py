@@ -13,6 +13,7 @@ falta algo, cada función lo dice en vez de reventar.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,9 @@ SIGNOS = (
     ("signo de exclamacion", "!"),
     ("puntos suspensivos", "... "),
     ("punto y aparte", ".\n"),
+    ("punto y a parte", ".\n"),
+    ("punto a parte", ".\n"),
+    ("punto aparte", ".\n"),
     ("punto y seguido", ". "),
     ("punto seguido", ". "),
     ("punto y coma", "; "),
@@ -66,6 +70,9 @@ def disponible() -> bool:
         import win32com.client  # type: ignore[import-not-found]  # noqa: F401
 
     except ImportError:
+        return False
+
+    if sys.platform != "win32":
         return False
 
     try:
@@ -260,13 +267,16 @@ def deshacer(veces: int = 1) -> dict[str, Any]:
     return {"ok": True}
 
 
-def guardar(nombre: str = "", carpeta: Path | None = None) -> dict[str, Any]:
-    """Guarda el documento activo (como .docx en el escritorio si es nuevo)."""
+def guardar(
+    nombre: str = "", carpeta: Path | None = None, forzar_nombre: bool = False
+) -> dict[str, Any]:
+    """Guarda el documento activo (como .docx en el escritorio si es nuevo).
+    Sin nombre, se llama «Dictado <fecha y hora>» para no pisar otro."""
     try:
         app = _app()
         doc = app.ActiveDocument
 
-        if doc.Path and not nombre:
+        if doc.Path and not nombre and not forzar_nombre:
             doc.Save()
 
             return {"ok": True, "ruta": str(Path(doc.Path) / doc.Name)}
@@ -274,7 +284,13 @@ def guardar(nombre: str = "", carpeta: Path | None = None) -> dict[str, Any]:
         from ai_architect.commands.crear_carpetas import escritorio
 
         base = carpeta or escritorio()
-        limpio = re.sub(r"[^\w\s.-]", "", nombre or "Dictado").strip() or "Dictado"
+
+        if not nombre:
+            import time
+
+            nombre = "Dictado " + time.strftime("%Y-%m-%d %H.%M")
+
+        limpio = re.sub(r"[^\w\s.-]", "", nombre).strip() or "Dictado"
 
         if not limpio.lower().endswith(".docx"):
             limpio += ".docx"

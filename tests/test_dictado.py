@@ -44,7 +44,7 @@ def word_falso(monkeypatch):
     monkeypatch.setattr(
         word,
         "guardar",
-        lambda n="", c=None: {
+        lambda n="", c=None, forzar_nombre=False: {
             "ok": True,
             "ruta": f"C:/Escritorio/{n or 'Dictado'}.docx",
         },
@@ -174,3 +174,61 @@ def test_conversar_cierra_aunque_este_dictando(word_falso) -> None:
             salida = conversar.atender("cierra Architect", ".", si=False)
 
     assert salida["cerrar"] is True
+
+
+@pytest.mark.parametrize(
+    "dicho",
+    [
+        "Guarda el archivo de Word.",
+        "guarda el archivo",
+        "guárdalo",
+        "guarda el documento",
+        "guarda esto en documentos",
+    ],
+)
+def test_guardar_de_cualquier_forma(word_falso, dicho: str) -> None:
+    dictado.empezar()
+
+    salida = dictado.atender(dicho)
+
+    assert "Guardado" in salida["respuesta"], dicho
+    assert word_falso["escrito"] == []
+
+
+def test_guardar_con_nombre_y_sitio(word_falso, monkeypatch) -> None:
+    llamadas: list[tuple] = []
+    monkeypatch.setattr(
+        word,
+        "guardar",
+        lambda n="", c=None, forzar_nombre=False: llamadas.append((n, c, forzar_nombre))
+        or {"ok": True, "ruta": "x"},
+    )
+    dictado.empezar()
+
+    dictado.atender("guarda el archivo como carta para Ana en documentos")
+
+    assert llamadas[-1][0] == "carta para ana" and llamadas[-1][1] is not None
+
+
+@pytest.mark.parametrize(
+    "dicho",
+    ["Findel dikta.", "fin del dictao", "termina el dictado", "Deja de escribir"],
+)
+def test_terminar_aunque_llegue_mal_transcrito(word_falso, dicho: str) -> None:
+    dictado.empezar()
+
+    salida = dictado.atender(dicho)
+
+    assert salida["dictando"] is False and not dictado.activo(), dicho
+
+
+def test_una_frase_normal_no_termina(word_falso) -> None:
+    dictado.empezar()
+    dictado.atender("final de la carta")
+
+    assert dictado.activo() and word_falso["escrito"] == ["final de la carta"]
+
+
+def test_punto_a_parte() -> None:
+    assert word.puntuar("hola punto a parte adiós") == "Hola.\nAdiós"
+    assert word.puntuar("hola punto aparte adiós") == "Hola.\nAdiós"

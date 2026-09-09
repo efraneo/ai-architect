@@ -101,8 +101,18 @@ CELDA = re.compile(
     r"^(?:en la\s+)?fila\s+(?P<f>\d+)\s*,?\s*(?:y\s+)?columna\s+(?P<c>\d+)\s*,?\s*(?:escribe|pon|coloca)?\s*:?\s*(?P<t>.+)$"
 )
 GUARDAR = re.compile(
-    r"^guarda(?:lo)?(?:\s+el\s+documento)?(?:\s+(?:como|con el nombre)\s+(?P<n>.+))?$"
+    r"^(?:guarda|guardar|guardalo|guardala|salva|salvar)"
+    r"(?:\s+(?:esto|eso|todo))?"
+    r"(?:\s+(?:el|este|ese|la|esta)\s+(?:archivo|documento|texto|dictado|carta|nota))?"
+    r"(?:\s+(?:de|en)\s+word)?"
+    r"(?:\s+(?:en|al)\s+(?:el\s+|mis?\s+)?(?P<d>escritorio|documentos))?"
+    r"(?:\s+(?:como|con el nombre|con nombre|llamado|llamada)\s+(?P<n>.+?))?"
+    r"(?:\s+(?:en|al)\s+(?:el\s+|mis?\s+)?(?P<d2>escritorio|documentos))?$"
 )
+
+# Lo que se parece a «termina el dictado» aunque el transcriptor lo estropee
+# («Findel dikta», «fin del dictao»). Solo para frases cortas.
+PARECIDO_TERMINAR = 0.72
 
 _estado: dict[str, Any] = {"activo": False, "esperando_tabla": False}
 
@@ -186,7 +196,9 @@ def atender(frase: str) -> dict[str, Any] | None:
     if not plano:
         return {"respuesta": ""}
 
-    if any(plano == t or plano.startswith(t) for t in TERMINAR):
+    if any(plano == t or plano.startswith(t) for t in TERMINAR) or _suena_a_terminar(
+        plano
+    ):
         return terminar()
 
     if plano in NO_ES_TEXTO or any(
@@ -249,8 +261,17 @@ def atender(frase: str) -> dict[str, Any] | None:
     m = GUARDAR.match(plano)
 
     if m is not None:
-        nombre = m["n"] or ""
-        hecho = word.guardar(nombre)
+        nombre = (m["n"] or "").strip()
+        destino = m["d"] or m["d2"] or ""
+
+        from ai_architect.commands.crear_carpetas import documentos, escritorio
+
+        carpeta = (
+            documentos()
+            if destino == "documentos"
+            else (escritorio() if destino else None)
+        )
+        hecho = word.guardar(nombre, carpeta, forzar_nombre=bool(destino))
 
         return {
             "respuesta": (
@@ -278,6 +299,20 @@ def atender(frase: str) -> dict[str, Any] | None:
 
     # Escrito en silencio: contestar a cada frase sería insoportable.
     return {"respuesta": "", "escrito": hecho.get("escrito", "")}
+
+
+def _suena_a_terminar(plano: str) -> bool:
+    """«Findel dikta» es «fin del dictado» mal transcrito: se compara por parecido."""
+    from difflib import SequenceMatcher
+
+    if len(plano.split()) > 4:
+        return False
+
+    return any(
+        SequenceMatcher(None, plano, t).ratio() >= PARECIDO_TERMINAR
+        for t in TERMINAR
+        if t != "eso es todo"
+    )
 
 
 def _numeros(plano: str) -> str:
