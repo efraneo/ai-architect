@@ -834,7 +834,11 @@ const estado = {
   apertura: 0, objetivoApertura: 0,
   redondeo: 0, objetivoRedondeo: 0,
   cejas: 0, objetivoCejas: 0,
-  dispersion: 0, objetivoDispersion: 0,
+  // Empieza deshecho: la nebulosa. Se forma al oir la primera voz y se
+  // vuelve a deshacer cuando lleva un rato en reposo.
+  dispersion: 1, objetivoDispersion: 1,
+  formado: false,
+  ultimaInteraccion: 0,
   parpadeo: 0,
   proximoParpadeo: 2000,
   cabeceo: 0,
@@ -861,10 +865,20 @@ window.addEventListener("pointermove", function (e) {
   estado.ratonY = (e.clientY / window.innerHeight - 0.5) * 2;
 });
 
+// Cuanto tiene que estar quieto para volver a ser nebulosa.
+const REPOSO_MS = 25000;
+
 const arquitecto = {
+  // Fase 5: al oir una voz o recibir una orden, la nebulosa se hace rostro.
+  despertar: function () {
+    estado.formado = true;
+    estado.ultimaInteraccion = performance.now();
+  },
+
   hablar: function (ms, texto) {
     const duracion = ms || 2500;
 
+    arquitecto.despertar();
     estado.modo = "hablando";
     estado.empezo = performance.now();
     estado.hasta = estado.empezo + duracion;
@@ -881,6 +895,7 @@ const arquitecto = {
   },
 
   pensar: function () {
+    arquitecto.despertar();
     estado.modo = "pensando";
     estado.guion = [];
     document.body.classList.remove("trabajando");
@@ -898,6 +913,7 @@ const arquitecto = {
   // Fase 4: con las manos en el repositorio. La cara se concentra —se
   // deshace a medias, cejas bajas— y la reticula gira alrededor.
   trabajar: function () {
+    arquitecto.despertar();
     estado.modo = "trabajando";
     estado.guion = [];
     document.body.classList.add("trabajando");
@@ -907,6 +923,7 @@ const arquitecto = {
   // Fase 4: quiso escribir y no tenia permiso. Ambar, y dos botones. Se
   // contesta con la voz («si», «no») o pulsando.
   permiso: function (lista) {
+    arquitecto.despertar();
     estado.pidiendo = true;
     document.body.classList.add("pidiendo");
 
@@ -1413,7 +1430,10 @@ function conversar() {
       else suelto += e.results[i][0].transcript;
     }
 
-    if (suelto && !ocupado) mostrarOido(suelto, false);
+    if (suelto && !ocupado) {
+      arquitecto.despertar();
+      mostrarOido(suelto, false);
+    }
 
     const orden = firme.trim();
 
@@ -1855,6 +1875,9 @@ async function escucharConWhisper() {
       calladoDesde = 0;
       vozAcumulada += 60;
 
+      // Una voz: la nebulosa se hace rostro y te mira.
+      if (vozAcumulada >= 180) arquitecto.despertar();
+
       if (!grabando) {
         // Se empieza con lo que ya estaba sonando: la primera silaba entera.
         grabando = previos.splice(0);
@@ -1996,8 +2019,17 @@ function fotograma(ahora) {
   // —0.075—: costar recomponerse mas de lo que cuesta perderse se lee como
   // desgana, y lo que tiene que parecer es que vuelve porque tiene algo
   // que decir.
-  estado.objetivoDispersion = estado.modo === "pensando" ? 1
-                            : estado.modo === "trabajando" ? 0.35 : 0;
+  // La nebulosa ya no es "pensando": es el reposo. Formado, la cara se
+  // queda entera mientras escucha, piensa, trabaja o habla; si lleva un
+  // rato sin que le hablen, se deshace otra vez.
+  if (estado.formado && !estado.pidiendo &&
+      (estado.modo === "escuchando" || estado.modo === "reposo") &&
+      ahora - estado.ultimaInteraccion > REPOSO_MS) {
+    estado.formado = false;
+    rotulo.textContent = estado.modo === "escuchando" ? "en reposo \u00b7 escuchando" : "en reposo";
+  }
+
+  estado.objetivoDispersion = estado.formado ? 0 : 1;
 
   // El tinte de la fase: ambar si espera permiso, cian trabajando.
   const quiere = estado.pidiendo ? TINTES.pidiendo

@@ -29,6 +29,8 @@ from ai_architect.commands import (
     analyze,
     auto,
     avatar,
+    canales,
+    celular,
     changelog,
     configurar,
     conversar,
@@ -37,6 +39,7 @@ from ai_architect.commands import (
     execute,
     hacer,
     improve,
+    instalar,
     mcp,
     memoria,
     pendientes,
@@ -44,6 +47,7 @@ from ai_architect.commands import (
     review,
     skills,
     tareas,
+    telegram,
     voz,
 )
 from ai_architect.core.env_file import cargar_todo
@@ -225,6 +229,31 @@ COMANDOS: tuple[Comando, ...] = (
         lambda a: pendientes.run("aprobar", " ".join(a.frase or [])),
         requiere=(("frase", "aprobar requires --frase <id|todo>"),),
         elegible=False,
+    ),
+    Comando(
+        "canales",
+        "Por dónde te habla además del micrófono: celular, correo, WhatsApp (--canal X lo prueba)",
+        lambda a: canales.run(probar=a.canal),
+        elegible=False,
+    ),
+    Comando(
+        "celular",
+        'Mandar el teléfono: llamar, colgar, bloquear, música… (--frase "bloquea el celular")',
+        lambda a: celular.run(" ".join(a.frase or [])),
+        elegible=False,
+    ),
+    Comando(
+        "telegram",
+        "Atender órdenes desde el celular (--si autoriza lo que escribe)",
+        lambda a: telegram.run(a.project, si=a.si),
+        elegible=False,
+    ),
+    Comando(
+        "instalar",
+        "Instalar lo que falte: un paquete de Python (y apuntarlo en requirements) o una skill de GitHub",
+        lambda a: instalar.run(
+            " ".join(a.frase or []) or (a.instruction or ""), a.project
+        ),
     ),
     Comando(
         "rechazar",
@@ -433,6 +462,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--sin-nombre",
         action="store_true",
         help="For conversar: attend everything it hears, without saying 'Architect' first",
+    )
+
+    parser.add_argument(
+        "--canal",
+        default="",
+        help="For canales: send a test message through that channel (telegram, correo)",
     )
 
     parser.add_argument(

@@ -270,9 +270,12 @@ def test_cada_particula_sabe_a_donde_se_va() -> None:
 def test_pensando_se_deshace_y_contestando_se_rehace() -> None:
     pagina = rostro()
 
-    assert 'estado.modo === "pensando" ? 1' in pagina
-    # Fase 4: trabajando se deshace solo a medias (concentrado, no ausente).
-    assert 'estado.modo === "trabajando" ? 0.35' in pagina
+    # Desde la fase 5 la nebulosa es el reposo, no el pensar: empieza
+    # deshecho, se forma al oir una voz y se deshace tras un rato quieto.
+    assert "dispersion: 1, objetivoDispersion: 1" in pagina
+    assert "estado.objetivoDispersion = estado.formado ? 0 : 1" in pagina
+    assert "REPOSO_MS" in pagina and "despertar:" in pagina
+    assert 'estado.modo === "pensando" ? 1' not in pagina
     assert "estado.dispersion" in pagina
 
 

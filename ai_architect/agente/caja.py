@@ -18,13 +18,27 @@ from ai_architect.agente.herramientas.git import (
     GitLogTool,
     GitStatusTool,
 )
+from ai_architect.agente.herramientas.instalar import InstalarTool
 from ai_architect.agente.herramientas.leer import FileReadTool
 from ai_architect.agente.herramientas.parche import ApplyPatchTool
 from ai_architect.agente.herramientas.shell import ShellExecTool
 from ai_architect.agente.herramientas_base import BaseTool, ToolSpec
 
 # Nombres de las herramientas que cambian el repositorio o ejecutan cosas.
-ESCRIBEN = frozenset({"file_write", "apply_patch", "shell_exec", "git_commit"})
+ESCRIBEN = frozenset(
+    {
+        "file_write",
+        "apply_patch",
+        "shell_exec",
+        "git_commit",
+        # Lo que sale de la máquina o la cambia también pide permiso.
+        "enviar_telegram",
+        "enviar_correo",
+        "enviar_whatsapp",
+        "instalar",
+        "celular_llamar",
+    }
+)
 
 
 class _ConPermiso:
@@ -81,7 +95,24 @@ def herramientas_para(
         GitDiffTool(),
         GitLogTool(),
         CommitConPermiso(),
+        # Procurarse lo que falte (paquetes, skills) pide permiso.
+        InstalarTool(requisitos=str(Path(raiz) / "requirements.txt")),
     ]
+    # Los canales configurados (celular, correo, WhatsApp) entran como herramientas.
+    try:
+        from ai_architect.agente.herramientas.canales import herramientas_de_canales
+
+        base.extend(herramientas_de_canales())
+
+        # El celular va por Telegram: si hay bot, se puede mandar.
+        from ai_architect import canales
+
+        if canales.configurado("telegram"):
+            from ai_architect.agente.herramientas.celular import Celular, CelularLlamar
+
+            base.extend([Celular(), CelularLlamar()])
+    except Exception:  # noqa: BLE001 - sin canales se sigue igual
+        pass
     if not con_skills and not con_mcp:
         return base
 

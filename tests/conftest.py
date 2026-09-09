@@ -17,3 +17,15 @@ import pytest
 @pytest.fixture(autouse=True)
 def _casa_de_architect_aislada(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ARCHITECT_HOME", str(tmp_path / ".ai_architect"))
+
+    # Ningún canal real: ni el Telegram ni el correo del usuario se tocan en
+    # una prueba, tenga lo que tenga en su .env.
+    from ai_architect import canales
+
+    monkeypatch.setattr(canales, "_cargar", lambda: None)
+
+    for variables in canales.VARIABLES.values():
+        for variable in variables:
+            monkeypatch.delenv(variable, raising=False)
+
+    monkeypatch.delenv("CORREO_IMAP_HOST", raising=False)

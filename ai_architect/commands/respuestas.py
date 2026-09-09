@@ -23,6 +23,7 @@ atajo que adivina mal es peor que tres segundos de espera.
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Any
 
@@ -159,6 +160,12 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
     if recordado is not None:
         return recordado
 
+    # «Llama a Juan», «pon música», «bloquea el celular»: al teléfono, ya.
+    telefono = _celular(limpia, frase)
+
+    if telefono is not None:
+        return telefono
+
     for prueba in (
         _ventana,
         _hora,
@@ -196,6 +203,87 @@ QUE_SABES_DE_MI = (
 OLVIDA = ("olvida todo", "olvidalo todo", "borra tu memoria", "borra la memoria")
 
 
+def _celular(limpia: str, original: str) -> dict[str, Any] | None:
+    """Las órdenes al celular se resuelven aquí, sin modelo: van por Telegram a
+    una automatización del teléfono (docs/CELULAR.md). Llamar y mandar SMS
+    quedan esperando un «sí»; lo demás sale al momento."""
+    from ai_architect.canales import celular
+
+    entendido = celular.entender(original)
+
+    if entendido is None:
+        return None
+
+    accion, argumento = entendido
+
+    if accion == "desbloquear":
+        return {
+            "respuesta": (
+                "Eso no lo permite el teléfono: desbloquear solo se puede con tu cara, "
+                "tu huella o tu clave. Puedo bloquearlo, llamar, poner música o abrir apps."
+            )
+        }
+
+    from ai_architect.canales import telegram
+
+    if not telegram.configurado():
+        return {
+            "respuesta": (
+                "Para mandar el celular necesito el bot de Telegram configurado. "
+                "Mira «architect canales»."
+            )
+        }
+
+    if accion in celular.CON_PERMISO:
+        from pathlib import Path
+
+        from ai_architect.commands import pendientes
+
+        numero = celular.numero_de(argumento) if accion == "llamar" else argumento
+        pendiente = pendientes.encolar(
+            Path.cwd(),
+            "celular_llamar",
+            {"accion": accion, "argumento": numero},
+            original,
+        )
+        que = (
+            f"¿Llamo a {argumento}"
+            + (f" ({numero})" if numero != argumento else "")
+            + "?"
+        )
+
+        if accion == "mensaje":
+            que = f"¿Mando el mensaje a {argumento.split('|', 1)[0]}?"
+
+        return {
+            "respuesta": que + " Di sí o no.",
+            "pending": [pendiente.description],
+            "pending_ids": [pendiente.id],
+            "pregunta_permiso": True,
+        }
+
+    salida = celular.ordenar(accion, argumento)
+
+    if not salida.get("ok"):
+        return {"respuesta": f"No pude mandarlo al celular: {salida.get('error')}"}
+
+    dicho = {
+        "colgar": "Colgado.",
+        "bloquear": "Bloqueado.",
+        "pausar": "Pausada.",
+        "reanudar": "Sigue.",
+        "siguiente": "Siguiente.",
+        "anterior": "Anterior.",
+        "sonar": "Sonando.",
+    }.get(
+        accion,
+        f"Mandado: {celular.ACCIONES[accion]}"
+        + (f" ({argumento})." if argumento else "."),
+    )
+
+    return {"respuesta": dicho}
+
+
 def _memoria(limpia: str, original: str) -> dict[str, Any] | None:
     """«Recuerda que…», «qué sabes de mí» y «olvida todo» se resuelven sin modelo.
 
@@ -206,6 +294,8 @@ def _memoria(limpia: str, original: str) -> dict[str, Any] | None:
     from ai_architect.commands.memoria import run as memoria_run
 
     if limpia.startswith(RECUERDA) or limpia in OLVIDA:
+        _quiza_un_contacto(original)
+
         salida = memoria_run(original if limpia.startswith(RECUERDA) else limpia)
         return {"respuesta": salida["explanation"], "panel": salida.get("panel")}
 
@@ -227,6 +317,24 @@ def _memoria(limpia: str, original: str) -> dict[str, Any] | None:
         }
 
     return None
+
+
+CONTACTO = re.compile(
+    r"(?:numero|telefono|celular|movil)\s+de\s+(?P<quien>[^,]+?)\s+es\s+(?:el\s+)?(?P<numero>\+?[\d][\d ]{5,})",
+    re.IGNORECASE,
+)
+
+
+def _quiza_un_contacto(original: str) -> None:
+    """«El número de Juan es 300…» también va a la agenda del celular."""
+    m = CONTACTO.search(sin_adornos(original).replace("+", " +"))
+
+    if not m:
+        return
+
+    from ai_architect.canales import celular
+
+    celular.guardar_contacto(m["quien"], m["numero"])
 
 
 def _divisa(limpia: str, _: datetime | None) -> dict[str, Any] | None:

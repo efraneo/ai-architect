@@ -57,6 +57,10 @@ def test_estan_los_comandos() -> None:
         "pendientes",
         "aprobar",
         "rechazar",
+        "canales",
+        "telegram",
+        "instalar",
+        "celular",
     }
 
 

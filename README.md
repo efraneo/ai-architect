@@ -393,6 +393,24 @@ permiso, se pone en ámbar y espera un «sí» o un «no» (o los botones).
 (`pip install pywebview`). Lo que oye y contesta queda en
 `~/.ai_architect/conversacion.log`.
 
+**Canales.** Con `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` en `~/.ai_architect/.env`,
+el celular es otro micrófono: lo que le escribas al bot es una orden, te
+contesta ahí y los permisos («tengo 2 cambios esperando…») se aprueban con un
+«sí» desde donde estés (`architect telegram`, o solo con la cara abierta).
+Con las variables `CORREO_*` manda y lee correo; con `WHATSAPP_TOKEN` y
+`WHATSAPP_PHONE_ID` manda WhatsApp. `architect canales` dice qué hay y qué falta.
+
+**El celular obedece.** «Architect, llama a Juan», «pon Tití me preguntó»,
+«bloquea el celular», «pausa la música»: salen al instante por el bot de
+Telegram a una automatización del teléfono (Tasker en Android; receta en
+`docs/CELULAR.md`). Llamar pide un «sí». Desbloquear no lo permite ningún
+teléfono. «Recuerda que el número de Juan es 300…» lo guarda en la agenda.
+
+**Se procura lo que le falta.** `architect instalar --frase "paquete rich"`
+instala con pip y lo apunta en `requirements.txt`; `--frase "skill
+https://github.com/…"` baja una skill a `~/.ai_architect/skills`. En `hacer`
+tiene la misma herramienta, con permiso.
+
 **Memoria.** «Recuerda que…» guarda un hecho; «¿qué sabes de mí?» los lista;
 «olvida todo» los borra. Además aprende solo de cada charla
 (`ARCHITECT_MEMORIA_AUTO=0` lo apaga). Todo lo suyo vive en

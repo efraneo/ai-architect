@@ -148,6 +148,14 @@ def run(
     # registra en el Programador de tareas.
     _vigilar_tareas()
 
+    # El celular (Telegram) atiende a la vez, si está configurado: las órdenes
+    # que le escribas y los «sí»/«no» al permiso llegan al mismo sitio.
+    from ai_architect.commands import telegram as celular
+
+    global _celular
+
+    _celular = celular.en_segundo_plano(project, si)
+
     # Cada sesion empieza con un saludo, y solo uno: "Buenas tardes,
     # Efrain" delante de cada respuesta cansa a la tercera.
     from ai_architect.commands import pide
@@ -179,7 +187,8 @@ def run(
         f"  Órdenes que tocan archivos: {'autorizadas' if si else 'NO autorizadas'}"
         f"{'' if si else ' (arranca con --si para permitirlas)'}.\n"
         f"  Te oye: {_quien_oye()}\n"
-        f"  Muletillas listas: {listas} (dice algo mientras trabaja)\n\n"
+        f"  Muletillas listas: {listas} (dice algo mientras trabaja)\n"
+        f"  Celular (Telegram): {'atendido' if _celular else 'sin configurar (architect canales)'}\n\n"
         f"{_como_llamarlo()}\n\n"
         f"  Ctrl+C para terminar.\n"
     )
@@ -227,6 +236,9 @@ def run(
 # la cola de aprobaciones de la fase 2.
 
 _bitacora = progreso.Bitacora()
+
+# El hilo que atiende el celular, si lo hay (para poder pararlo).
+_celular: threading.Event | None = None
 
 # Los cambios que están esperando un «sí»: id y descripción.
 _permiso_pendiente: list[dict[str, str]] = []
@@ -337,6 +349,28 @@ def _anotar_permiso(resultado: dict[str, Any]) -> list[str]:
     ]
 
     return [p["descripcion"] for p in _permiso_pendiente]
+
+
+def _avisar_al_celular(permiso: list[str]) -> None:
+    """Si hay Telegram, el permiso también se pide ahí: se contesta desde donde estés."""
+    try:
+        from ai_architect.canales import telegram
+
+        if not telegram.configurado():
+            return
+
+        threading.Thread(
+            target=telegram.enviar,
+            args=(
+                f"Tengo {len(permiso)} cambio(s) esperando tu permiso:\n- "
+                + "\n- ".join(permiso)
+                + "\n\nResponde «sí» o «no».",
+            ),
+            daemon=True,
+        ).start()
+
+    except Exception:  # noqa: BLE001 - el aviso es un extra
+        return
 
 
 def resolver_permiso(decision: str) -> dict[str, Any]:
@@ -836,10 +870,14 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
     permiso = _anotar_permiso(resultado)
 
     if permiso:
-        respuesta = (
-            respuesta.rstrip()
-            + f"\n\nTengo {len(permiso)} cambio(s) esperando tu permiso. ¿Los aplico?"
-        )
+        # Si la respuesta ya es la pregunta («¿Llamo a Juan?»), no se repite.
+        if not resultado.get("pregunta_permiso"):
+            respuesta = (
+                respuesta.rstrip()
+                + f"\n\nTengo {len(permiso)} cambio(s) esperando tu permiso. ¿Los aplico?"
+            )
+
+        _avisar_al_celular(permiso)
 
     preparado = motor_de_voz.preparar(respuesta)
 

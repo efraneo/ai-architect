@@ -28,7 +28,9 @@ ARGUMENTOS
   carpeta        si nombra una carpeta hablando —"revisa autosgsst"— ponla
                  aqui tal como la dijo, sin inventarte la ruta: se busca
                  aqui y se resuelve. Nunca te inventes rutas de disco.
-  instruction    para improve: qué mejora se pide, en una frase
+  instruction    para improve: qué mejora se pide, en una frase;
+                 para hacer: la orden entera; para instalar: "paquete X"
+                 o "skill URL"
   file           para improve: archivo concreto a modificar, si se nombra
   apply          para improve/auto: true SOLO si el usuario pide aplicar,
                  arreglar, corregir o cambiar el código de verdad
@@ -65,6 +67,8 @@ REGLAS
   instruction = la orden entera tal como la dijo. Un "revisa el proyecto"
   o "cómo está" a secas NO es "hacer": es "agents" (o "review" si pide
   nota). Tarda medio minuto y usa herramientas; no se elige para mirar.
+- "instala X", "descarga la skill de URL", "necesitas el paquete X" ->
+  "instalar" con instruction = "paquete X" o "skill URL".
 - Cuando contestas tú (comando vacío), sé breve: una a tres frases,
   solo lo que se preguntó, sin preámbulos ni ofrecimientos.
 - "está todo bien configurado", "funciona", "tengo la clave" -> "doctor".

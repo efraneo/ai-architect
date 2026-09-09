@@ -22,7 +22,11 @@ def limpio(tmp_path: Path):
         conversar._ultima_vez = 0.0
         conversar._ultimo_dicho = ""
 
-        yield
+        # `run` sintetiza cinco muletillas y abre la conexión con OpenAI: en una
+        # prueba eran siete segundos de Piper y red por cada `run`.
+        with mock.patch.object(conversar, "preparar_rellenos", return_value=0):
+            with mock.patch("ai_architect.voz.escuchar.calentar"):
+                yield
 
     conversar._permiso_pendiente = []
     conversar.configurar_oido("libre")
