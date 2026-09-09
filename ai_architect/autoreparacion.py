@@ -537,7 +537,9 @@ def reiniciar() -> dict[str, Any]:
     try:
         banderas = 0
 
-        if os.name == "nt":
+        # `sys.platform` y no `os.name`: mypy solo entiende el primero como
+        # guarda de plataforma, y en Linux esas banderas no existen.
+        if sys.platform == "win32":
             banderas = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
 
         subprocess.Popen(orden, creationflags=banderas, close_fds=True)
