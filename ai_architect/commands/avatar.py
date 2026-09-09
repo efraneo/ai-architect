@@ -159,6 +159,40 @@ def ventana_flotante(url: str, titulo: str = "Architect") -> bool:
     return True
 
 
+def accion_ventana(accion: str) -> bool:
+    """«Maximiza/minimiza/restaura la ventana»: sobre la ventana flotante (pywebview).
+    En el navegador no se puede desde aquí. Devuelve si se hizo."""
+    try:
+        import webview
+
+    except ImportError:
+        return False
+
+    ventanas = list(getattr(webview, "windows", []) or [])
+
+    if not ventanas:
+        return False
+
+    ventana = ventanas[0]
+    metodo = {
+        "maximizar": "maximize",
+        "minimizar": "minimize",
+        "restaurar": "restore",
+        "pantalla_completa": "toggle_fullscreen",
+    }.get(accion)
+
+    if not metodo or not hasattr(ventana, metodo):
+        return False
+
+    try:
+        getattr(ventana, metodo)()
+
+    except Exception:  # noqa: BLE001 - la ventana pudo cerrarse entre medias
+        return False
+
+    return True
+
+
 def cerrar_ventana_flotante() -> bool:
     """Cierra la ventana de pywebview, si la hay. Vale desde cualquier hilo."""
     try:

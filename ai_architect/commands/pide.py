@@ -254,7 +254,10 @@ def run(
                 "descubrir": rapida.get("descubrir", ""),
                 "cerrar": bool(rapida.get("cerrar")),
                 "rostro": rapida.get("rostro", ""),
-                "explanation": _con_trato(rapida["respuesta"]),
+                "ventana_app": rapida.get("ventana_app", ""),
+                "explanation": _con_trato(
+                    _recordado(frase, rapida["respuesta"], rapida)
+                ),
             },
             decir,
             cara,
@@ -333,7 +336,7 @@ def run(
                     "executed": False,
                     "command": "",
                     "conversation": True,
-                    "explanation": _con_trato(charla),
+                    "explanation": _con_trato(_recordado(frase, charla, {})),
                 },
                 decir,
                 cara,

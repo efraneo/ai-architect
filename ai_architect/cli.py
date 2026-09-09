@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ai_architect.commands import (
+    abrir,
     agents,
     analyze,
     auto,
@@ -235,6 +236,12 @@ COMANDOS: tuple[Comando, ...] = (
         "canales",
         "Por dónde te habla además del micrófono: celular, correo, WhatsApp (--canal X lo prueba)",
         lambda a: canales.run(probar=a.canal),
+        elegible=False,
+    ),
+    Comando(
+        "abrir",
+        "Abrir un programa, una web o una carpeta del PC (--frase Word)",
+        lambda a: abrir.run(" ".join(a.frase or [])),
         elegible=False,
     ),
     Comando(

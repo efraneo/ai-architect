@@ -173,10 +173,14 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
         return telefono
 
     for prueba in (
+        _ventana_app,
         _ventana,
         _cerrar,
         _reposo,
         _queja,
+        _mejora,
+        _abrir,
+        _calculo,
         _hora,
         _fecha,
         _divisa,
@@ -553,6 +557,41 @@ def _fecha(limpia: str, ahora: datetime | None) -> dict[str, Any] | None:
     }
 
 
+VENTANA_APP = re.compile(
+    r"^(?:architect,?\s+)?(?P<que>maximiza|maximizar|minimiza|minimizar|restaura|restaurar|pantalla completa)"
+    r"(?:\s+(?:la\s+)?ventana)?(?:\s+(?:de architect|del programa|de la presentacion|la presentacion))?$"
+)
+
+
+def _ventana_app(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    """«Maximiza ventana» / «minimiza ventana»: la ventana de Architect (la
+    presentación), no el panel flotante de dentro."""
+    m = VENTANA_APP.match(limpia)
+
+    if m is None:
+        return None
+
+    accion = {
+        "maximiza": "maximizar",
+        "maximizar": "maximizar",
+        "minimiza": "minimizar",
+        "minimizar": "minimizar",
+        "restaura": "restaurar",
+        "restaurar": "restaurar",
+        "pantalla completa": "pantalla_completa",
+    }[m["que"]]
+
+    return {
+        "respuesta": {
+            "maximizar": "Maximizada.",
+            "minimizar": "Minimizada.",
+            "restaurar": "Restaurada.",
+            "pantalla_completa": "Pantalla completa.",
+        }[accion],
+        "ventana_app": accion,
+    }
+
+
 def _ventana(limpia: str, _: datetime | None) -> dict[str, Any] | None:
     """Órdenes sobre la ventana flotante. Van primero y por buenas razones.
 
@@ -590,6 +629,17 @@ CERRARSE = (
     "chao",
     "nos vemos",
     "buenas noches architect",
+    "cerrar",
+    "cierra ya",
+    "cierrate ya",
+    "no cierra",
+    "no cierrate",
+    "apagate ya",
+    "ya puedes cerrar",
+    "despidete",
+    "despidete ya",
+    "despidete y cierra",
+    "puedes cerrar",
 )
 
 REPOSO = (
@@ -623,17 +673,121 @@ QUEJA = (
 )
 
 
+MEJORA = (
+    "quiero que puedas",
+    "quiero que sepas",
+    "quiero que aprendas a",
+    "coloca en tu codigo",
+    "pon en tu codigo",
+    "agrega a tu codigo",
+    "anade a tu codigo",
+    "programa en tu codigo",
+    "modifica tu codigo",
+    "cambia tu codigo",
+    "mejora tu codigo",
+    "aprende a",
+    "deberias poder",
+    "necesito que puedas",
+)
+
+ABRIR_PC = re.compile(
+    r"^(?:abre|abrir|abreme|lanza|inicia|ejecuta)\s+(?:el programa\s+|la aplicacion\s+|la app\s+|el\s+|la\s+)?(?P<que>.+?)(?:\s+en (?:el|este|mi) (?:pc|computador|computadora|equipo|ordenador))?$"
+)
+
+_ultima_orden_vista = ""
+
+
+def _mejora(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    """«Quiero que puedas abrir Word», «coloca en tu código que…»: una capacidad
+    nueva. Se apunta como mejora; la programa solo con el «adelante»."""
+    if not limpia.startswith(MEJORA):
+        return None
+
+    from ai_architect import autoreparacion
+    from ai_architect.commands import conversar
+
+    orden, _dicho = conversar.ultimo_intercambio()
+    averia = autoreparacion.registrar(
+        "mejora", orden or limpia, "capacidad pedida por el usuario"
+    )
+
+    return {
+        "respuesta": (
+            f"Apuntado como mejora: «{(orden or limpia)[:90]}». Si dices «adelante», la "
+            "programo en mi código, corro mis pruebas y te aviso; sin tu orden no toco nada."
+        ),
+        "averia": averia["id"],
+    }
+
+
+def _calculo(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    """«¿Cuánto es 25 por 4?», «suma 3 y 5», «el 15 por ciento de 200»: sin modelo."""
+    from ai_architect.commands import calcular
+
+    salida = calcular.calcular(limpia)
+
+    return {"respuesta": salida["respuesta"]} if salida else None
+
+
+def _abrir(limpia: str, _: datetime | None) -> dict[str, Any] | None:
+    """«Abre Word», «abre Chrome», «abre el escritorio»: programas del PC, sin modelo."""
+    m = ABRIR_PC.match(limpia)
+
+    if m is None:
+        return None
+
+    que = m["que"].strip()
+
+    # Lo que no es un programa: archivos del proyecto y el celular van por otro lado.
+    if que.startswith(("el archivo", "archivo", "la carpeta del proyecto")) or any(
+        c in limpia for c in ("celular", "telefono", "movil")
+    ):
+        return None
+
+    if que in ("la ventana", "ventana", "el panel"):
+        return None
+
+    from ai_architect.commands import abrir
+
+    salida = abrir.abrir(que)
+
+    return {"respuesta": salida["explicacion"]}
+
+
+# Cualquier forma de mandarlo cerrar: «Cerrar», «No, cierra», «apágate ya»,
+# «termina el proyecto», «detente». Lo único que no es cerrar es la ventana
+# flotante, y esa va antes.
+CERRAR_PATRON = re.compile(
+    r"^(?:no,?\s+|ya,?\s+|por favor,?\s+)?"
+    r"(?:cierra|cerrar|cierrate|apaga|apagar|apagate|termina|terminar|terminate|"
+    r"deten|detente|detener|finaliza|finalizar|para|parate|sal|salir|salte|despidete)"
+    r"(?:\s+(?:ya|architect|arquitecto|el programa|la sesion|todo|tu ejecucion|"
+    r"la ejecucion|el proyecto|la conversacion|architect ya|y cierra|por favor))*$"
+)
+
+
 def _cerrar(limpia: str, _: datetime | None) -> dict[str, Any] | None:
     """«Cierra Architect» se cumple: se despide y se apaga. En la prueba real
     contestaba «aquí sigo» y se quedaba."""
-    if limpia not in CERRARSE:
+    if limpia not in CERRARSE and CERRAR_PATRON.match(limpia) is None:
         return None
 
     return {"respuesta": f"Hasta luego, {perfil.como_llamarte()}.", "cerrar": True}
 
 
+REPOSO_PATRON = re.compile(
+    r"^(?:architect,?\s+|arquitecto,?\s+)?"
+    r"(?:hiberna|hibernar|hibernate|descansa|descansar|reposa|reposar|duerme|dormir|duermete|"
+    r"quedate en reposo|ponte en reposo|entra en reposo|modo reposo|ponte a dormir|ve a dormir|"
+    r"a dormir|vuelve a la nebulosa|hazte nebulosa|transformate en nebulosa|conviertete en nebulosa|"
+    r"deshazte|relajate)"
+    r"(?:\s+(?:un rato|ya|hasta que te llame|hasta que te hable|por ahora|architect|arquitecto))*$"
+)
+
+
 def _reposo(limpia: str, _: datetime | None) -> dict[str, Any] | None:
-    if limpia not in REPOSO:
+    """«Descansa», «hiberna», «quédate en reposo»: nebulosa hasta que le hablen."""
+    if limpia not in REPOSO and REPOSO_PATRON.match(limpia) is None:
         return None
 
     return {"respuesta": "Descanso. Llámame cuando quieras.", "rostro": "reposo"}

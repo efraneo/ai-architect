@@ -914,6 +914,14 @@ def atender_lo_oido(
 
         return {"oido": "", "respuesta": "", "ms": 0, "error": "eco"}
 
+    # Si la página no dice que le interrumpen, es que ya terminó de sonar:
+    # la ventana de seguimiento empieza ahora, aunque la estimación del audio
+    # dijera que seguía hablando. Un «¿qué día es hoy?» se rechazaba por eso.
+    global _ultima_vez
+
+    if not interrumpe and _ultima_vez > time.monotonic():
+        _ultima_vez = time.monotonic()
+
     # Solo lo que va dirigido a él. Un micrófono abierto oye la tele, a
     # quien pasa por detrás y a quien habla por teléfono al lado.
     para_mi, orden = dirigido_a_mi(dicho)
@@ -1016,6 +1024,15 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
         # Se apaga cuando termine de despedirse, no antes.
         cerrar_sesion(float(preparado.get("segundos", 0) or 0) + 1.5)
 
+    if resultado.get("ventana_app"):
+        if not avatar.accion_ventana(str(resultado["ventana_app"])):
+            respuesta = (
+                "Eso solo puedo hacerlo con la ventana flotante (arranca con --flotante); "
+                "en el navegador usa F11 o el botón de la ventana."
+            )
+            preparado = motor_de_voz.preparar(respuesta)
+            _recordar_dicho(preparado, respuesta)
+
     return {
         "respuesta": respuesta,
         "dicho": preparado.get("texto", respuesta),
@@ -1097,7 +1114,16 @@ def _resumen(respuesta: str) -> str:
     """
     partes = [t.strip() for t in respuesta.split(chr(10) * 2) if t.strip()]
 
-    return partes[1] if len(partes) > 2 else (partes[0] if partes else "")
+    # Fuera el saludo («Buenas noches, Efraín.») y la coletilla: en modo conciso
+    # solo había dos partes y el registro se quedaba con el saludo.
+    de_verdad = [
+        p
+        for p in partes
+        if not (p.startswith("Buen") and len(p.split()) <= 4)
+        and "te puedo ayudar" not in p
+    ]
+
+    return de_verdad[0] if de_verdad else (partes[0] if partes else "")
 
 
 UnSoloDuenio = conversar_servidor.UnSoloDuenio

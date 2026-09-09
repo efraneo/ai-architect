@@ -176,6 +176,19 @@ def _python_de(fuente_: Path) -> str:
 
 
 def orden_de_reparacion(averia: dict[str, Any]) -> str:
+    if averia.get("comando") == "mejora":
+        return (
+            "Este repositorio es TU PROPIO CÓDIGO (AI-architect). El usuario pide una "
+            f"capacidad nueva: «{averia['frase']}». Impleméntala de la forma más pequeña y "
+            "coherente con el proyecto: mira cómo están hechos los comandos en "
+            "ai_architect/commands, los atajos de voz en commands/respuestas.py y la tabla "
+            "del CLI en cli.py; añade pruebas nuevas en tests/. Corre `python -m pytest -q -x` "
+            "y `python -m ruff check ai_architect` hasta que pasen. No empaquetes, no hagas "
+            "commit y no automatices este ciclo: el usuario lo autoriza cada vez con su "
+            "palabra maestra. Termina con un informe breve: qué añadiste (archivo por archivo) "
+            "y cómo se usa."
+        )
+
     return (
         "Este repositorio es TU PROPIO CÓDIGO (AI-architect). Falló el comando "
         f"«{averia['comando']}» al atender la orden «{averia['frase']}» con este error:\n"
@@ -251,9 +264,15 @@ def reparar(averia: dict[str, Any], motor: Any = None) -> dict[str, Any]:
             informe=informe[:2000],
             pruebas=pruebas["resumen"],
         )
+
+        if averia.get("comando") == "mejora":
+            cabeza = f"Mejora «{averia['frase'][:60]}» programada"
+        else:
+            cabeza = f"Reparación de «{averia['comando']}» lista"
+
         _ultimo_informe = (
-            f"Reparación de «{averia['comando']}» lista y las pruebas pasan ({pruebas['resumen']}). "
-            f"{informe[:600]}\n\nSi dices «adelante», reconstruyo el instalador."
+            f"{cabeza} y las pruebas pasan ({pruebas['resumen']}). {informe[:600]}"
+            "\n\nSi dices «adelante», reconstruyo el instalador."
         )
 
         return {"ok": True, "informe": _ultimo_informe, "pruebas": pruebas}
@@ -359,7 +378,10 @@ def adelante(avisar: Any = None, motor: Any = None, en_hilo: bool = True) -> str
     else:
         trabajo = lambda: reparar(averia, motor=motor)  # noqa: E731 - es un despacho
         dicho = (
-            f"Adelante: reviso la avería de «{averia['comando']}», la corrijo y corro mis "
+            f"Adelante: programo la mejora «{averia['frase'][:70]}», corro mis pruebas "
+            "y te aviso. No toco nada más sin tu orden."
+            if averia.get("comando") == "mejora"
+            else f"Adelante: reviso la avería de «{averia['comando']}», la corrijo y corro mis "
             "pruebas. No toco nada más sin tu orden. Te aviso cuando termine."
         )
 
