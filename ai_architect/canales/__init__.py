@@ -36,6 +36,7 @@ VARIABLES: dict[str, tuple[str, ...]] = {
         "CORREO_CLAVE",
     ),
     "whatsapp": ("WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID"),
+    "hogar": ("HOGAR_URL", "HOGAR_TOKEN"),
 }
 
 # Cómo se consigue cada cosa, para decirlo cuando falta.
@@ -51,6 +52,10 @@ COMO_SE_CONFIGURA = {
     "whatsapp": (
         "una app de Meta con WhatsApp Cloud API: token permanente y el Phone Number ID "
         "(developers.facebook.com)"
+    ),
+    "hogar": (
+        "la URL de tu Home Assistant (p. ej. http://homeassistant.local:8123) y un "
+        "token de acceso de larga duración (perfil → Tokens)"
     ),
 }
 

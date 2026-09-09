@@ -29,7 +29,7 @@ def _casa_de_architect_aislada(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # Todas las de canales, incluidas las que otra prueba haya podido dejar en el
     # entorno al «configurar hablando» (guardar_en_env escribe en os.environ).
     for variable in list(os.environ):
-        if variable.startswith(("TELEGRAM_", "CORREO_", "WHATSAPP_")):
+        if variable.startswith(("TELEGRAM_", "CORREO_", "WHATSAPP_", "HOGAR_")):
             monkeypatch.delenv(variable, raising=False)
 
 

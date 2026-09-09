@@ -61,6 +61,18 @@ PASOS: dict[str, list[tuple[str, str, bool]]] = {
             False,
         ),
     ],
+    "hogar": [
+        (
+            "HOGAR_URL",
+            "¿Cuál es la dirección de tu Home Assistant? (p. ej. http://homeassistant.local:8123)",
+            False,
+        ),
+        (
+            "HOGAR_TOKEN",
+            "Un token de acceso de larga duración de Home Assistant (tu perfil → Tokens).",
+            True,
+        ),
+    ],
 }
 
 ESPERA_CHAT = 120

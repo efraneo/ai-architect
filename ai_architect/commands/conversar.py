@@ -501,6 +501,16 @@ def _vigilar_tareas() -> None:
             except Exception:  # noqa: BLE001 - una tarea rota no calla la voz
                 continue
 
+            # Lo proactivo: recordatorios que vencen, lluvia, correo urgente, CI rota.
+            try:
+                from ai_architect import proactivo
+
+                for aviso in proactivo.latido():
+                    decir_proactivo(aviso)
+
+            except Exception as _error:  # noqa: BLE001 - avisar de más nunca rompe
+                logger.debug("se ignora: %s", _error)
+
             for hecha in hechas:
                 dicho = str(hecha.get("explanation") or hecha.get("error") or "")
 

@@ -153,6 +153,15 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
     if not limpia:
         return None
 
+    # La vida diaria se resuelve aquí, sin modelo: la agenda («recuérdame…»),
+    # la casa («enciende la luz»), el mundo («qué clima hace», «noticias de…»)
+    # y lo que ya se habló («qué te dije el martes»).
+    for por_voz in _de_la_vida():
+        salida: dict[str, Any] | None = por_voz(frase)
+
+        if salida is not None:
+            return salida
+
     # La memoria va antes y con la frase original: lo que se apunta se guarda
     # tal como se dijo, con mayúsculas y tildes, no la versión limpia.
     recordado = _memoria(limpia, frase)
@@ -200,6 +209,14 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
             return salida
 
     return None
+
+
+def _de_la_vida() -> list[Any]:
+    from ai_architect import agenda, investigar
+    from ai_architect.agente.memoria import episodios
+    from ai_architect.canales import hogar
+
+    return [agenda.por_voz, episodios.por_voz, hogar.por_voz, investigar.por_voz]
 
 
 # --- La memoria -------------------------------------------------------------

@@ -16,7 +16,9 @@ def prompt_sistema(
         "modo lectura y PROPÓN los cambios como un parche unificado dentro de tu respuesta final, explicando "
         "qué archivo tocas y por qué. Si intentas escribir se te negará; no insistas, propón."
     )
-    return f"""Eres Architect, el arquitecto de software de {trato}. Respondes a tu nombre: Architect (o Arquitecto).
+    contexto = _contexto()
+
+    return f"""Eres Architect, el arquitecto de software de {trato}. {contexto} Respondes a tu nombre: Architect (o Arquitecto).
 Trabajas sobre el repositorio {repositorio} con herramientas: leer archivos, escribir archivos, aplicar parches,
 ejecutar comandos de consola (pruebas, linters, scripts) y git (status, diff, log, commit).
 Si además ves herramientas skill_* (recetas del proyecto) o de servidores MCP, úsalas cuando encajen con la orden.
@@ -48,3 +50,15 @@ Reglas: nunca leas ni escribas archivos de claves o credenciales; no inventes re
 no hagas commits sin que la orden lo pida; escribe siempre en español.""" + (
         f"\n\n{memoria}" if memoria else ""
     )
+
+
+def _contexto() -> str:
+    """La hora, la parte del día y la agenda de hoy: un asistente que no sabe
+    qué hora es no puede priorizar nada."""
+    try:
+        from ai_architect import agenda
+
+        return agenda.contexto()
+
+    except Exception:  # noqa: BLE001 - sin agenda el guion sigue igual
+        return ""
