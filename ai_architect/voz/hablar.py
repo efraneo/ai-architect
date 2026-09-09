@@ -25,6 +25,7 @@ mentirle al usuario en lo primero que va a notar.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -78,6 +79,8 @@ ACENTO = (
 
 # El PCM que devuelve OpenAI: 24 kHz, 16 bits, mono.
 HERCIOS_OPENAI = 24000
+
+logger = logging.getLogger(__name__)
 
 
 def motores() -> dict[str, Any]:
@@ -578,8 +581,10 @@ def callar() -> bool:
 
             winsound.PlaySound(None, winsound.SND_PURGE)
 
-        except Exception:  # noqa: BLE001 - si no se puede purgar, se mata el proceso
-            pass
+        except (
+            Exception
+        ) as _error:  # noqa: BLE001 - si no se puede purgar, se mata el proceso
+            logger.debug("se ignora: %s", _error)
 
     proceso = _proceso
 
@@ -587,8 +592,8 @@ def callar() -> bool:
         try:
             proceso.kill()
 
-        except OSError:
-            pass
+        except OSError as _error:
+            logger.debug("se ignora: %s", _error)
 
     return True
 
@@ -621,8 +626,8 @@ def _esperar(proceso: subprocess.Popen[bytes]) -> None:
                 proceso.kill()
                 proceso.wait(timeout=2)
 
-            except (OSError, subprocess.SubprocessError):
-                pass
+            except (OSError, subprocess.SubprocessError) as _error:
+                logger.debug("se ignora: %s", _error)
 
             break
 

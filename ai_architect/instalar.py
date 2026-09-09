@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import re
 import subprocess
 import sys
@@ -41,6 +42,8 @@ TIEMPO_LIMITE = 600
 PAQUETE_VALIDO = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9_,.-]+\])?([<>=!~]=?[A-Za-z0-9.*+!-]+(,[<>=!~]=?[A-Za-z0-9.*+!-]+)*)?$"
 )
+
+logger = logging.getLogger(__name__)
 
 
 def ruta_registro() -> Path:
@@ -65,8 +68,8 @@ def _apuntar(que: str, nombre: str, detalle: str = "") -> None:
             json.dumps(lista, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-    except OSError:
-        pass
+    except OSError as _error:
+        logger.debug("se ignora: %s", _error)
 
 
 def instalado() -> list[dict[str, Any]]:

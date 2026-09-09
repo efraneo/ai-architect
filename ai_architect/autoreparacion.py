@@ -31,6 +31,7 @@ código fuente, que es de donde sale el próximo instalador.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import subprocess
@@ -56,6 +57,8 @@ TIEMPO_EMPAQUETAR = 1200
 _en_curso = threading.Event()
 _ultimo_informe = ""
 
+logger = logging.getLogger(__name__)
+
 
 def ruta() -> Path:
     return get_config_dir() / "averias.json"
@@ -79,8 +82,8 @@ def _guardar(lista: list[dict[str, Any]]) -> None:
             json.dumps(lista[-50:], ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-    except OSError:
-        pass
+    except OSError as _error:
+        logger.debug("se ignora: %s", _error)
 
 
 def registrar(comando: str, frase: str, error: str, traza: str = "") -> dict[str, Any]:
@@ -371,8 +374,8 @@ def adelante(avisar: Any = None, motor: Any = None, en_hilo: bool = True) -> str
             try:
                 avisar(str(salida.get("informe", "")))
 
-            except Exception:  # noqa: BLE001 - el aviso es un extra
-                pass
+            except Exception as _error:  # noqa: BLE001 - el aviso es un extra
+                logger.debug("se ignora: %s", _error)
 
     if en_hilo:
         threading.Thread(target=_hacerlo, daemon=True, name="architect-reparar").start()

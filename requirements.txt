@@ -9,10 +9,8 @@ google-generativeai>=0.8.0
 ollama>=0.3.3
 
 # Git
-GitPython>=3.1.43
 
 # Configuration
-python-dotenv>=1.0.1
 PyYAML>=6.0.2
 
 # Data
@@ -28,7 +26,7 @@ rich>=13.7.1
 colorama>=0.4.6
 
 # HTTP
-requests>=2.32.3
+requests>=2.34.2
 httpx>=0.27.0
 
 # Async

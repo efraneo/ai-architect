@@ -30,7 +30,7 @@ OLVIDAR = (
     "olvida lo que sabes",
 )
 RECORDAR = re.compile(
-    r"^\s*(recuerda|recuérdame|acuerdate|acuérdate|anota|apunta)\s+(que\s+)?",
+    r"^\s*(recuerda|recuérdame|acuerdate|acuérdate|anota|apunta|memoriza|guarda en (tu |la )?memoria|ten en cuenta|ten presente|no olvides)\s+(que\s+)?",
     re.IGNORECASE,
 )
 

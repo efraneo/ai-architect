@@ -43,6 +43,9 @@ class SecurityAgent(BaseAgent):
         yo = Path(__file__).resolve()
 
         for file in archivos(project_path):
+            if _ajeno(file, project_path):
+                continue
+
             if file.resolve() == yo:
                 continue
 
@@ -112,3 +115,17 @@ class SecurityAgent(BaseAgent):
             "secretos commiteados en el historial",
             "claves y tokens expuestos",
         ]
+
+
+def _ajeno(file: Path, raiz: Path) -> bool:
+    """Las pruebas traen claves falsas a propósito y el escáner trae sus patrones:
+    contarlos era la mitad de los hallazgos de seguridad."""
+    from ai_architect.herramientas.historial import ajeno_al_escaner
+
+    try:
+        relativa = Path(file).resolve().relative_to(Path(raiz).resolve())
+
+    except ValueError:
+        relativa = Path(file)
+
+    return ajeno_al_escaner(relativa.as_posix())

@@ -125,11 +125,26 @@ def _buscar(texto: str) -> list[dict[str, Any]]:
     hallazgos: list[dict[str, Any]] = []
 
     commit = ""
+    archivo = ""
 
     for linea in texto.splitlines():
         if linea.startswith("commit "):
             commit = linea.split()[1][:8]
+            archivo = ""
 
+            continue
+
+        if linea.startswith("+++ b/") or linea.startswith("+++ "):
+            archivo = (
+                linea.split(" ", 1)[1].strip()[2:] if linea.startswith("+++ b/") else ""
+            )
+
+            continue
+
+        # El escáner se encontraba a sí mismo: sus propios patrones y los
+        # ejemplos falsos de sus pruebas («sk-abcd…», «AKIA3F7Q…») salían
+        # como claves filtradas en cada revisión.
+        if ajeno_al_escaner(archivo):
             continue
 
         # Solo las líneas añadidas. Una línea borrada en este commit es una
@@ -158,6 +173,26 @@ def _buscar(texto: str) -> list[dict[str, Any]]:
             )
 
     return hallazgos
+
+
+# Lo que no es un secreto aunque lo parezca: el propio escáner, sus pruebas y
+# la documentación que explica qué busca.
+PROPIOS = (
+    "ai_architect/herramientas/historial.py",
+    "ai_architect/agents/security_agent.py",
+)
+
+
+def ajeno_al_escaner(archivo: str) -> bool:
+    ruta = archivo.replace("\\", "/")
+
+    if not ruta:
+        return False
+
+    if ruta.startswith("tests/") or "/tests/" in ruta:
+        return True
+
+    return any(ruta.endswith(p) for p in PROPIOS)
 
 
 def _tapar(linea: str) -> str:

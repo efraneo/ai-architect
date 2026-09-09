@@ -4,10 +4,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import webbrowser
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 # Dónde se puede guardar sin abrir un diálogo. Los nombres son los que se
@@ -50,8 +53,8 @@ def _abrir(destino: Path) -> None:
     try:
         webbrowser.open(destino.as_uri())
 
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as _error:
+        logger.debug("se ignora: %s", _error)
 
 
 def _sin_pisar(destino: Path) -> Path:

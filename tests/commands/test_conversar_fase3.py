@@ -245,3 +245,34 @@ def test_por_defecto_conversar_pide_el_nombre() -> None:
             cli.main()
 
     assert run.call_args.kwargs["nombre"] is True
+
+
+def test_pasado_el_audio_lo_que_repite_sus_palabras_no_es_eco() -> None:
+    """La prueba real: «en el escritorio» tras «¿dónde lo guardo? en el escritorio…»."""
+    conversar._ultimo_dicho = (
+        "Listo, en Word. Donde lo guardo? En el escritorio, en documentos, o dimelo."
+    )
+    conversar._ultima_vez = conversar.time.monotonic() - 10  # terminó hace rato
+
+    with mock.patch.object(conversar.motor_de_voz, "preparar", return_value=sin_voz()):
+        with mock.patch(
+            "ai_architect.commands.pide.run",
+            return_value={"success": True, "explanation": "Guardado."},
+        ):
+            salida = conversar.atender_lo_oido("En el escritorio.", ".", False)
+
+            assert salida.get("resguardo"), salida
+            respuesta = conversar._pendientes.pop(salida["resguardo"]).get(timeout=5)
+
+    assert respuesta["respuesta"] == "Guardado."
+
+
+def test_mientras_habla_si_es_eco() -> None:
+    conversar._ultimo_dicho = (
+        "Listo, en Word. Donde lo guardo? En el escritorio, en documentos, o dimelo."
+    )
+    conversar._ultima_vez = conversar.time.monotonic() + 5  # sigue hablando
+
+    salida = conversar.atender_lo_oido("en el escritorio en documentos", ".", False)
+
+    assert salida["error"] == "eco"

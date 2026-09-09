@@ -339,3 +339,18 @@ def test_conversar_recibe_el_dato_y_lo_dice(monkeypatch, tmp_path: Path) -> None
         salida["pedir"]["clave"] == "CORREO_SMTP_PUERTO"
         and "Puerto" in salida["respuesta"]
     )
+
+
+def test_reparate_sin_averia_explica_la_regla() -> None:
+    salida = respuestas.responder("Repárate.")
+
+    assert salida is not None and "adelante" in salida["respuesta"]
+    assert "ninguna avería" in salida["respuesta"]
+
+
+def test_reparate_con_averia_la_nombra() -> None:
+    autoreparacion.registrar("review", "revisa", "boom")
+
+    salida = respuestas.responder("arréglate")
+
+    assert salida is not None and "review" in salida["respuesta"]

@@ -198,6 +198,25 @@ RECUERDA = (
     "acuerdate que",
     "anota que",
     "apunta que",
+    # En la prueba real: «guarda en tu memoria que no me debes…» se fue al
+    # especialista de seguridad en vez de a la memoria.
+    "guarda en tu memoria que",
+    "guarda en memoria que",
+    "guarda en la memoria que",
+    "memoriza que",
+    "ten en cuenta que",
+    "ten presente que",
+    "no olvides que",
+)
+
+REPARATE = (
+    "reparate",
+    "arreglate",
+    "repara tu codigo",
+    "arregla tu codigo",
+    "repara tus errores",
+    "arreglate a ti mismo",
+    "corrigete",
 )
 QUE_SABES_DE_MI = (
     "que sabes de mi",
@@ -229,6 +248,24 @@ def _adelante(limpia: str) -> dict[str, Any] | None:
         from ai_architect.commands import conversar
 
         return {"respuesta": autoreparacion.adelante(avisar=conversar.decir_proactivo)}
+
+    if limpia in REPARATE:
+        averia = autoreparacion.pendiente()
+
+        if averia is None:
+            return {
+                "respuesta": (
+                    "No tengo ninguna avería apuntada. Cuando algo falle en mi código te "
+                    "lo diré, y lo reparo solo si me dices «adelante»."
+                )
+            }
+
+        return {
+            "respuesta": (
+                f"Tengo una avería pendiente en «{averia['comando']}». "
+                "Si dices «adelante», la reviso, la corrijo y corro mis pruebas."
+            )
+        }
 
     if limpia in CONECTAR_CELULAR:
         from ai_architect.canales import asistente

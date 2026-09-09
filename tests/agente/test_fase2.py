@@ -288,3 +288,14 @@ def test_lo_trivial_no_entra_en_la_memoria():
     assert [h.text for h in memoria.hechos()] == ["Trabaja en Xentris Tech"]
     # y el extractor recibe el guion en español, no el de OpenJarvis
     assert "DURABLES" in str(motor.recibido[0][0].content)
+
+
+def test_guarda_en_tu_memoria_que_va_a_la_memoria():
+    """En la prueba real se fue al especialista de seguridad."""
+    from ai_architect.commands import respuestas
+
+    salida = respuestas.responder(
+        "Guarda en tu memoria que no me debes decir qué malo tienes"
+    )
+    assert salida is not None and "Apuntado" in salida["respuesta"]
+    assert [h.text for h in memoria.hechos()] == ["no me debes decir qué malo tienes"]

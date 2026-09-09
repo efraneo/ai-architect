@@ -51,6 +51,7 @@ conversación, no en mitad de ella.
 from __future__ import annotations
 
 import json
+import logging
 import queue
 import secrets
 import threading
@@ -84,6 +85,8 @@ LIMITE = 4000
 # mirar sin saber qué se dijo exactamente.
 REGISTRO = "conversacion.log"
 
+logger = logging.getLogger(__name__)
+
 
 def ruta_registro() -> Path:
     from ai_architect.agente.rutas_agente import get_config_dir
@@ -99,8 +102,8 @@ def _registro(linea: str) -> None:
         with ruta_registro().open("a", encoding="utf-8") as archivo:
             archivo.write(time.strftime("%Y-%m-%d %H:%M:%S ") + linea.strip() + "\n")
 
-    except OSError:
-        pass
+    except OSError as _error:
+        logger.debug("se ignora: %s", _error)
 
 
 def run(
@@ -201,8 +204,8 @@ def run(
         try:
             avatar.ventana_flotante(url)
 
-        except KeyboardInterrupt:
-            pass
+        except KeyboardInterrupt as _error:
+            logger.debug("se ignora: %s", _error)
 
         finally:
             print(f"\n{perfil.despedir()}")
@@ -521,6 +524,22 @@ def _componer(project: str) -> str:
 _ultimo_dicho = ""
 
 
+# Cuánto después de terminar de hablar puede seguir llegando su propia voz.
+MARGEN_ECO = 2.5
+
+
+def puede_ser_eco(ahora: float | None = None) -> bool:
+    """Solo mientras está sonando su voz, o justo después, lo oído puede ser eco.
+
+    En la prueba real, «en el escritorio» —la respuesta del usuario a «¿dónde lo
+    guardo? en el escritorio, en documentos…»— se descartó dos veces como eco
+    porque repetía sus palabras. Pasado el audio, lo que llega es del usuario.
+    """
+    momento = time.monotonic() if ahora is None else ahora
+
+    return momento <= _ultima_vez + MARGEN_ECO
+
+
 def es_eco(oido: str, dicho: str) -> bool:
     """Si lo que se acaba de oir es la propia voz saliendo por los altavoces.
 
@@ -757,8 +776,8 @@ def decir_proactivo(texto: str) -> None:
                 target=motor_de_voz.emitir, args=(sonido,), daemon=True
             ).start()
 
-    except Exception:  # noqa: BLE001 - hablar de más nunca rompe nada
-        pass
+    except Exception as _error:  # noqa: BLE001 - hablar de más nunca rompe nada
+        logger.debug("se ignora: %s", _error)
 
     try:
         from ai_architect.canales import telegram
@@ -766,8 +785,8 @@ def decir_proactivo(texto: str) -> None:
         if telegram.configurado():
             threading.Thread(target=telegram.enviar, args=(texto,), daemon=True).start()
 
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as _error:  # noqa: BLE001
+        logger.debug("se ignora: %s", _error)
 
 
 def recibir_dato(clave: str, valor: str) -> dict[str, Any]:
@@ -854,7 +873,7 @@ def atender_lo_oido(
 
         return {"oido": "", "respuesta": "", "ms": 0, "error": "eco"}
 
-    if es_eco(dicho, _ultimo_dicho):
+    if (interrumpe or puede_ser_eco()) and es_eco(dicho, _ultimo_dicho):
         # Se oyó a sí mismo por los altavoces. Ni se ejecuta ni se
         # contesta: contestar sería empezar una conversación consigo
         # mismo que no para hasta que alguien cierre la pestaña.
@@ -1022,8 +1041,8 @@ def _trabajar(buzon: queue.Queue, dicho: str, project: str, si: bool) -> None:
     try:
         buzon.put_nowait(caja)
 
-    except queue.Full:
-        pass
+    except queue.Full as _error:
+        logger.debug("se ignora: %s", _error)
 
 
 def _resumen(respuesta: str) -> str:
