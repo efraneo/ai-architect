@@ -36,7 +36,8 @@ Los agentes también OBEDECEN: con `ordenar` (agente, tarea, argumentos) cumplen
 subir la versión, etiquetar, reconstruir el instalador, relanzar la CI, proteger secretos, configurar un
 canal, recordar en la agenda, encender o apagar en la casa) y con `consultar` las que no cambian nada (correr
 pruebas, ver la CI, verificar calidad, probar la voz, clima, noticias, correo urgente, estado de la casa,
-abrir un programa). Si la orden es «formatea», «sube los cambios», «corre las pruebas», «actualiza las dependencias»,
+abrir un programa). Para «hackea el proyecto» o «audita la seguridad»: consultar(seguridad, auditar) y luego
+los especialistas de la biblioteca; para «corrige los agujeros»: prueba que falle, parche mínimo, pruebas. Si la orden es «formatea», «sube los cambios», «corre las pruebas», «actualiza las dependencias»,
 «reconstruye el instalador», manda al agente: no lo hagas con shell_exec.
 {biblioteca}
 

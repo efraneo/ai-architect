@@ -662,6 +662,40 @@ def _biblioteca_buscar(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _auditar(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import auditoria
+
+    solo = tuple(str(s) for s in (args.get("escaneres") or []) if s)
+    informe = auditoria.escanear(str(raiz), solo)
+
+    return {
+        "ok": True,
+        "hecho": auditoria.en_palabras(informe),
+        "archivo": informe.get("archivo", ""),
+        "escaneres": informe.get("escaneres", {}),
+        "por_severidad": informe.get("por_severidad", {}),
+        "hallazgos": (informe.get("hallazgos") or [])[:60],
+    }
+
+
+def _ultima_auditoria(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import auditoria
+
+    informe = auditoria.ultima()
+
+    if informe is None:
+        return {"ok": False, "hecho": "no hay ninguna auditoría todavía"}
+
+    return {
+        "ok": True,
+        "hecho": auditoria.en_palabras(informe),
+        "archivo": informe.get("archivo", ""),
+        "fecha": informe.get("fecha", ""),
+        "por_severidad": informe.get("por_severidad", {}),
+        "hallazgos": (informe.get("hallazgos") or [])[:60],
+    }
+
+
 # --- el catálogo -------------------------------------------------------------------------
 
 CATALOGO: dict[str, dict[str, Tarea]] = {
@@ -778,6 +812,19 @@ CATALOGO: dict[str, dict[str, Tarea]] = {
         ),
     },
     "seguridad": {
+        "auditar": Tarea(
+            "auditar",
+            "ataca el proyecto con los escáneres reales (secretos, patrones, dependencias, bandit, pip-audit, npm audit, agentes) y guarda el informe",
+            _auditar,
+            False,
+            {"escaneres": "lista opcional para correr solo algunos"},
+        ),
+        "ultima_auditoria": Tarea(
+            "ultima_auditoria",
+            "el último informe de seguridad guardado",
+            _ultima_auditoria,
+            False,
+        ),
         "proteger_secretos": Tarea(
             "proteger_secretos",
             "asegura que .env y llaves estén en .gitignore",
