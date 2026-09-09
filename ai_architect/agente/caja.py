@@ -100,6 +100,7 @@ def _programa_ausente(salida: str) -> bool:
         "no se reconoce como un comando" in texto
         or "is not recognized as" in texto
         or "command not found" in texto
+        or ": not found" in texto
         or "no such file or directory" in texto
         and "execvp" in texto
     )
