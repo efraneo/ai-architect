@@ -40,7 +40,18 @@ EQUIPO: dict[str, tuple[str, str]] = {
     "calidad": ("calidad", "black, ruff, mypy, docstrings y README al día"),
     "voz": ("voz", "oído, voces, ventana, canales, Word y averías pendientes"),
     "empaquetado": ("empaquetado", "versión, spec, instalador y etiqueta"),
+    "agenda": ("agenda", "recordatorios, qué toca hoy y el contexto del día"),
+    "hogar": ("hogar", "luces, puertas, sensores y enchufes por Home Assistant"),
+    "investigacion": (
+        "investigacion",
+        "clima, lluvia, noticias y correo urgente",
+    ),
+    "sistema": ("sistema", "programas, Word, ventana y disco de esta máquina"),
 }
+
+# Los que miran la máquina y la vida diaria, no el repositorio: no entran en
+# inspect() pero sí en la herramienta equipo.
+DEL_ENTORNO = ("voz", "agenda", "hogar", "investigacion", "sistema")
 
 
 def _resumen(clave: str, informe: dict[str, Any]) -> str:
@@ -149,7 +160,16 @@ class EquipoTool(BaseTool):
             gestor = AgentManager()
             inspeccion = gestor.inspect(self._project)
             veredicto = gestor.veredicto(inspeccion)
-            inspeccion["voz"] = gestor.voz.review(self._project)
+            for clave in DEL_ENTORNO:
+                atributo, _ = EQUIPO[clave]
+
+                try:
+                    inspeccion[atributo] = getattr(gestor, atributo).review(
+                        self._project
+                    )
+
+                except Exception as e:  # noqa: BLE001 - uno roto no calla al resto
+                    inspeccion[atributo] = {"status": "error", "error": str(e)}
 
         except Exception as e:  # noqa: BLE001
             return ToolResult(

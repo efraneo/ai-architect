@@ -504,6 +504,131 @@ def _configurar_canal(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "hecho": str(salida.get("respuesta") or "configurando")}
 
 
+# --- la vida diaria -----------------------------------------------------------------------
+
+
+def _recordar(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import agenda
+
+    frase = str(args.get("frase") or "").strip()
+
+    if not frase and args.get("texto") and args.get("cuando"):
+        frase = f"{args['texto']} {args['cuando']}"
+
+    salida = agenda.por_voz("recuérdame " + frase) if frase else None
+
+    if salida is None:
+        return {
+            "ok": False,
+            "hecho": "dime qué recordar y cuándo (frase: «llamar a Juan a las tres»)",
+        }
+
+    return {"ok": bool(salida.get("agenda")), "hecho": str(salida.get("respuesta", ""))}
+
+
+def _que_toca(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import agenda
+
+    return {"ok": True, "hecho": agenda.contexto(), "pendientes": agenda.pendientes()}
+
+
+def _cancelar_recordatorios(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import agenda
+
+    return {
+        "ok": True,
+        "hecho": f"cancelados {agenda.cancelar_todos()} recordatorio(s)",
+    }
+
+
+def _casa(encender: bool) -> Hacer:
+    def hacer(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+        from ai_architect.canales import hogar
+
+        salida = hogar.accion(str(args.get("dispositivo", "")), encender)
+
+        if salida.get("falta"):
+            return {
+                "ok": False,
+                "hecho": "Home Assistant sin configurar: falta "
+                + ", ".join(salida["falta"]),
+            }
+
+        if not salida.get("ok"):
+            return {"ok": False, "hecho": str(salida.get("error"))}
+
+        return {"ok": True, "hecho": f"{salida['dispositivo']}: {salida['accion']}"}
+
+    return hacer
+
+
+def _estado_casa(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect.canales import hogar
+
+    if args.get("dispositivo"):
+        salida = hogar.estado(str(args["dispositivo"]))
+
+        return {
+            "ok": bool(salida.get("ok")),
+            "hecho": (
+                hogar._en_palabras(salida)
+                if salida.get("ok")
+                else str(salida.get("error") or salida.get("falta"))
+            ),
+        }
+
+    if not hogar.configurado():
+        return {"ok": False, "hecho": "Home Assistant sin configurar"}
+
+    lista = hogar.dispositivos()
+
+    return {
+        "ok": True,
+        "hecho": f"{len(lista)} dispositivo(s)",
+        "dispositivos": lista[:60],
+    }
+
+
+def _clima(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import investigar
+
+    datos = investigar.clima(str(args.get("ciudad", "")))
+
+    return {
+        "ok": bool(datos.get("ok")),
+        "hecho": investigar.clima_en_palabras(datos),
+        "datos": datos,
+    }
+
+
+def _noticias(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import investigar
+
+    datos = investigar.noticias(str(args.get("tema", "")))
+
+    return {
+        "ok": bool(datos.get("ok")),
+        "hecho": investigar.noticias_en_palabras(datos),
+        "titulares": datos.get("titulares", []),
+    }
+
+
+def _correo_urgente(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import investigar
+
+    datos = investigar.correos_urgentes()
+
+    return {"ok": bool(datos.get("ok")), "hecho": investigar.correos_en_palabras(datos)}
+
+
+def _abrir_programa(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect.commands import abrir
+
+    salida = abrir.abrir(str(args.get("que", "")))
+
+    return {"ok": bool(salida.get("ok")), "hecho": str(salida.get("explicacion", ""))}
+
+
 # --- el catálogo -------------------------------------------------------------------------
 
 CATALOGO: dict[str, dict[str, Tarea]] = {
@@ -625,6 +750,75 @@ CATALOGO: dict[str, dict[str, Tarea]] = {
             "asegura que .env y llaves estén en .gitignore",
             _proteger_secretos,
             True,
+        ),
+    },
+    "agenda": {
+        "recordar": Tarea(
+            "recordar",
+            "apunta un recordatorio dicho como por voz («llamar a Juan a las tres»)",
+            _recordar,
+            True,
+            {"frase": "qué y cuándo"},
+        ),
+        "que_toca": Tarea(
+            "que_toca", "la hora, la parte del día y lo pendiente", _que_toca, False
+        ),
+        "cancelar": Tarea(
+            "cancelar", "cancela todos los recordatorios", _cancelar_recordatorios, True
+        ),
+    },
+    "hogar": {
+        "encender": Tarea(
+            "encender",
+            "enciende, abre o activa un dispositivo",
+            _casa(True),
+            True,
+            {"dispositivo": "nombre"},
+        ),
+        "apagar": Tarea(
+            "apagar",
+            "apaga, cierra o desactiva un dispositivo",
+            _casa(False),
+            True,
+            {"dispositivo": "nombre"},
+        ),
+        "estado": Tarea(
+            "estado",
+            "el estado de un dispositivo o de toda la casa",
+            _estado_casa,
+            False,
+            {"dispositivo": "opcional"},
+        ),
+    },
+    "investigacion": {
+        "clima": Tarea(
+            "clima",
+            "el clima ahora y la lluvia próxima",
+            _clima,
+            False,
+            {"ciudad": "opcional"},
+        ),
+        "noticias": Tarea(
+            "noticias",
+            "titulares de hoy o de un tema",
+            _noticias,
+            False,
+            {"tema": "opcional"},
+        ),
+        "correo_urgente": Tarea(
+            "correo_urgente",
+            "correos recientes que parecen urgentes",
+            _correo_urgente,
+            False,
+        ),
+    },
+    "sistema": {
+        "abrir": Tarea(
+            "abrir",
+            "abre un programa, carpeta o archivo",
+            _abrir_programa,
+            False,
+            {"que": "nombre"},
         ),
     },
     "voz": {

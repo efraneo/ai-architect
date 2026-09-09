@@ -28,6 +28,12 @@ from ai_architect.agents.scope import recorrido_compartido
 from ai_architect.agents.security_agent import SecurityAgent
 from ai_architect.agents.test_agent import TestAgent
 from ai_architect.agents.testing_agent import TestingAgent
+from ai_architect.agents.vida_agent import (
+    AgendaAgent,
+    HogarAgent,
+    InvestigacionAgent,
+    SistemaAgent,
+)
 from ai_architect.agents.voz_agent import VozAgent
 from ai_architect.swarm.consensus_engine import ConsensusEngine
 from ai_architect.swarm.task_dispatcher import TaskDispatcher
@@ -62,6 +68,11 @@ class AgentManager:
         self.release = ReleaseAgent()
         self.calidad = CalidadAgent()
         self.voz = VozAgent()
+        # Los del entorno: revisan la máquina y la vida diaria, no el repositorio.
+        self.agenda = AgendaAgent()
+        self.hogar = HogarAgent()
+        self.investigacion = InvestigacionAgent()
+        self.sistema = SistemaAgent()
         self.empaquetado = EmpaquetadoAgent()
 
         # AI agents

@@ -101,7 +101,11 @@ pip, pytest, osv.dev) y uno más, Voz y Canales, revisa la máquina. Como herram
 | pruebas | correr (`ruta`, `filtro`) |
 | devops | ver_ci, relanzar_ci |
 | seguridad | proteger_secretos (.gitignore) |
-| voz | instalar_ventana, probar_voz, configurar_canal `canal` |
+| voz | instalar_ventana, probar_voz, configurar_canal `canal`, instalar_huella, instalar_oido_local |
+| agenda | recordar `frase`, que_toca, cancelar |
+| hogar | encender `dispositivo`, apagar `dispositivo`, estado |
+| investigacion | clima, noticias `tema`, correo_urgente |
+| sistema | abrir `que` |
 
 Por voz: «formatea el código», «sube los cambios», «corre las pruebas», «actualiza las
 dependencias», «anota el changelog», «etiqueta la versión», «reconstruye el instalador».

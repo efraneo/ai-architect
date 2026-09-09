@@ -56,6 +56,10 @@ POR_DEFECTO_PROYECTO = {
     "publicacion": "changelog, versión, listo para publicar",
     "voz": "oído, voces, ventana, canales, Word, averías pendientes",
     "empaquetado": "versión coherente, spec, instalador al día",
+    "agenda": "recordatorios, qué toca hoy, contexto del día",
+    "hogar": "luces, puertas, sensores, Home Assistant",
+    "investigacion": "clima, lluvia, noticias, correo urgente",
+    "sistema": "programas, Word, ventana, disco",
 }
 
 
