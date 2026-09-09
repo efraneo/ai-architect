@@ -374,3 +374,38 @@ def test_orden_por_http_con_resguardo_y_audio_en_la_pagina(tmp_path: Path) -> No
                     servidor.shutdown()
 
     emitir.assert_not_called()
+
+
+def test_por_voz_no_hay_coletilla() -> None:
+    from ai_architect.commands import pide
+
+    try:
+        pide.conciso(True)
+        pide.reiniciar_saludo()
+        primera = pide._con_trato("Son las nueve.")
+        segunda = pide._con_trato("Hecho.")
+
+    finally:
+        pide.conciso(False)
+
+    assert "En qué te puedo ayudar" not in primera and "Son las nueve." in primera
+    assert primera.count("\n") >= 1  # el saludo, solo la primera vez
+    assert segunda == "Hecho."
+    assert "En qué te puedo ayudar" in pide._con_trato("Escribiendo sí.")
+
+
+def test_conversar_enciende_el_modo_conciso_y_calienta_el_oido() -> None:
+    from ai_architect.commands import pide
+
+    servidor = mock.Mock()
+
+    with mock.patch.object(
+        conversar, "_levantar", return_value=(servidor, "http://x/")
+    ):
+        with mock.patch("webbrowser.open"):
+            with mock.patch("ai_architect.voz.escuchar.calentar") as calentar:
+                conversar.run(".", servir_para_siempre=False)
+
+    calentar.assert_called_once()
+    assert pide._conciso is True
+    pide.conciso(False)

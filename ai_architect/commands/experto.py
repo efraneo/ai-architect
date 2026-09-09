@@ -154,7 +154,11 @@ Y tiene que decir **qué**, con el dato concreto: qué has encontrado, qué
 cifra sale, qué harías. "Hay problemas que deben corregirse" no dice nada
 — eso ya lo sabía antes de preguntar. "Hay dos contraseñas escritas en el
 código, en config y en el arranque" sí.
-"""
+
+
+Contesta AL GRANO: responde exactamente a lo que se pregunta, en tres o
+cuatro frases como mucho, sin repetir la pregunta, sin preámbulos ni
+ofrecimientos de seguir ayudando. Se va a leer en voz alta."""
 
 
 def responder(

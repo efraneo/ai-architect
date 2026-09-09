@@ -96,7 +96,7 @@ def test_se_le_pasa_el_vocabulario_del_proyecto() -> None:
 
 
 def test_si_el_primer_modelo_no_esta_se_usa_el_segundo() -> None:
-    """`gpt-4o-transcribe` no está en todas las cuentas; `whisper-1` sí."""
+    """El mini no está en todas las cuentas; el siguiente de la lista, sí."""
     with mock.patch("openai.OpenAI") as constructor:
         crear = constructor.return_value.audio.transcriptions.create
         crear.side_effect = [RuntimeError("model_not_found"), respuesta("hola")]
@@ -104,17 +104,21 @@ def test_si_el_primer_modelo_no_esta_se_usa_el_segundo() -> None:
         salida = escuchar.transcribir(b"audio")
 
     assert salida["texto"] == "hola"
-    assert salida["modelo"] == "whisper-1"
+    assert salida["modelo"] == escuchar.MODELOS[1]
 
 
 def test_si_ninguno_responde_se_dice_el_ultimo_motivo() -> None:
     with mock.patch("openai.OpenAI") as constructor:
         crear = constructor.return_value.audio.transcriptions.create
-        crear.side_effect = [RuntimeError("uno"), RuntimeError("dos")]
+        crear.side_effect = [
+            RuntimeError("uno"),
+            RuntimeError("dos"),
+            RuntimeError("tres"),
+        ]
 
         salida = escuchar.transcribir(b"audio")
 
-    assert salida["error"] == "dos"
+    assert salida["error"] == "tres"
 
 
 # --- Si hay con qué oír -----------------------------------------------------
@@ -139,3 +143,13 @@ def test_los_dos_modelos_son_de_transcripcion(orden: int) -> None:
     assert (
         "transcribe" in escuchar.MODELOS[orden] or "whisper" in escuchar.MODELOS[orden]
     )
+
+
+@pytest.fixture(autouse=True)
+def _cliente_nuevo_por_prueba():
+    """El cliente de OpenAI se reutiliza en la sesión; cada prueba dobla el suyo."""
+    escuchar._cliente = None
+
+    yield
+
+    escuchar._cliente = None

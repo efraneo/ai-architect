@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any
 
-from ai_architect.agente.tipos import Message, Role, _message_to_dict
+from ai_architect.agente.tipos import Message, Role
 
 
 class InferenceEngine(ABC):
@@ -55,6 +55,39 @@ def _aplanar(messages: Sequence[Message]) -> str:
         else:
             partes.append(f"[{rol}]\n{m.content or ''}")
     return "\n\n".join(partes)
+
+
+def _a_openai(m: Message) -> dict[str, Any]:
+    """Un mensaje en el formato del *chat completions* de OpenAI.
+
+    ``_message_to_dict`` (de OpenJarvis) serializa para trazas, no para la API:
+    las llamadas a herramientas van como ``{"id","name","arguments"}`` y OpenAI
+    exige ``{"id","type":"function","function":{"name","arguments"}}``. Con lo
+    primero contestaba 400 «Missing required parameter: tool_calls[0].type» y
+    ``hacer`` fallaba en la primera herramienta. Se vio en la primera prueba real.
+    """
+    rol = m.role.value
+    d: dict[str, Any] = {"role": rol, "content": m.content or ""}
+
+    if rol == "assistant" and m.tool_calls:
+        d["tool_calls"] = [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.name, "arguments": tc.arguments or "{}"},
+            }
+            for tc in m.tool_calls
+        ]
+        if not m.content:
+            d["content"] = None
+
+    if rol == "tool":
+        d["tool_call_id"] = m.tool_call_id or ""
+
+    if m.name and rol != "tool":
+        d["name"] = m.name
+
+    return d
 
 
 class MotorArquitecto(InferenceEngine):
@@ -135,7 +168,7 @@ class MotorArquitecto(InferenceEngine):
     ) -> dict[str, Any]:
         peticion: dict[str, Any] = {
             "model": model or self.modelo,
-            "messages": [_message_to_dict(m) for m in messages],
+            "messages": [_a_openai(m) for m in messages],
             "tools": list(tools),
             "tool_choice": "auto",
         }

@@ -172,3 +172,37 @@ def test_el_motor_aplana_la_conversacion_para_proveedores_de_texto():
 
     r = motor.generate([Message(role=Role.USER, content="hola")], model="x")
     assert r["content"].startswith("respuesta: [user]") and r["tool_calls"] == []
+
+
+def test_los_mensajes_van_en_el_formato_de_openai():
+    """OpenAI exige tool_calls[].type = "function" y function.{name,arguments}.
+    Con el formato de trazas de OpenJarvis contestaba 400 en la primera herramienta."""
+    from ai_architect.agente.motor import _a_openai
+    from ai_architect.agente.tipos import Message, Role, ToolCall
+
+    asistente = Message(
+        role=Role.ASSISTANT,
+        content="",
+        tool_calls=[ToolCall(id="c1", name="file_read", arguments='{"path": "a"}')],
+    )
+    d = _a_openai(asistente)
+    assert d["content"] is None
+    assert d["tool_calls"] == [
+        {
+            "id": "c1",
+            "type": "function",
+            "function": {"name": "file_read", "arguments": '{"path": "a"}'},
+        }
+    ]
+    herramienta = Message(
+        role=Role.TOOL, content="ok", tool_call_id="c1", name="file_read"
+    )
+    assert _a_openai(herramienta) == {
+        "role": "tool",
+        "content": "ok",
+        "tool_call_id": "c1",
+    }
+    assert _a_openai(Message(role=Role.USER, content="hola")) == {
+        "role": "user",
+        "content": "hola",
+    }

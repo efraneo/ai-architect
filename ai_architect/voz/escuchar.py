@@ -29,7 +29,47 @@ from pathlib import Path
 from typing import Any
 
 # En orden de preferencia. El primero que responda es el que se usa.
-MODELOS = ("gpt-4o-transcribe", "whisper-1")
+#
+# Medido el 8 sep 2026 con 3,9 s de audio: gpt-4o-mini-transcribe 1,2 s,
+# gpt-4o-transcribe 1,3 s, whisper-1 4,2 s. El «mini» entiende igual de bien el
+# español de estas órdenes y es el más barato: va primero.
+MODELOS = ("gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1")
+
+# Un solo cliente para toda la sesión: crear uno por frase abría una conexión
+# nueva cada vez, y la primera llamada de la sesión tardaba hasta 7 s.
+_cliente: Any = None
+
+
+def _con_openai() -> Any:
+    global _cliente
+
+    if _cliente is None:
+        from openai import OpenAI
+
+        _cliente = OpenAI()
+
+    return _cliente
+
+
+def calentar() -> None:
+    """Abre la conexión antes de que haga falta, en segundo plano.
+
+    La primera transcripción de la sesión pagaba el arranque del cliente y la
+    conexión TLS: 7 s en la primera prueba real. Con esto se paga al abrir la
+    cara, mientras el usuario todavía no ha dicho nada.
+    """
+    import threading
+
+    def _calentar() -> None:
+        try:
+            _con_openai().models.retrieve(MODELOS[0])
+
+        except Exception:  # noqa: BLE001 - es un calentamiento, no una comprobación
+            pass
+
+    if disponible():
+        threading.Thread(target=_calentar, daemon=True).start()
+
 
 IDIOMA = "es"
 
@@ -65,7 +105,7 @@ def transcribir(datos: bytes, sufijo: str = ".webm") -> dict[str, Any]:
         }
 
     try:
-        from openai import OpenAI
+        cliente = _con_openai()
 
     except ImportError:
         return {"texto": "", "modelo": "", "error": "falta el paquete openai"}
@@ -77,8 +117,6 @@ def transcribir(datos: bytes, sufijo: str = ".webm") -> dict[str, Any]:
 
     except OSError as e:
         return {"texto": "", "modelo": "", "error": str(e)}
-
-    cliente = OpenAI()
 
     ultimo = ""
 

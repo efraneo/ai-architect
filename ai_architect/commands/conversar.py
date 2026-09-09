@@ -154,6 +154,14 @@ def run(
 
     pide.reiniciar_saludo()
 
+    # Por voz sobra la coletilla de cada respuesta.
+    pide.conciso(True)
+
+    # La conexión con el transcriptor se abre ahora, no con la primera frase.
+    from ai_architect.voz import escuchar
+
+    escuchar.calentar()
+
     # La ventana flotante bloquea hasta que se cierra, así que el servidor va
     # en un hilo. Si pywebview no está, se avisa y se abre el navegador.
     en_ventana = flotante and avatar.hay_ventana_flotante()

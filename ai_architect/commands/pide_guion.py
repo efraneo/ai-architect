@@ -59,11 +59,14 @@ REGLAS
   -> "analyze".
 - "arregla", "mejora", "cambia", "añade", "extrae" -> "improve" con
   instruction en español, copiando lo que pidió.
-- Una orden de varios pasos sobre el repositorio —"examina X, corre las
-  pruebas y corrige lo que falle", "haz que…", "revisa y arregla",
-  "propón cómo simplificar"— -> "hacer" con instruction = la orden entera
-  tal como la dijo. "hacer" examina, prueba y propone; sin permiso no
-  escribe, así que no hace falta pedirlo.
+- "hacer" SOLO cuando la orden pide ACTUAR en varios pasos: "examina X,
+  corre las pruebas y corrige lo que falle", "haz que…", "revisa y arregla",
+  "corrige lo que encuentres", "propón un parche para…". Va con
+  instruction = la orden entera tal como la dijo. Un "revisa el proyecto"
+  o "cómo está" a secas NO es "hacer": es "agents" (o "review" si pide
+  nota). Tarda medio minuto y usa herramientas; no se elige para mirar.
+- Cuando contestas tú (comando vacío), sé breve: una a tres frases,
+  solo lo que se preguntó, sin preámbulos ni ofrecimientos.
 - "está todo bien configurado", "funciona", "tengo la clave" -> "doctor".
 - "hazme", "prepárame", "redacta", "resume", "una tabla de", "una gráfica
   de", "ayúdame con mi tarea", "un trabajo sobre" -> "crear", con `peticion`

@@ -462,11 +462,24 @@ def _recordado(frase: str, cuerpo: str, fuente: Any) -> str:
     return cuerpo
 
 
+# Por voz, cada respuesta terminaba con «¿En qué te puedo ayudar ahora, Efraín?»:
+# dos segundos de audio que no dicen nada y que se oyen veinte veces por
+# conversación. `conversar` lo apaga; escribiendo se mantiene.
+_conciso = False
+
+
+def conciso(activar: bool = True) -> None:
+    global _conciso
+
+    _conciso = activar
+
+
 def _con_trato(cuerpo: str) -> str:
     """La respuesta, entre el saludo y la despedida del momento del día.
 
     Es lo que separa una herramienta de algo que se siente tuyo: que sepa a
-    quién le habla y qué hora es.
+    quién le habla y qué hora es. En modo conciso (por voz) solo se saluda la
+    primera vez y no hay coletilla.
     """
     global _ya_saludo
 
@@ -475,7 +488,9 @@ def _con_trato(cuerpo: str) -> str:
     _ya_saludo = True
 
     partes.append(cuerpo)
-    partes.append(perfil.cerrar())
+
+    if not _conciso:
+        partes.append(perfil.cerrar())
 
     return "\n\n".join(partes)
 
