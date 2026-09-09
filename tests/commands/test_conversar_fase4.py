@@ -331,9 +331,18 @@ def test_orden_por_http_con_resguardo_y_audio_en_la_pagina(tmp_path: Path) -> No
                 "ai_architect.commands.pide.run",
                 return_value={"success": True, "explanation": "Hecho."},
             ):
-                servidor, url = conversar._levantar("<html>", ".", False)
+                # Un puerto libre de verdad: en Linux el 8731 de una prueba
+                # anterior sigue en TIME_WAIT y el servidor no comparte puerto.
+                import socket
 
-                assert servidor is not None, "el puerto 8731 está ocupado"
+                with socket.socket() as sonda:
+                    sonda.bind(("127.0.0.1", 0))
+                    puerto = sonda.getsockname()[1]
+
+                with mock.patch.object(avatar, "PUERTO", puerto):
+                    servidor, url = conversar._levantar("<html>", ".", False)
+
+                assert servidor is not None, f"el puerto {puerto} está ocupado"
 
                 import threading
 
