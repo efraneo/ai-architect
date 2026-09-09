@@ -160,6 +160,12 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
     if recordado is not None:
         return recordado
 
+    # La palabra maestra: solo ella arranca una reparación o una reconstrucción.
+    maestra = _adelante(limpia)
+
+    if maestra is not None:
+        return maestra
+
     # «Llama a Juan», «pon música», «bloquea el celular»: al teléfono, ya.
     telefono = _celular(limpia, frase)
 
@@ -203,6 +209,40 @@ QUE_SABES_DE_MI = (
 OLVIDA = ("olvida todo", "olvidalo todo", "borra tu memoria", "borra la memoria")
 
 
+CONECTAR_CELULAR = (
+    "conectate al celular",
+    "conecta el celular",
+    "configura el celular",
+    "configura telegram",
+    "conecta telegram",
+)
+CONECTAR_CORREO = ("configura el correo", "conecta el correo", "configura mi correo")
+
+
+def _adelante(limpia: str) -> dict[str, Any] | None:
+    """«Adelante» es la palabra maestra: repara o reconstruye lo que espera, y nada más.
+    También «conéctate al celular» / «configura el correo» arrancan la configuración guiada.
+    """
+    from ai_architect import autoreparacion
+
+    if autoreparacion.es_palabra_maestra(limpia):
+        from ai_architect.commands import conversar
+
+        return {"respuesta": autoreparacion.adelante(avisar=conversar.decir_proactivo)}
+
+    if limpia in CONECTAR_CELULAR:
+        from ai_architect.canales import asistente
+
+        return asistente.empezar("telegram")
+
+    if limpia in CONECTAR_CORREO:
+        from ai_architect.canales import asistente
+
+        return asistente.empezar("correo")
+
+    return None
+
+
 def _celular(limpia: str, original: str) -> dict[str, Any] | None:
     """Las órdenes al celular se resuelven aquí, sin modelo: van por Telegram a
     una automatización del teléfono (docs/CELULAR.md). Llamar y mandar SMS
@@ -224,15 +264,12 @@ def _celular(limpia: str, original: str) -> dict[str, Any] | None:
             )
         }
 
-    from ai_architect.canales import telegram
+    from ai_architect.canales import asistente, telegram
 
     if not telegram.configurado():
-        return {
-            "respuesta": (
-                "Para mandar el celular necesito el bot de Telegram configurado. "
-                "Mira «architect canales»."
-            )
-        }
+        # Sin bot no hay celular: se configura ahora, pidiendo lo que falte, y
+        # la orden se retoma sola en cuanto quede conectado.
+        return asistente.empezar("telegram", original)
 
     if accion in celular.CON_PERMISO:
         from pathlib import Path

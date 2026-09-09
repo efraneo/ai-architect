@@ -341,6 +341,55 @@
     .oido { font-size: 13px; bottom: 58px; }
   }
 
+  /* Cuando pide un dato (un token, una clave): un campo, y nada mas. */
+  .dato {
+    position: fixed;
+    left: 50%;
+    bottom: 118px;
+    transform: translateX(-50%);
+    width: min(520px, 80vw);
+    padding: 14px 18px;
+    border-radius: 14px;
+    background: rgba(10, 18, 40, .88);
+    border: 1px solid rgba(120, 200, 255, .5);
+    backdrop-filter: blur(12px);
+    color: #dbe6ff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s;
+    z-index: 12;
+  }
+
+  .dato.se-ve { opacity: 1; pointer-events: auto; }
+
+  .dato label { display: block; font-size: 12px; line-height: 1.4; margin-bottom: 8px; color: #9fd0ff; }
+
+  .dato .fila { display: flex; gap: 8px; }
+
+  .dato input {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(120, 200, 255, .4);
+    background: rgba(0, 0, 0, .35);
+    color: #f0f5ff;
+    font: inherit;
+    font-size: 13px;
+  }
+
+  .dato button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(120, 220, 150, .6);
+    background: rgba(120, 220, 150, .18);
+    color: #d9ffe6;
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
   .destello { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
 
   .destello.exito {
@@ -374,6 +423,14 @@
   <div class="botones">
     <button class="si" id="permiso-si">S&iacute;, hazlo</button>
     <button id="permiso-no">No</button>
+  </div>
+</div>
+
+<div class="dato" id="dato">
+  <label id="dato-etiqueta"></label>
+  <div class="fila">
+    <input id="dato-valor" autocomplete="off">
+    <button id="dato-ok">Listo</button>
   </div>
 </div>
 
@@ -985,6 +1042,19 @@ function tarjeta(clase, titulo, cuerpo, detalle) {
 }
 
 function atenderAviso(a) {
+  if (a.tipo === "decir") {
+    if (ocupado && !hablando()) {
+      porDecir.push(a);
+
+      return;
+    }
+
+    ocupado = true;
+    procesarRespuesta({ respuesta: a.respuesta, dicho: a.dicho, ms: a.ms, audio: a.audio }, 600, true);
+
+    return;
+  }
+
   if (a.tipo === "fase") {
     if (a.fase === "trabajando") arquitecto.trabajar();
     else if (a.fase === "error") arquitecto.error();
@@ -1275,6 +1345,15 @@ function escucharDeNuevo() {
   ocupado = false;
   arquitecto.escuchar();
 
+  if (porDecir.length) {
+    const a = porDecir.shift();
+
+    ocupado = true;
+    procesarRespuesta({ respuesta: a.respuesta, dicho: a.dicho, ms: a.ms, audio: a.audio }, 600, true);
+
+    return;
+  }
+
   if (escuchando) { try { escuchando.start(); } catch (e) { /* ya estaba */ } }
 }
 
@@ -1528,7 +1607,59 @@ async function enviarOrden(texto, interrumpe) {
 
 // Lo que se hace con una respuesta, venga de donde venga: la ventana, el
 // panel, el permiso (ambar) o su resolucion, y decirla.
+// Lo que Architect quiere decir por su cuenta (una reparacion que termino,
+// el celular recien conectado) espera a que no este ocupado.
+const porDecir = [];
+
+function pedirDato(p) {
+  const caja = document.getElementById("dato");
+  const campo = document.getElementById("dato-valor");
+
+  document.getElementById("dato-etiqueta").textContent = p.etiqueta || p.clave;
+  campo.type = p.secreto ? "password" : "text";
+  campo.value = "";
+  caja.dataset.clave = p.clave;
+  caja.classList.add("se-ve");
+  campo.focus();
+}
+
+async function entregarDato() {
+  const caja = document.getElementById("dato");
+  const campo = document.getElementById("dato-valor");
+  const clave = caja.dataset.clave || "";
+  const valor = campo.value;
+
+  caja.classList.remove("se-ve");
+  campo.value = "";
+
+  let datos;
+
+  try {
+    const r = await fetch("/dato", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave: clave, valor: valor }),
+    });
+
+    datos = await r.json();
+
+  } catch (e) {
+    mostrarOido("No pude guardar el dato: " + e.message, true);
+
+    return;
+  }
+
+  procesarRespuesta(datos, 600, true);
+}
+
+document.getElementById("dato-ok").addEventListener("click", entregarDato);
+document.getElementById("dato-valor").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") entregarDato();
+});
+
 function procesarRespuesta(datos, margen, mostrar) {
+  if (datos.pedir && datos.pedir.clave) pedirDato(datos.pedir);
+
   if (datos.ventana) ordenarVentana(datos.ventana);
 
   if (datos.panel) mostrarPanel(datos.panel);

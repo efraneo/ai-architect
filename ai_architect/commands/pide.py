@@ -240,6 +240,8 @@ def run(
                 "pending": rapida.get("pending", []),
                 "pending_ids": rapida.get("pending_ids", []),
                 "pregunta_permiso": bool(rapida.get("pregunta_permiso")),
+                "pedir": rapida.get("pedir"),
+                "descubrir": rapida.get("descubrir", ""),
                 "explanation": _con_trato(rapida["respuesta"]),
             },
             decir,
@@ -553,7 +555,19 @@ def _ejecutar(
         resultado = comando.ejecutar(cast(Any, args))
 
     except Exception as e:  # noqa: BLE001 - el comando falla, `pide` informa
-        return _error(f"{nombre} falló: {e}", command=nombre)
+        # Es un fallo del propio código: se apunta y se ofrece la reparación,
+        # que solo arranca con la palabra maestra del usuario.
+        import traceback
+
+        from ai_architect import autoreparacion
+
+        averia = autoreparacion.registrar(nombre, frase, str(e), traceback.format_exc())
+
+        return _error(
+            f"{nombre} falló: {e}\n\n{autoreparacion.aviso_de_averia(averia)}",
+            command=nombre,
+            averia=averia["id"],
+        )
 
     respuesta = {
         "success": True,

@@ -44,6 +44,7 @@ from ai_architect.commands import (
     memoria,
     pendientes,
     pide,
+    reparar,
     review,
     skills,
     tareas,
@@ -234,6 +235,12 @@ COMANDOS: tuple[Comando, ...] = (
         "canales",
         "Por dónde te habla además del micrófono: celular, correo, WhatsApp (--canal X lo prueba)",
         lambda a: canales.run(probar=a.canal),
+        elegible=False,
+    ),
+    Comando(
+        "reparar",
+        "Las averías del propio Architect; --frase adelante es la palabra maestra que lo repara",
+        lambda a: reparar.run(" ".join(a.frase or [])),
         elegible=False,
     ),
     Comando(

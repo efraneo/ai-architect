@@ -406,6 +406,18 @@ Telegram a una automatización del teléfono (Tasker en Android; receta en
 `docs/CELULAR.md`). Llamar pide un «sí». Desbloquear no lo permite ningún
 teléfono. «Recuerda que el número de Juan es 300…» lo guarda en la agenda.
 
+**Se arregla a sí mismo, pero solo con tu «adelante».** Si falla su propio
+código, lo apunta y te lo dice; la palabra maestra **«adelante»** (de viva voz,
+por Telegram o `architect reparar --frase adelante`) arranca la reparación
+sobre su código fuente (`ARCHITECT_FUENTE`), corre sus pruebas de verdad y te
+cuenta; otro «adelante» reconstruye el instalador. Nunca lo hace solo ni lo
+aprende: siempre pide tu orden.
+
+**Se configura hablando.** «Llama a Juan» sin bot de Telegram: te pide el
+token de @BotFather en un campo de la cara, descubre él solo tu chat cuando le
+escribes, y sigue con la orden. «Conéctate al celular» y «configura el correo»
+hacen lo mismo.
+
 **Se procura lo que le falta.** `architect instalar --frase "paquete rich"`
 instala con pip y lo apunta en `requirements.txt`; `--frase "skill
 https://github.com/…"` baja una skill a `~/.ai_architect/skills`. En `hacer`

@@ -69,6 +69,8 @@ REGLAS
   nota). Tarda medio minuto y usa herramientas; no se elige para mirar.
 - "instala X", "descarga la skill de URL", "necesitas el paquete X" ->
   "instalar" con instruction = "paquete X" o "skill URL".
+- "adelante" a secas es la palabra maestra del usuario y la atiende otro
+  sitio: nunca la conviertas en comando ni la interpretes como "sí".
 - Cuando contestas tú (comando vacío), sé breve: una a tres frases,
   solo lo que se preguntó, sin preámbulos ni ofrecimientos.
 - "está todo bien configurado", "funciona", "tengo la clave" -> "doctor".

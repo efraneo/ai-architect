@@ -146,8 +146,17 @@ def run(
             AgentContext(metadata={"repositorio": str(repositorio), "permiso": si}),
         )
     except Exception as e:  # noqa: BLE001 - el agente falla, el comando informa
+        import traceback
+
+        from ai_architect import autoreparacion
+
         progreso.avisar("fase", fase="error", detalle=str(e)[:120])
-        return _error(f"el agente falló: {e}")
+        averia = autoreparacion.registrar(
+            "hacer", frase, str(e), traceback.format_exc()
+        )
+        return _error(
+            f"el agente falló: {e}\n\n{autoreparacion.aviso_de_averia(averia)}"
+        )
 
     usadas = [r.tool_name for r in resultado.tool_results]
     escrituras = [n for n in usadas if n in caja.ESCRIBEN]

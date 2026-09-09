@@ -102,6 +102,23 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
+            if ruta == "/dato":
+                # Un dato que la cara pidió (token, clave…). Nunca se registra.
+                try:
+                    largo = min(int(self.headers.get("Content-Length") or 0), 8192)
+                    cuerpo = json.loads(self.rfile.read(largo) or b"{}")
+                    clave = str(cuerpo.get("clave", ""))
+                    valor = str(cuerpo.get("valor", ""))
+
+                except (ValueError, OSError, AttributeError):
+                    self.send_error(400)
+
+                    return
+
+                self._enviar(c.recibir_dato(clave, valor))
+
+                return
+
             if ruta == "/sonar":
                 # La página no pudo reproducir el audio: suena aquí.
                 sono = c.sonar_aqui(self._parametro("t"))

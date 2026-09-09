@@ -61,6 +61,7 @@ def test_estan_los_comandos() -> None:
         "telegram",
         "instalar",
         "celular",
+        "reparar",
     }
 
 

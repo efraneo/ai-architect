@@ -732,6 +732,74 @@ def entregar(salida: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | N
     return salida, None
 
 
+def decir_proactivo(texto: str) -> None:
+    """Hablar sin que le hayan preguntado: el resultado de una reparación, el
+    celular recién conectado. Va a la cara (por `/progreso`) y al celular si hay."""
+    if not (texto or "").strip():
+        return
+
+    _registro(f"  < (proactivo) {_resumen(texto)}")
+
+    try:
+        preparado = motor_de_voz.preparar(texto)
+        salida, sonido = entregar({"respuesta": texto, "_audio": preparado})
+        _recordar_dicho(preparado, texto)
+        progreso.avisar(
+            "decir",
+            respuesta=texto,
+            dicho=preparado.get("texto", texto),
+            ms=int(float(preparado.get("segundos", 0) or 0) * 1000),
+            audio=salida.get("audio", ""),
+        )
+
+        if sonido:
+            threading.Thread(
+                target=motor_de_voz.emitir, args=(sonido,), daemon=True
+            ).start()
+
+    except Exception:  # noqa: BLE001 - hablar de más nunca rompe nada
+        pass
+
+    try:
+        from ai_architect.canales import telegram
+
+        if telegram.configurado():
+            threading.Thread(target=telegram.enviar, args=(texto,), daemon=True).start()
+
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def recibir_dato(clave: str, valor: str) -> dict[str, Any]:
+    """Un dato que la cara pidió (token, clave de correo…): se guarda y se sigue."""
+    from ai_architect.canales import asistente
+
+    salida = asistente.recibir(clave, valor)
+
+    return _seguir_configurando(salida)
+
+
+def _seguir_configurando(salida: dict[str, Any]) -> dict[str, Any]:
+    """Si la configuración necesita descubrir el chat del celular, arranca la espera."""
+    if salida.get("descubrir") == "telegram":
+        from ai_architect.canales import asistente
+
+        asistente.descubrir_chat_id(avisar=decir_proactivo)
+
+    respuesta = str(salida.get("respuesta", ""))
+    preparado = motor_de_voz.preparar(respuesta)
+    _recordar_dicho(preparado, respuesta)
+
+    return {
+        "respuesta": respuesta,
+        "dicho": preparado.get("texto", respuesta),
+        "ms": int(float(preparado.get("segundos", 0) or 0) * 1000),
+        "instantanea": True,
+        "pedir": salida.get("pedir"),
+        "_audio": preparado,
+    }
+
+
 def audio_preparado(token: str) -> bytes | None:
     return _audios.get(token)
 
@@ -883,6 +951,11 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
 
     _recordar_dicho(preparado, respuesta)
 
+    if resultado.get("descubrir") == "telegram":
+        from ai_architect.canales import asistente
+
+        asistente.descubrir_chat_id(avisar=decir_proactivo)
+
     return {
         "respuesta": respuesta,
         "dicho": preparado.get("texto", respuesta),
@@ -891,6 +964,7 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
         "ventana": resultado.get("window", ""),
         "instantanea": bool(resultado.get("instant")),
         "permiso": permiso,
+        "pedir": resultado.get("pedir"),
         "_audio": preparado,
     }
 
@@ -935,15 +1009,18 @@ def _trabajar(buzon: queue.Queue, dicho: str, project: str, si: bool) -> None:
     # termine—, y al pedirla se sacaba el buzón del diccionario. Cuando la
     # tarea acababa ya no encontraba dónde dejar el resultado, lo tiraba, y
     # la página se quedaba esperando algo que nunca iba a llegar.
-    try:
-        buzon.put_nowait(
-            caja
-            or {
-                "respuesta": "Algo se me atragantó y no pude terminar.",
-                "dicho": "Algo se me atragantó y no pude terminar.",
-                "ms": 0,
-            }
+    if not caja:
+        from ai_architect import autoreparacion
+
+        averia = autoreparacion.registrar("conversar", dicho, "la faena no terminó")
+        texto = (
+            "Algo se me atragantó y no pude terminar. "
+            + autoreparacion.aviso_de_averia(averia)
         )
+        caja = {"respuesta": texto, "dicho": texto, "ms": 0}
+
+    try:
+        buzon.put_nowait(caja)
 
     except queue.Full:
         pass

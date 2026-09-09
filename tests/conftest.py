@@ -24,8 +24,10 @@ def _casa_de_architect_aislada(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(canales, "_cargar", lambda: None)
 
-    for variables in canales.VARIABLES.values():
-        for variable in variables:
-            monkeypatch.delenv(variable, raising=False)
+    import os
 
-    monkeypatch.delenv("CORREO_IMAP_HOST", raising=False)
+    # Todas las de canales, incluidas las que otra prueba haya podido dejar en el
+    # entorno al «configurar hablando» (guardar_en_env escribe en os.environ).
+    for variable in list(os.environ):
+        if variable.startswith(("TELEGRAM_", "CORREO_", "WHATSAPP_")):
+            monkeypatch.delenv(variable, raising=False)

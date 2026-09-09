@@ -159,6 +159,9 @@ def test_lo_exportado_a_mano_manda_sobre_los_tres(tmp_path, monkeypatch) -> None
 
 def test_una_carpeta_que_no_existe_no_revienta(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    # Sin la carpeta del usuario: en la máquina de Efraín ~/.ai_architect/.env
+    # ya tiene sus canales y la prueba dejó de ser sobre «no existe».
+    monkeypatch.setattr(env_file, "CARPETA_USUARIO", tmp_path / "casa-vacia")
 
     assert env_file.cargar_todo(tmp_path / "no-existe") == []
 
