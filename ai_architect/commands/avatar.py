@@ -143,6 +143,12 @@ def ventana_flotante(url: str, titulo: str = "Architect") -> bool:
     except ImportError:
         return False
 
+    # Cámara y micrófono permitidos desde el arranque, sin preguntar, y el
+    # audio sin exigir un clic: son banderas de Chromium que WebView2 acepta
+    # por esta variable de entorno. Y sin modo privado, para que lo que la
+    # página guarde (permisos, ajustes) siga ahí la próxima vez.
+    permitir_medios()
+
     webview.create_window(
         titulo,
         url,
@@ -154,9 +160,100 @@ def ventana_flotante(url: str, titulo: str = "Architect") -> bool:
         background_color="#04030c",
     )
 
-    webview.start()
+    webview.start(private_mode=False, storage_path=str(carpeta_navegador()))
 
     return True
+
+
+# Banderas de Chromium: cámara/micrófono concedidos sin diálogo y sonido sin
+# gesto previo. Valen para WebView2 (ventana flotante) y para Chrome/Edge en
+# modo aplicación.
+BANDERAS_MEDIOS = (
+    "--use-fake-ui-for-media-stream",
+    "--autoplay-policy=no-user-gesture-required",
+)
+
+
+def carpeta_navegador() -> Path:
+    from ai_architect.agente.rutas_agente import get_config_dir
+
+    carpeta = get_config_dir() / "navegador"
+    carpeta.mkdir(parents=True, exist_ok=True)
+
+    return carpeta
+
+
+def permitir_medios() -> None:
+    """Que WebView2 arranque con cámara y micrófono permitidos."""
+    import os
+
+    actual = os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "")
+    faltan = [b for b in BANDERAS_MEDIOS if b not in actual]
+
+    if faltan:
+        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = " ".join(
+            [actual, *faltan]
+        ).strip()
+
+
+def _navegador_chromium() -> str | None:
+    """Chrome o Edge, si están: los únicos que aceptan las banderas."""
+    import os
+
+    candidatos = (
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+        / "Google/Chrome/Application/chrome.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+        / "Google/Chrome/Application/chrome.exe",
+        Path(os.environ.get("LOCALAPPDATA", ""))
+        / "Google/Chrome/Application/chrome.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+        / "Microsoft/Edge/Application/msedge.exe",
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+        / "Microsoft/Edge/Application/msedge.exe",
+    )
+
+    for ruta in candidatos:
+        if ruta.is_file():
+            return str(ruta)
+
+    import shutil
+
+    return shutil.which("chrome") or shutil.which("msedge") or shutil.which("chromium")
+
+
+def abrir_en_navegador(url: str) -> str:
+    """Abre la cara en Chrome/Edge en modo aplicación (sin barra de pestañas) con
+    cámara, micrófono y sonido permitidos de entrada. Si no hay ninguno, el
+    navegador que haya. Devuelve cómo se abrió."""
+    import subprocess
+
+    navegador = _navegador_chromium()
+
+    if navegador:
+        try:
+            subprocess.Popen(
+                [
+                    navegador,
+                    f"--app={url}",
+                    f"--user-data-dir={carpeta_navegador() / 'perfil'}",
+                    "--window-size=520,640",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    *BANDERAS_MEDIOS,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            return "aplicacion"
+
+        except OSError:
+            pass
+
+    webbrowser.open(url)
+
+    return "navegador"
 
 
 def accion_ventana(accion: str) -> bool:

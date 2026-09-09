@@ -198,7 +198,7 @@ def test_abre_la_cara_y_deja_el_servidor_vivo() -> None:
     with mock.patch.object(
         conversar, "_levantar", return_value=(servidor, "http://x/")
     ):
-        with mock.patch("webbrowser.open") as abrir:
+        with mock.patch.object(conversar.avatar, "abrir_en_navegador") as abrir:
             resultado = conversar.run(".", servir_para_siempre=False)
 
     abrir.assert_called_once_with("http://x/")

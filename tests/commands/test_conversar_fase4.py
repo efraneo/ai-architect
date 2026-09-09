@@ -209,7 +209,7 @@ def test_sin_pywebview_se_avisa_y_se_abre_el_navegador(capsys) -> None:
         conversar, "_levantar", return_value=(servidor, "http://x/")
     ):
         with mock.patch.object(avatar, "hay_ventana_flotante", return_value=False):
-            with mock.patch("webbrowser.open") as abrir:
+            with mock.patch.object(conversar.avatar, "abrir_en_navegador") as abrir:
                 salida = conversar.run(".", servir_para_siempre=False, flotante=True)
 
     abrir.assert_called_once_with("http://x/")

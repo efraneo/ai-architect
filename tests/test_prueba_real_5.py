@@ -157,3 +157,74 @@ def test_atender_maximiza_la_ventana_flotante() -> None:
             salida = conversar.atender("minimiza ventana", ".", si=False)
 
     assert "flotante" in salida["respuesta"]
+
+
+# --- Cámara y micrófono sin preguntar -------------------------------------------------------
+
+
+def test_la_ventana_flotante_permite_medios_y_recuerda(monkeypatch) -> None:
+    from unittest import mock
+
+    from ai_architect.commands import avatar
+
+    monkeypatch.delenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", raising=False)
+    falso = mock.Mock()
+
+    with mock.patch.dict("sys.modules", {"webview": falso}):
+        assert avatar.ventana_flotante("http://x/")
+
+    import os
+
+    assert (
+        "--use-fake-ui-for-media-stream"
+        in os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"]
+    )
+    assert falso.start.call_args.kwargs["private_mode"] is False
+    assert falso.start.call_args.kwargs["storage_path"]
+
+
+def test_en_el_navegador_se_abre_en_modo_aplicacion_con_medios() -> None:
+    from unittest import mock
+
+    from ai_architect.commands import avatar
+
+    with mock.patch.object(avatar, "_navegador_chromium", return_value="C:/chrome.exe"):
+        with mock.patch("subprocess.Popen") as popen:
+            assert avatar.abrir_en_navegador("http://x/") == "aplicacion"
+
+    args = popen.call_args.args[0]
+    assert args[0] == "C:/chrome.exe" and "--app=http://x/" in args
+    assert "--use-fake-ui-for-media-stream" in args
+    assert "--autoplay-policy=no-user-gesture-required" in args
+
+
+def test_sin_chrome_ni_edge_se_usa_el_navegador_que_haya() -> None:
+    from unittest import mock
+
+    from ai_architect.commands import avatar
+
+    with mock.patch.object(avatar, "_navegador_chromium", return_value=None):
+        with mock.patch("webbrowser.open") as abrir:
+            assert avatar.abrir_en_navegador("http://x/") == "navegador"
+
+    abrir.assert_called_once_with("http://x/")
+
+
+def test_conversar_abre_la_cara_con_medios_permitidos() -> None:
+    from unittest import mock
+
+    from ai_architect.commands import avatar, conversar
+
+    servidor = mock.Mock()
+
+    with mock.patch.object(
+        conversar, "_levantar", return_value=(servidor, "http://x/")
+    ):
+        with mock.patch.object(conversar, "preparar_rellenos", return_value=0):
+            with mock.patch("ai_architect.voz.escuchar.calentar"):
+                with mock.patch.object(
+                    avatar, "abrir_en_navegador", return_value="aplicacion"
+                ) as abrir:
+                    conversar.run(".", servir_para_siempre=False)
+
+    abrir.assert_called_once_with("http://x/")

@@ -56,7 +56,6 @@ import queue
 import secrets
 import threading
 import time
-import webbrowser
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -185,7 +184,7 @@ def run(
         print(avatar.SIN_VENTANA, flush=True)
 
     if not en_ventana:
-        webbrowser.open(url)
+        avatar.abrir_en_navegador(url)
 
     aviso = (
         f"{perfil.encabezar()} Te escucho.\n\n"
