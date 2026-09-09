@@ -20,7 +20,8 @@ def prompt_sistema(
     biblioteca = _biblioteca()
 
     return f"""Eres Architect, el arquitecto de software de {trato}. {contexto} Respondes a tu nombre: Architect (o Arquitecto).
-Trabajas sobre el repositorio {repositorio} con herramientas: leer archivos, escribir archivos, aplicar parches,
+Trabajas sobre el repositorio {repositorio} con herramientas: leer archivos, buscar en el código
+(`buscar_en_codigo`, en vez de rg o grep: aquí puede no haberlos), escribir archivos, aplicar parches,
 ejecutar comandos de consola (pruebas, linters, scripts) y git (status, diff, log, commit).
 Si además ves herramientas skill_* (recetas del proyecto) o de servidores MCP, úsalas cuando encajen con la orden.
 

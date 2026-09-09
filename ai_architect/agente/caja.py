@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ai_architect.agente.herramientas.buscar import BuscarEnCodigoTool
 from ai_architect.agente.herramientas.escribir import FileWriteTool
 from ai_architect.agente.herramientas.git import (
     GitCommitTool,
@@ -24,6 +25,7 @@ from ai_architect.agente.herramientas.leer import FileReadTool
 from ai_architect.agente.herramientas.parche import ApplyPatchTool
 from ai_architect.agente.herramientas.shell import ShellExecTool
 from ai_architect.agente.herramientas_base import BaseTool, ToolSpec
+from ai_architect.agente.tipos import ToolResult
 
 # Nombres de las herramientas que cambian el repositorio o ejecutan cosas.
 ESCRIBEN = frozenset(
@@ -67,6 +69,40 @@ class ShellConPermiso(_ConPermiso, ShellExecTool):
 
     def sin_confirmacion(self, params: dict[str, Any]) -> bool:
         return es_solo_lectura(str(params.get("command", "")))
+
+    def execute(self, **params: Any) -> ToolResult:
+        resultado = super().execute(**params)
+
+        # «rg no se reconoce…» en la prueba real: se dice claro y se ofrece lo propio.
+        if not resultado.success and _programa_ausente(str(resultado.content)):
+            orden = str(params.get("command", "")).split()
+            programa = orden[0] if orden else "ese programa"
+            pista = (
+                " Para buscar en el código usa la herramienta buscar_en_codigo."
+                if programa in ("rg", "grep", "findstr", "ag", "ack")
+                else " Si hace falta, instálalo con la herramienta instalar o dilo."
+            )
+
+            return ToolResult(
+                tool_name=resultado.tool_name,
+                content=f"«{programa}» no está instalado en esta máquina." + pista,
+                success=False,
+                metadata=resultado.metadata,
+            )
+
+        return resultado
+
+
+def _programa_ausente(salida: str) -> bool:
+    texto = salida.lower()
+
+    return (
+        "no se reconoce como un comando" in texto
+        or "is not recognized as" in texto
+        or "command not found" in texto
+        or "no such file or directory" in texto
+        and "execvp" in texto
+    )
 
 
 SOLO_LECTURA = frozenset(
@@ -219,6 +255,8 @@ def herramientas_para(
         CommitConPermiso(),
         # Procurarse lo que falte (paquetes, skills) pide permiso.
         InstalarTool(requisitos=str(Path(raiz) / "requirements.txt")),
+        # Buscar en el código sin rg ni grep: no cambia nada y no depende de nada.
+        BuscarEnCodigoTool(raiz),
     ]
     # El equipo de agentes: Architect reparte, ellos analizan con sus herramientas.
     try:
