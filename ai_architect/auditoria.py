@@ -140,6 +140,8 @@ CARPETAS_AJENAS = {
     "dist",
     "build",
     "salida",
+    "dist_tmp",
+    "build_tmp",
     "__pycache__",
     ".mypy_cache",
     ".ruff_cache",
@@ -213,7 +215,14 @@ def patrones_peligrosos(raiz: Path) -> list[dict[str, Any]]:
             continue
 
         for numero, texto in enumerate(lineas, 1):
-            if "noqa: S" in texto or "# seguro" in texto:
+            recortado = texto.lstrip()
+
+            # Un comentario que describe el peligro no es el peligro.
+            if (
+                "noqa: S" in texto
+                or "# seguro" in texto
+                or recortado.startswith(("#", "//", "*", "<!--", "rem ", "REM "))
+            ):
                 continue
 
             for patron, severidad, que in compilados:

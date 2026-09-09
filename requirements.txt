@@ -38,3 +38,5 @@ packaging>=24.1
 
 # Word por COM (dictado): solo Windows
 pywin32>=306; sys_platform == 'win32'
+bandit
+pip-audit

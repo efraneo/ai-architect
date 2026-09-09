@@ -308,6 +308,9 @@ def test_pide_ejecuta_lo_que_la_biblioteca_manda_a_hacer(
         }
 
     monkeypatch.setattr(hacer, "run", hacer_falso)
+    monkeypatch.setattr(
+        "ai_architect.commands.configurar.esta_configurado", lambda *a, **k: True
+    )
     pide.conciso(False)
 
     salida = pide.run(
