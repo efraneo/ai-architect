@@ -140,7 +140,6 @@ def _vector(datos: bytes) -> list[float] | None:
 
     global _codificador
 
-    import numpy as np
     from resemblyzer import VoiceEncoder, preprocess_wav
 
     valores, frecuencia = _wav_a_muestras(datos)
@@ -151,7 +150,16 @@ def _vector(datos: bytes) -> list[float] | None:
     if _codificador is None:
         _codificador = VoiceEncoder(verbose=False)
 
-    onda = preprocess_wav(np.asarray(valores, dtype=np.float32), source_sr=frecuencia)
+    # resemblyzer trae numpy; sin él (las pruebas con un doble) vale la lista.
+    try:
+        import numpy as np
+
+        muestras: Any = np.asarray(valores, dtype=np.float32)
+
+    except ImportError:
+        muestras = valores
+
+    onda = preprocess_wav(muestras, source_sr=frecuencia)
 
     return [float(x) for x in _codificador.embed_utterance(onda)]
 
