@@ -237,6 +237,23 @@ def run(
 
     rapida = respuestas.responder(frase)
 
+    # Lo que la respuesta rápida manda al agente (una habilidad, un especialista):
+    # la orden ya nombra la herramienta, así que no hay nada que adivinar.
+    if rapida is not None and rapida.get("hacer"):
+        from ai_architect.commands import hacer
+
+        _decir_si_toca(
+            {"explanation": _con_trato(rapida["respuesta"]), "instant": True},
+            decir,
+            cara,
+        )
+        hecho = hacer.run(str(repositorio), str(rapida["hacer"]), si=si, engine=engine)
+        hecho["explanation"] = _con_trato(
+            hecho.get("explanation") or hecho.get("error", "")
+        )
+
+        return _decir_si_toca(hecho, decir, cara)
+
     if rapida is not None:
         return _decir_si_toca(
             {

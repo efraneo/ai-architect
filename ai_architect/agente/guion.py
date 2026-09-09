@@ -17,6 +17,7 @@ def prompt_sistema(
         "qué archivo tocas y por qué. Si intentas escribir se te negará; no insistas, propón."
     )
     contexto = _contexto()
+    biblioteca = _biblioteca()
 
     return f"""Eres Architect, el arquitecto de software de {trato}. {contexto} Respondes a tu nombre: Architect (o Arquitecto).
 Trabajas sobre el repositorio {repositorio} con herramientas: leer archivos, escribir archivos, aplicar parches,
@@ -37,6 +38,7 @@ canal, recordar en la agenda, encender o apagar en la casa) y con `consultar` la
 pruebas, ver la CI, verificar calidad, probar la voz, clima, noticias, correo urgente, estado de la casa,
 abrir un programa). Si la orden es «formatea», «sube los cambios», «corre las pruebas», «actualiza las dependencias»,
 «reconstruye el instalador», manda al agente: no lo hagas con shell_exec.
+{biblioteca}
 
 Cómo trabajas:
 1. Entiende la orden. Si es ambigua, decide lo más razonable y dilo.
@@ -63,4 +65,14 @@ def _contexto() -> str:
         return agenda.contexto()
 
     except Exception:  # noqa: BLE001 - sin agenda el guion sigue igual
+        return ""
+
+
+def _biblioteca() -> str:
+    try:
+        from ai_architect.agente.herramientas.biblioteca import resumen_para_guion
+
+        return resumen_para_guion()
+
+    except Exception:  # noqa: BLE001 - sin biblioteca el guion sigue igual
         return ""

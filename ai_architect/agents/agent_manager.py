@@ -30,6 +30,7 @@ from ai_architect.agents.test_agent import TestAgent
 from ai_architect.agents.testing_agent import TestingAgent
 from ai_architect.agents.vida_agent import (
     AgendaAgent,
+    BibliotecaAgent,
     HogarAgent,
     InvestigacionAgent,
     SistemaAgent,
@@ -73,6 +74,7 @@ class AgentManager:
         self.hogar = HogarAgent()
         self.investigacion = InvestigacionAgent()
         self.sistema = SistemaAgent()
+        self.biblioteca = BibliotecaAgent()
         self.empaquetado = EmpaquetadoAgent()
 
         # AI agents

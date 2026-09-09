@@ -106,6 +106,15 @@ def herramientas_para(
         base.extend(herramientas_del_equipo(raiz))
     except Exception:  # noqa: BLE001 - sin equipo se sigue con lo básico
         pass
+    # La biblioteca: habilidades y especialistas, por tema, cuando hacen falta.
+    try:
+        from ai_architect.agente.herramientas.biblioteca import (
+            herramientas_de_biblioteca,
+        )
+
+        base.extend(herramientas_de_biblioteca(raiz, bus=bus))
+    except Exception:  # noqa: BLE001 - sin biblioteca se sigue con lo básico
+        pass
     # Los canales configurados (celular, correo, WhatsApp) entran como herramientas.
     try:
         from ai_architect.agente.herramientas.canales import herramientas_de_canales

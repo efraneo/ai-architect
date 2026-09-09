@@ -106,6 +106,7 @@ pip, pytest, osv.dev) y uno más, Voz y Canales, revisa la máquina. Como herram
 | hogar | encender `dispositivo`, apagar `dispositivo`, estado |
 | investigacion | clima, noticias `tema`, correo_urgente |
 | sistema | abrir `que` |
+| biblioteca | instalar `origen`, buscar `tema` |
 
 Por voz: «formatea el código», «sube los cambios», «corre las pruebas», «actualiza las
 dependencias», «anota el changelog», «etiqueta la versión», «reconstruye el instalador».

@@ -158,6 +158,56 @@ class InvestigacionAgent(BaseAgent):
         ]
 
 
+class BibliotecaAgent(BaseAgent):
+    name = "Biblioteca Agent"
+
+    def run(self, context):
+        return self.review(context)
+
+    def review(self, project: str) -> dict[str, Any]:
+        from pathlib import Path
+
+        from ai_architect import biblioteca
+
+        informe: dict[str, Any] = {"agent": self.name, "status": "OK"}
+        findings: list[dict[str, Any]] = []
+        informe["instalada"] = biblioteca.instalada()
+
+        if not biblioteca.instalada():
+            findings.append(
+                {
+                    "type": "biblioteca",
+                    "issue": "sin biblioteca de habilidades y especialistas: di «instala la biblioteca»",
+                }
+            )
+            informe["findings"] = findings
+
+            return informe
+
+        informe.update(biblioteca.cuenta())
+        informe["origen"] = biblioteca.estado().get("origen", "")
+        lenguajes = biblioteca.reglas_para(Path(project))
+        informe["reglas_que_aplican"] = lenguajes
+        informe["especialistas_sugeridos"] = [
+            e["nombre"]
+            for e in biblioteca.buscar(
+                " ".join(lenguajes[1:]) or "revision", "especialistas", 5
+            )
+        ]
+        informe["findings"] = findings
+
+        return informe
+
+    def capabilities(self) -> list[str]:
+        return [
+            "biblioteca",
+            "habilidades por tema",
+            "especialistas",
+            "reglas por lenguaje",
+            "recetas",
+        ]
+
+
 class SistemaAgent(BaseAgent):
     name = "Sistema Agent"
 

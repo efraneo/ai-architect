@@ -215,10 +215,12 @@ def _de_la_vida() -> list[Any]:
     from ai_architect import agenda, investigar, vision
     from ai_architect.agente.memoria import episodios
     from ai_architect.canales import hogar
+    from ai_architect.commands import biblioteca as biblioteca_voz
     from ai_architect.voz import escuchar, huella
 
     return [
         lambda frase: huella.por_voz(frase, escuchar.ultimo_audio),
+        biblioteca_voz.por_voz,
         vision.por_voz,
         agenda.por_voz,
         episodios.por_voz,

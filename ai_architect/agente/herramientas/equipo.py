@@ -47,11 +47,15 @@ EQUIPO: dict[str, tuple[str, str]] = {
         "clima, lluvia, noticias y correo urgente",
     ),
     "sistema": ("sistema", "programas, Word, ventana y disco de esta máquina"),
+    "biblioteca": (
+        "biblioteca",
+        "habilidades, especialistas, reglas y recetas disponibles",
+    ),
 }
 
 # Los que miran la máquina y la vida diaria, no el repositorio: no entran en
 # inspect() pero sí en la herramienta equipo.
-DEL_ENTORNO = ("voz", "agenda", "hogar", "investigacion", "sistema")
+DEL_ENTORNO = ("voz", "agenda", "hogar", "investigacion", "sistema", "biblioteca")
 
 
 def _resumen(clave: str, informe: dict[str, Any]) -> str:

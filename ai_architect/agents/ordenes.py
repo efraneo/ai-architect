@@ -629,6 +629,39 @@ def _abrir_programa(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
     return {"ok": bool(salida.get("ok")), "hecho": str(salida.get("explicacion", ""))}
 
 
+def _biblioteca_instalar(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import biblioteca
+
+    salida = biblioteca.instalar(str(args.get("origen", "")))
+
+    if not salida.get("ok"):
+        return {"ok": False, "hecho": str(salida.get("error"))}
+
+    c = biblioteca.cuenta()
+
+    return {
+        "ok": True,
+        "hecho": (
+            f"biblioteca instalada: {c['habilidades']} habilidades, {c['especialistas']} "
+            f"especialistas, {c['reglas']} reglas, {c['recetas']} recetas"
+        ),
+    }
+
+
+def _biblioteca_buscar(raiz: Path, args: dict[str, Any]) -> dict[str, Any]:
+    from ai_architect import biblioteca
+
+    encontrados = biblioteca.buscar(
+        str(args.get("tema", "")), str(args.get("tipo", "")), 10
+    )
+
+    return {
+        "ok": True,
+        "hecho": ", ".join(e["nombre"] for e in encontrados) or "nada para ese tema",
+        "encontrados": encontrados,
+    }
+
+
 # --- el catálogo -------------------------------------------------------------------------
 
 CATALOGO: dict[str, dict[str, Tarea]] = {
@@ -810,6 +843,22 @@ CATALOGO: dict[str, dict[str, Tarea]] = {
             "correos recientes que parecen urgentes",
             _correo_urgente,
             False,
+        ),
+    },
+    "biblioteca": {
+        "instalar": Tarea(
+            "instalar",
+            "instala o actualiza la biblioteca de habilidades y especialistas",
+            _biblioteca_instalar,
+            True,
+            {"origen": "opcional: URL de GitHub o carpeta"},
+        ),
+        "buscar": Tarea(
+            "buscar",
+            "qué habilidades, especialistas, reglas o recetas hay para un tema",
+            _biblioteca_buscar,
+            False,
+            {"tema": "texto", "tipo": "opcional"},
         ),
     },
     "sistema": {
