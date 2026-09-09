@@ -70,6 +70,18 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
+            if ruta == "/audio":
+                datos = c.audio_preparado(self._parametro("t"))
+
+                if datos is None:
+                    self.send_error(404)
+
+                    return
+
+                self._responder(datos, "audio/wav")
+
+                return
+
             if ruta not in ("/", "/index.html", "/rostro.html"):
                 self.send_error(404)
 
@@ -90,42 +102,69 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
+            if ruta == "/sonar":
+                # La página no pudo reproducir el audio: suena aquí.
+                sono = c.sonar_aqui(self._parametro("t"))
+
+                self._enviar({"sonando": sono})
+
+                return
+
             if ruta != "/orden":
                 self.send_error(404)
 
                 return
 
+            # La vía del reconocedor de Chrome: texto ya transcrito. Desde la
+            # fase 4 va por el mismo camino que el audio: se contesta al
+            # momento con un resguardo y el trabajo se hace aparte.
             try:
                 largo = min(int(self.headers.get("Content-Length") or 0), c.LIMITE * 4)
 
                 cuerpo = json.loads(self.rfile.read(largo) or b"{}")
 
-                dicho = cuerpo.get("texto", "")
+                dicho = str(cuerpo.get("texto", ""))
 
             except (ValueError, OSError, AttributeError):
                 self.send_error(400)
 
                 return
 
-            salida = c.atender_lo_dicho(
-                str(dicho), project, si, interrumpe=bool(cuerpo.get("interrumpe"))
+            self._enviar(
+                c.atender_lo_oido(
+                    dicho.strip()[: c.LIMITE],
+                    project,
+                    si,
+                    interrumpe=bool(cuerpo.get("interrumpe")),
+                    error="no se entendió",
+                )
             )
 
-            audio = salida.pop("_audio", None)
+        def _parametro(self, nombre: str) -> str:
+            if "?" not in self.path:
+                return ""
+
+            from urllib.parse import parse_qs
+
+            return parse_qs(self.path.split("?", 1)[1]).get(nombre, [""])[0]
+
+        def _enviar(self, salida: dict[str, Any]) -> None:
+            """Responde en JSON; el audio, si es archivo, lo reproducirá la
+            página; si no (voz de Windows), suena aquí después de contestar."""
+            salida, sonido = c.entregar(salida)
 
             self._responder(
                 json.dumps(salida, ensure_ascii=False).encode("utf-8"),
                 "application/json; charset=utf-8",
             )
 
-            # Después de contestar, no antes: la cara empieza a gesticular
-            # al recibir la respuesta, y el sonido tiene que salir a la vez.
-            if audio:
-                threading.Thread(
-                    target=c.motor_de_voz.emitir, args=(audio,), daemon=True
-                ).start()
+            if salida.get("respuesta"):
+                c._registro(f"  < {c._resumen(salida['respuesta'])}")
 
-            c._registro(f"  < {c._resumen(salida['respuesta'])}")
+            if sonido:
+                threading.Thread(
+                    target=c.motor_de_voz.emitir, args=(sonido,), daemon=True
+                ).start()
 
         def _permiso(self) -> None:
             """Los botones «Sí, hazlo» / «No» de la cara."""
@@ -141,19 +180,7 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
-            salida = c.resolver_permiso(decision)
-
-            sonido = salida.pop("_audio", None)
-
-            self._responder(
-                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-
-            if sonido:
-                threading.Thread(
-                    target=c.motor_de_voz.emitir, args=(sonido,), daemon=True
-                ).start()
+            self._enviar(c.resolver_permiso(decision))
 
         def _oir(self) -> None:
             """Audio en crudo: se transcribe aquí y se trata como una orden."""
@@ -188,34 +215,19 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
             oido = escuchar.transcribir(audio, ".wav" if "wav" in tipo else ".webm")
 
-            salida = c.atender_lo_oido(
-                oido["texto"],
-                project,
-                si,
-                interrumpe=self.headers.get("X-Interrumpe") == "1",
-                error=oido["error"],
+            self._enviar(
+                c.atender_lo_oido(
+                    oido["texto"],
+                    project,
+                    si,
+                    interrumpe=self.headers.get("X-Interrumpe") == "1",
+                    error=oido["error"],
+                )
             )
-
-            sonido = salida.pop("_audio", None)
-
-            self._responder(
-                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-
-            if sonido:
-                threading.Thread(
-                    target=c.motor_de_voz.emitir, args=(sonido,), daemon=True
-                ).start()
 
         def _recoger(self) -> None:
             """La respuesta, cuando esté. La página espera aquí colgada."""
-            resguardo = ""
-
-            if "?" in self.path:
-                from urllib.parse import parse_qs
-
-                resguardo = parse_qs(self.path.split("?", 1)[1]).get("r", [""])[0]
+            resguardo = self._parametro("r")
 
             buzon = c._pendientes.pop(resguardo, None)
 
@@ -234,19 +246,7 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
                     "ms": 0,
                 }
 
-            sonido = salida.pop("_audio", None)
-
-            self._responder(
-                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-
-            c._registro(f"  < {c._resumen(salida.get('respuesta', ''))}")
-
-            if sonido:
-                threading.Thread(
-                    target=c.motor_de_voz.emitir, args=(sonido,), daemon=True
-                ).start()
+            self._enviar(salida)
 
         def _responder(self, cuerpo: bytes, tipo: str) -> None:
             self.send_response(200)

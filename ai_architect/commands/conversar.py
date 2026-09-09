@@ -641,43 +641,81 @@ def responder_al_nombre() -> dict[str, Any]:
     }
 
 
-def atender_lo_dicho(
-    texto: str, project: str, si: bool, *, interrumpe: bool = False
-) -> dict[str, Any]:
-    """La vía del reconocedor del navegador: texto ya transcrito, respuesta en la
-    misma petición. ``interrumpe`` es que llegó mientras él hablaba."""
-    limpio = (texto or "").strip()
+# --- El audio suena en la página --------------------------------------------
+#
+# Antes sonaba aquí (winsound) y el micrófono lo oía por los altavoces: había
+# que adivinar qué era eco y qué era el usuario, y pagar transcripciones para
+# saberlo. Si lo reproduce la propia página, Chrome cancela su propio audio
+# del micrófono (``echoCancellation``) y sabe exactamente cuándo termina.
+# Lo preparado se guarda un momento en memoria y la página lo pide por
+# ``/audio?t=``. Solo la voz de Windows (SAPI, sin archivo) sigue sonando aquí.
 
-    if interrumpe and (
-        es_eco(limpio, _ultimo_dicho) or len(sin_adornos(limpio).split()) < 2
-    ):
-        return {"respuesta": "", "dicho": "", "ms": 0, "error": "eco"}
+_audios: dict[str, bytes] = {}
 
-    para_mi, orden = dirigido_a_mi(limpio)
 
-    if limpio and not para_mi:
-        _registro(f"  · (no era para mí) {limpio}")
+def entregar(salida: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Separa la respuesta de su audio.
 
-        return {"respuesta": "", "dicho": "", "ms": 0, "ajeno": True, "oido": limpio}
+    Devuelve ``(respuesta, sonido)``: si el audio es un archivo, la respuesta
+    lleva ``audio`` (la URL) y ``sonido`` es ``None``; si no hay archivo, el
+    sonido vuelve para que lo emita el servidor.
+    """
+    sonido = salida.pop("_audio", None)
 
-    cortado = motor_de_voz.callar() if interrumpe else False
+    if not sonido:
+        return salida, None
 
-    if cortado:
-        _registro("  ! (interrumpido)")
+    archivo = sonido.get("archivo")
 
-    if interrumpe and es_orden_de_parar(orden):
-        _olvidar_lo_dicho()
+    if not archivo:
+        return salida, sonido
 
-        return {"respuesta": "", "dicho": "", "ms": 0, "callado": True, "oido": limpio}
+    try:
+        datos = Path(archivo).read_bytes()
 
-    nombrado, resto = oido_nombre.separar(limpio)
+    except OSError:
+        return salida, sonido
 
-    if nombrado and not resto:
-        return {**responder_al_nombre(), "oido": limpio, "interrumpido": cortado}
+    # En memoria, no la ruta: `hablar` reutiliza el mismo temporal y la
+    # respuesta siguiente lo pisaría antes de que la página lo pidiera.
+    token = secrets.token_hex(6)
 
-    _registro(f"  > {orden}")
+    _audios[token] = datos
 
-    return {**atender(orden, project, si), "interrumpido": cortado}
+    while len(_audios) > 8:
+        _audios.pop(next(iter(_audios)))
+
+    salida["audio"] = f"/audio?t={token}"
+
+    return salida, None
+
+
+def audio_preparado(token: str) -> bytes | None:
+    return _audios.get(token)
+
+
+def sonar_aqui(token: str) -> bool:
+    """La página no pudo reproducirlo (autoplay bloqueado): suena en el servidor."""
+    datos = _audios.get(token)
+
+    if not datos:
+        return False
+
+    import tempfile
+
+    destino = Path(tempfile.gettempdir()) / f"arquitecto-sonar-{token}.wav"
+
+    try:
+        destino.write_bytes(datos)
+
+    except OSError:
+        return False
+
+    threading.Thread(
+        target=motor_de_voz.emitir, args=({"archivo": destino},), daemon=True
+    ).start()
+
+    return True
 
 
 def atender_lo_oido(

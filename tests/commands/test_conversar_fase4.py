@@ -254,3 +254,123 @@ def test_flotante_llega_desde_el_cli() -> None:
             cli.main()
 
     assert run.call_args.kwargs["flotante"] is True
+
+
+# --- El audio suena en la página -----------------------------------------------------
+
+
+def test_entregar_convierte_el_archivo_en_url(tmp_path: Path) -> None:
+    wav = tmp_path / "v.wav"
+    wav.write_bytes(b"RIFFxxxx")
+
+    salida, sonido = conversar.entregar(
+        {"respuesta": "hola", "_audio": {"archivo": wav, "segundos": 1.0}}
+    )
+
+    assert sonido is None and salida["audio"].startswith("/audio?t=")
+    assert conversar.audio_preparado(salida["audio"].split("t=")[1]) == b"RIFFxxxx"
+    assert "_audio" not in salida
+
+
+def test_entregar_devuelve_el_sonido_si_no_hay_archivo() -> None:
+    salida, sonido = conversar.entregar(
+        {
+            "respuesta": "hola",
+            "_audio": {"archivo": None, "motor": "windows", "texto": "hola"},
+        }
+    )
+
+    assert sonido == {"archivo": None, "motor": "windows", "texto": "hola"}
+    assert "audio" not in salida
+
+
+def test_entregar_sin_audio_no_hace_nada() -> None:
+    assert conversar.entregar({"respuesta": "x"}) == ({"respuesta": "x"}, None)
+
+
+def test_sonar_aqui_reproduce_en_el_servidor(tmp_path: Path) -> None:
+    wav = tmp_path / "v.wav"
+    wav.write_bytes(b"RIFFxxxx")
+    salida, _ = conversar.entregar({"_audio": {"archivo": wav}})
+    token = salida["audio"].split("t=")[1]
+
+    with mock.patch.object(conversar.motor_de_voz, "emitir") as emitir:
+        assert conversar.sonar_aqui(token)
+
+        for _ in range(50):
+            if emitir.called:
+                break
+
+            import time
+
+            time.sleep(0.02)
+
+    assert emitir.called and str(emitir.call_args.args[0]["archivo"]).endswith(".wav")
+    assert not conversar.sonar_aqui("no-existe")
+
+
+# --- De punta a punta por HTTP -------------------------------------------------------------
+
+
+def test_orden_por_http_con_resguardo_y_audio_en_la_pagina(tmp_path: Path) -> None:
+    """La vía del navegador: POST /orden → resguardo → GET /respuesta trae la URL
+    del audio → GET /audio devuelve el WAV. Nada suena en el servidor."""
+    import json
+    import urllib.request
+
+    from ai_architect.voz import hablar as voz
+
+    wav = tmp_path / "voz.wav"
+    voz._escribir_wav(wav, b"\x00\x00" * 2400)
+
+    preparado = {"archivo": wav, "motor": "piper", "segundos": 0.1, "texto": "Hecho."}
+
+    with mock.patch.object(conversar.motor_de_voz, "preparar", return_value=preparado):
+        with mock.patch.object(conversar.motor_de_voz, "emitir") as emitir:
+            with mock.patch(
+                "ai_architect.commands.pide.run",
+                return_value={"success": True, "explanation": "Hecho."},
+            ):
+                servidor, url = conversar._levantar("<html>", ".", False)
+
+                assert servidor is not None, "el puerto 8731 está ocupado"
+
+                import threading
+
+                threading.Thread(target=servidor.serve_forever, daemon=True).start()
+
+                try:
+                    peticion = urllib.request.Request(
+                        url + "orden",
+                        data=json.dumps({"texto": "revisa el proyecto"}).encode(),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    primera = json.loads(
+                        urllib.request.urlopen(peticion, timeout=5).read()
+                    )
+
+                    assert (
+                        primera["resguardo"] and primera["oido"] == "revisa el proyecto"
+                    )
+
+                    final = json.loads(
+                        urllib.request.urlopen(
+                            url + "respuesta?r=" + primera["resguardo"], timeout=10
+                        ).read()
+                    )
+
+                    assert final["respuesta"] == "Hecho." and final["audio"].startswith(
+                        "/audio?t="
+                    )
+                    assert "_audio" not in final
+
+                    sonido = urllib.request.urlopen(url + final["audio"][1:], timeout=5)
+
+                    assert sonido.headers["Content-Type"] == "audio/wav"
+                    assert sonido.read()[:4] == b"RIFF"
+
+                finally:
+                    conversar._apagar(servidor)
+                    servidor.shutdown()
+
+    emitir.assert_not_called()

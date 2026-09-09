@@ -1267,10 +1267,88 @@ function escucharDeNuevo() {
 // de la propia frase y contestarse solo.
 function decir(datos, margen) {
   ocupado = true;
+  pararSonido();
   arquitecto.hablar(datos.ms || 1200, datos.dicho || datos.respuesta || "");
 
   clearTimeout(volverAEscuchar);
+
+  // El audio suena aqui, no en Python: asi Chrome cancela su propia voz
+  // del microfono y se sabe el instante exacto en que termina.
+  if (datos.audio) {
+    const pista = new Audio(datos.audio);
+
+    sonando = pista;
+
+    pista.onended = function () {
+      if (sonando !== pista) return;
+
+      sonando = null;
+      setTimeout(escucharDeNuevo, 250);
+    };
+
+    pista.onerror = function () { sonarEnElServidor(datos.audio); };
+    pista.play().catch(function () { sonarEnElServidor(datos.audio); });
+
+    // Por si el navegador nunca avisa del final.
+    volverAEscuchar = setTimeout(escucharDeNuevo, (datos.ms || 1200) + margen + 2000);
+
+    return;
+  }
+
   volverAEscuchar = setTimeout(escucharDeNuevo, (datos.ms || 1200) + margen);
+}
+
+// La pista que esta sonando ahora, para poder cortarla.
+let sonando = null;
+
+function pararSonido() {
+  if (!sonando) return;
+
+  try { sonando.pause(); } catch (e) { /* ya parada */ }
+
+  sonando = null;
+}
+
+// El navegador bloqueo la reproduccion (autoplay): que suene en el servidor.
+function sonarEnElServidor(url) {
+  sonando = null;
+
+  fetch("/sonar?" + (url.split("?")[1] || ""), { method: "POST" }).catch(function () {});
+}
+
+// Una respuesta con resguardo se recoge cuando esta. Devuelve la respuesta
+// final, o null si se perdio por el camino (ya se aviso en pantalla).
+async function recoger(datos) {
+  if (!datos.resguardo) return datos;
+
+  // Con tope. Una espera sin limite es como se quedo colgado: la pagina
+  // pidiendo una respuesta que ya no iba a llegar, y sin forma de salir
+  // mas que cerrandola.
+  const corte = new AbortController();
+  const reloj = setTimeout(function () { corte.abort(); }, 200000);
+
+  try {
+    const recogida = await fetch("/respuesta?r=" + datos.resguardo, {
+      signal: corte.signal,
+    });
+
+    return Object.assign({ oido: datos.oido }, await recogida.json());
+
+  } catch (e) {
+    mostrarOido(
+      e.name === "AbortError"
+        ? "Se me fue el santo al cielo. Dimelo otra vez."
+        : "Se corto mientras lo hacia: " + e.message,
+      true
+    );
+
+    escucharDeNuevo();
+
+    return null;
+
+  } finally {
+    clearTimeout(reloj);
+  }
 }
 
 // Que hacer con lo que llego mientras el hablaba. Lo decide el servidor:
@@ -1278,6 +1356,8 @@ function decir(datos, margen) {
 // audio y te atiende. Aqui solo se sabe si aquello llego a algo.
 function tratarInterrupcion(datos) {
   if (datos.error === "eco" || datos.ajeno) return false;
+
+  pararSonido();
 
   if (datos.callado) {
     escucharDeNuevo();
@@ -1410,7 +1490,18 @@ async function enviarOrden(texto, interrumpe) {
     escucharDeNuevo();
 
     return;
+
+  } else if (datos.error === "eco") {
+    escucharDeNuevo();
+
+    return;
   }
+
+  // Desde la fase 4 esta via tambien contesta con un resguardo y hace la
+  // faena aparte: la cara no se queda congelada en una orden larga.
+  datos = await recoger(datos);
+
+  if (!datos) return;
 
   procesarRespuesta(datos, 700, true);
 }
@@ -1600,11 +1691,11 @@ panel.addEventListener("dblclick", function () {
 // por debajo; lo tuyo, no.
 const UMBRAL_VOZ = 0.045;
 
-// Mientras el habla, sus altavoces entran por el microfono. Para cortarlo
-// hay que hablarle mas alto que eso: el doble. Lo que quede por debajo ni
-// se manda; lo que pase por encima lo juzga el servidor, que sabe que
-// acaba de decir y descarta su propio eco.
-const UMBRAL_INTERRUPCION = 0.09;
+// Mientras el habla, el audio sale de esta misma pagina y Chrome lo resta
+// del microfono (echoCancellation); lo que queda de eco es poco. Aun asi,
+// para cortarlo se pide algo mas de voz que en silencio, y lo que pase lo
+// juzga el servidor, que sabe que acaba de decir.
+const UMBRAL_INTERRUPCION = 0.065;
 
 // Cuanto silencio cierra la frase. Menos corta las pausas al pensar;
 // mas y hay que esperar mirando la pantalla.
@@ -1861,40 +1952,13 @@ async function enviarAudio(audio, interrumpe) {
   // medio minuto con los agentes— y en todo ese rato la cara no decia ni
   // hacia nada. Ahora se sabe enseguida que se te oyo, y la respuesta se
   // recoge cuando esta.
-  if (datos.resguardo) {
-    // Con tope. Una espera sin limite es como se quedo colgado: la pagina
-    // pidiendo una respuesta que ya no iba a llegar, y sin forma de salir
-    // mas que cerrandola.
-    const corte = new AbortController();
-    const reloj = setTimeout(function () { corte.abort(); }, 200000);
+  datos = await recoger(datos);
 
-    try {
-      const recogida = await fetch("/respuesta?r=" + datos.resguardo, {
-        signal: corte.signal,
-      });
+  if (!datos) return;
 
-      datos = Object.assign({ oido: datos.oido }, await recogida.json());
-
-    } catch (e) {
-      mostrarOido(
-        e.name === "AbortError"
-          ? "Se me fue el santo al cielo. Dimelo otra vez."
-          : "Se corto mientras lo hacia: " + e.message,
-        true
-      );
-
-      escucharDeNuevo();
-
-      return;
-
-    } finally {
-      clearTimeout(reloj);
-    }
-  }
-
-  // Margen generoso al volver a escuchar: el servidor tiene su propio
-  // guardia contra el eco, pero mas vale no darle trabajo.
-  procesarRespuesta(datos, 1400, false);
+  // Con el audio sonando en la pagina el margen ya no tiene que tapar el
+  // desfase de dos relojes; queda uno corto por cortesia.
+  procesarRespuesta(datos, 600, false);
 }
 
 const AJUSTES = window.DATOS_ARQUITECTO || {};

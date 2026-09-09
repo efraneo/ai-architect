@@ -102,7 +102,7 @@ def test_mientras_habla_su_eco_se_descarta() -> None:
     conversar._ultimo_dicho = "El entorno está healthy. Provider ready, agents ready."
 
     with mock.patch.object(conversar.motor_de_voz, "callar") as callar:
-        salida = conversar.atender_lo_dicho(
+        salida = conversar.atender_lo_oido(
             "el entorno esta healthy provider ready", ".", False, interrumpe=True
         )
 
@@ -116,7 +116,7 @@ def test_si_le_dices_calla_mientras_habla_se_calla() -> None:
     with mock.patch.object(
         conversar.motor_de_voz, "callar", return_value=True
     ) as callar:
-        salida = conversar.atender_lo_dicho(
+        salida = conversar.atender_lo_oido(
             "Architect, calla", ".", False, interrumpe=True
         )
 
@@ -136,14 +136,17 @@ def test_una_orden_nueva_mientras_habla_lo_corta_y_se_atiende() -> None:
                 "ai_architect.commands.pide.run",
                 return_value={"success": True, "explanation": "Hecho."},
             ) as pide:
-                salida = conversar.atender_lo_dicho(
+                salida = conversar.atender_lo_oido(
                     "Architect, mejor revisa las dependencias",
                     ".",
                     False,
                     interrumpe=True,
                 )
 
-    assert salida["interrumpido"] and salida["respuesta"] == "Hecho."
+                buzon = conversar._pendientes.pop(salida["resguardo"])
+                respuesta = buzon.get(timeout=5)
+
+    assert salida["interrumpido"] and respuesta["respuesta"] == "Hecho."
     assert pide.call_args.kwargs["frase"] == "mejor revisa las dependencias"
 
 
@@ -151,7 +154,7 @@ def test_en_modo_nombre_lo_ajeno_no_se_atiende_por_el_navegador() -> None:
     conversar.configurar_oido("nombre")
 
     with mock.patch("ai_architect.commands.pide.run") as pide:
-        salida = conversar.atender_lo_dicho("revisa el proyecto", ".", False)
+        salida = conversar.atender_lo_oido("revisa el proyecto", ".", False)
 
     assert salida["ajeno"] and salida["oido"] == "revisa el proyecto"
     pide.assert_not_called()
@@ -162,7 +165,7 @@ def test_su_nombre_a_secas_se_contesta_con_un_dime() -> None:
 
     with mock.patch.object(conversar.motor_de_voz, "preparar", return_value=sin_voz()):
         with mock.patch("ai_architect.commands.pide.run") as pide:
-            salida = conversar.atender_lo_dicho("Architect", ".", False)
+            salida = conversar.atender_lo_oido("Architect", ".", False)
 
     assert salida["respuesta"] == "Dime, Efraín." and salida["instantanea"]
     pide.assert_not_called()

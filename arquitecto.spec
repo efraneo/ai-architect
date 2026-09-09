@@ -21,7 +21,22 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 RAIZ = Path(SPECPATH)
+
+# Desde la fusión con OpenJarvis (sep 2026) el paquete tiene 200 módulos y
+# muchos se importan dentro de funciones: se recogen todos en vez de listarlos.
+TODO_EL_PAQUETE = collect_submodules("ai_architect")
+
+# La ventana flotante es opcional; si pywebview está en el entorno al
+# empaquetar, viaja dentro.
+try:
+    import webview  # noqa: F401
+
+    FLOTANTE = ["webview"] + collect_submodules("webview")
+except ImportError:
+    FLOTANTE = []
 
 a = Analysis(
     [str(RAIZ / "ai_architect" / "architect.py")],
@@ -30,11 +45,14 @@ a = Analysis(
     # (origen, destino dentro del paquete)
     datas=[
         (str(RAIZ / "ai_architect" / "avatar" / "rostro.html"), "ai_architect/avatar"),
+        # Las recetas de ejemplo de las skills y la licencia del código portado.
+        (str(RAIZ / "ai_architect" / "agente" / "skills" / "data"), "ai_architect/agente/skills/data"),
+        (str(RAIZ / "ai_architect" / "agente" / "LICENCIA-OpenJarvis.txt"), "ai_architect/agente"),
     ],
     # PyInstaller sigue los imports que ve escritos, y aqui hay unos
     # cuantos que se hacen dentro de una funcion para no pagarlos al
     # arrancar. Sin declararlos, el .exe falla al usarlos y no antes.
-    hiddenimports=[
+    hiddenimports=TODO_EL_PAQUETE + FLOTANTE + [
         "ai_architect.commands.agents",
         "ai_architect.commands.analyze",
         "ai_architect.commands.auto",
