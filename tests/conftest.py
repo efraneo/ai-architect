@@ -45,8 +45,8 @@ def _sin_ventanas_ni_programas(monkeypatch: pytest.MonkeyPatch):
     from ai_architect.office import word
 
     monkeypatch.setattr(webbrowser, "open", lambda *a, **k: True)
-    monkeypatch.setattr(avatar, "abrir_en_navegador", lambda url: "prueba")
-    monkeypatch.setattr(avatar, "ventana_flotante", lambda *a, **k: True)
+    # Sin Chrome ni Edge «encontrados»: abrir_en_navegador cae al webbrowser doblado.
+    monkeypatch.setattr(avatar, "_navegador_chromium", lambda: None)
     monkeypatch.setattr(abrir, "_lanzar", lambda objetivo: None)
     monkeypatch.setattr(
         word, "_app", lambda: (_ for _ in ()).throw(RuntimeError("sin Word en pruebas"))
