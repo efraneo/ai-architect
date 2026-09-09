@@ -47,8 +47,16 @@ def _llamar(metodo: str, **datos: Any) -> dict[str, Any]:
         return {"ok": False, "description": respuesta.text[:200]}
 
 
-def enviar(texto: str, chat_id: str = "") -> dict[str, Any]:
-    """Un mensaje al celular. Devuelve ``{"ok": bool, ...}``; nunca lanza."""
+def enviar(
+    texto: str,
+    chat_id: str = "",
+    botones: list[list[tuple[str, str]]] | None = None,
+) -> dict[str, Any]:
+    """Un mensaje al celular. Devuelve ``{"ok": bool, ...}``; nunca lanza.
+
+    ``botones``: filas de (rótulo, dato) que aparecen bajo el mensaje; al
+    pulsar uno, ``recibir`` lo devuelve como si el dato fuera un mensaje.
+    """
     if not configurado():
         return {
             "ok": False,
@@ -61,8 +69,21 @@ def enviar(texto: str, chat_id: str = "") -> dict[str, Any]:
     trozos = [texto[i : i + 3900] for i in range(0, max(1, len(texto)), 3900)]
     salida: dict[str, Any] = {"ok": True}
 
-    for trozo in trozos:
-        salida = _llamar("sendMessage", chat_id=destino, text=trozo or "…")
+    for indice, trozo in enumerate(trozos):
+        datos: dict[str, Any] = {"chat_id": destino, "text": trozo or "…"}
+
+        if botones and indice == len(trozos) - 1:
+            datos["reply_markup"] = {
+                "inline_keyboard": [
+                    [
+                        {"text": rotulo, "callback_data": dato[:64]}
+                        for rotulo, dato in fila
+                    ]
+                    for fila in botones
+                ]
+            }
+
+        salida = _llamar("sendMessage", **datos)
 
         if not salida.get("ok"):
             break
@@ -85,6 +106,29 @@ def recibir(desde: int = 0) -> list[dict[str, Any]]:
     mensajes = []
 
     for actualizacion in salida.get("result", []):
+        # Un botón pulsado llega como callback_query: el dato hace de texto.
+        pulsado = actualizacion.get("callback_query")
+
+        if pulsado:
+            chat = str(((pulsado.get("message") or {}).get("chat") or {}).get("id", ""))
+            _llamar("answerCallbackQuery", callback_query_id=pulsado.get("id", ""))
+
+            if chat != mio:
+                mensajes.append(
+                    {"update_id": actualizacion["update_id"], "ajeno": True}
+                )
+                continue
+
+            mensajes.append(
+                {
+                    "update_id": actualizacion["update_id"],
+                    "texto": str(pulsado.get("data") or "").strip(),
+                    "chat": chat,
+                    "boton": True,
+                }
+            )
+            continue
+
         mensaje = actualizacion.get("message") or {}
         chat = str((mensaje.get("chat") or {}).get("id", ""))
         texto = str(mensaje.get("text") or "").strip()

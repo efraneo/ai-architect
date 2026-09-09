@@ -57,9 +57,9 @@ POR_DEFECTO = (0.65, 2.60)
 
 # Los topes. Se pueden subir con `AI_ARCHITECT_TOPE_DIA` y
 # `AI_ARCHITECT_TOPE_SESION`, en dólares.
-TOPE_DIA = 5.00
+TOPE_DIA = 20.00
 
-TOPE_SESION = 1.50
+TOPE_SESION = 6.00
 
 # A partir de aquí se avisa, antes de llegar al tope.
 AVISO = 0.75
@@ -129,8 +129,8 @@ def permitido() -> tuple[bool, str]:
         return (
             False,
             f"Llevo {_dolares(_sesion)} en esta conversación y ese es el tope. "
-            "Cierra y vuelve a abrir para seguir, o sube el límite con "
-            "AI_ARCHITECT_TOPE_SESION.",
+            "Dime «sube el tope a diez dólares» para seguir (o AI_ARCHITECT_TOPE_SESION), "
+            "o cierra y vuelve a abrir.",
         )
 
     gastado = hoy()
@@ -215,3 +215,23 @@ def _dolares(cuanto: float) -> str:
         return "menos de un centavo"
 
     return f"{cuanto:.2f} dólares".replace(".", ",")
+
+
+def subir_tope(dolares: float, de_hoy: bool = False) -> float:
+    """Sube el tope (de la sesión o del día) y lo deja guardado en el .env."""
+    from ai_architect.canales.asistente import guardar_en_env
+
+    valor = max(0.5, float(dolares))
+    clave = "AI_ARCHITECT_TOPE_DIA" if de_hoy else "AI_ARCHITECT_TOPE_SESION"
+    os.environ[clave] = f"{valor:.2f}"
+
+    try:
+        guardar_en_env(clave, f"{valor:.2f}")
+
+    except Exception:  # noqa: BLE001 - queda en el entorno aunque no se guarde
+        pass
+
+    if not de_hoy and valor > tope_dia():
+        subir_tope(valor * 2, de_hoy=True)
+
+    return valor

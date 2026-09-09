@@ -8,6 +8,7 @@ consola arranca en él, y git actúa sobre él. Las que modifican algo piden con
 from __future__ import annotations
 
 import dataclasses
+import re
 from pathlib import Path
 from typing import Any
 
@@ -61,7 +62,127 @@ class ParcheConPermiso(_ConPermiso, ApplyPatchTool):
 
 
 class ShellConPermiso(_ConPermiso, ShellExecTool):
-    pass
+    """La consola pide permiso salvo para lo que solo mira: rg, grep, ls, git status,
+    pytest, ruff… Buscar en el código no debería esperar a nadie."""
+
+    def sin_confirmacion(self, params: dict[str, Any]) -> bool:
+        return es_solo_lectura(str(params.get("command", "")))
+
+
+SOLO_LECTURA = frozenset(
+    {
+        "rg",
+        "grep",
+        "findstr",
+        "ls",
+        "dir",
+        "cat",
+        "type",
+        "head",
+        "tail",
+        "wc",
+        "find",
+        "tree",
+        "echo",
+        "where",
+        "which",
+        "pwd",
+        "pytest",
+        "ruff",
+        "mypy",
+        "black",
+        "bandit",
+        "pip-audit",
+        "npm",
+        "node",
+        "git",
+        "python",
+        "python3",
+        "py",
+    }
+)
+
+GIT_LECTURA = frozenset(
+    {
+        "status",
+        "diff",
+        "log",
+        "show",
+        "ls-files",
+        "branch",
+        "blame",
+        "grep",
+        "rev-parse",
+        "describe",
+        "tag",
+        "remote",
+    }
+)
+PYTHON_LECTURA = (
+    "-m pytest",
+    "-m ruff",
+    "-m mypy",
+    "-m black --check",
+    "-m bandit",
+    "-m pip_audit",
+    "-m pip list",
+    "-m pip show",
+    "-c ",
+)
+NPM_LECTURA = (
+    "audit",
+    "ls",
+    "list",
+    "outdated",
+    "view",
+    "test",
+    "run test",
+    "run lint",
+)
+PELIGRO = re.compile(
+    r"(>>?|\|\s*(?:tee|sh|bash|cmd|powershell)\b|\brm\b|\bdel\b|\bmv\b|\bcp\b|\bmkdir\b|\brmdir\b|\bcurl\b|\bwget\b|\bInvoke-|\bSet-|\bRemove-|\bpip install\b|--fix\b|\bnpm (?:install|i|ci|uninstall|publish)\b)"
+)
+
+
+def es_solo_lectura(orden: str) -> bool:
+    """Si una orden de consola solo mira. Ante la duda, no."""
+    limpia = orden.strip()
+
+    if not limpia or "&&" in limpia or ";" in limpia or "`" in limpia or "$(" in limpia:
+        return False
+
+    if PELIGRO.search(limpia):
+        return False
+
+    partes = limpia.split()
+    programa = partes[0].lower().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    programa = programa[:-4] if programa.endswith(".exe") else programa
+
+    if programa not in SOLO_LECTURA:
+        return False
+
+    if programa == "git":
+        return len(partes) > 1 and partes[1] in GIT_LECTURA
+
+    if programa in ("python", "python3", "py"):
+        resto = " ".join(partes[1:])
+
+        return resto.startswith(PYTHON_LECTURA) and " -m pip install" not in resto
+
+    if programa == "npm":
+        return (
+            len(partes) > 1
+            and " ".join(partes[1:3]) in NPM_LECTURA
+            or (len(partes) > 1 and partes[1] in NPM_LECTURA)
+        )
+
+    if programa == "node":
+        return len(partes) > 1 and partes[1] in ("--version", "-v")
+
+    if programa == "black":
+        return "--check" in partes or "--diff" in partes
+
+    return True
 
 
 class CommitConPermiso(_ConPermiso, GitCommitTool):

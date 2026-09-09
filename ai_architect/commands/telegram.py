@@ -22,6 +22,7 @@ falta lanzarlo aparte.
 
 from __future__ import annotations
 
+import re
 import threading
 from typing import Any
 
@@ -37,12 +38,25 @@ def atender(texto: str, project: str, si: bool) -> str:
     plano = limpio.lower().lstrip("/")
 
     if plano in ("pendientes", "pending"):
-        return str(pendientes.run("listar")["explanation"])
+        return pendientes_para_el_celular()
+
+    # Los botones y los atajos: «si:ID», «no:ID», «/si ID», «/no todo».
+    decision_directa = re.match(r"^(si|sí|no)[:\s]+([0-9a-f]{4,}|todo|todas)$", plano)
+
+    if decision_directa:
+        que = decision_directa.group(2)
+        accion = "aprobar" if decision_directa.group(1).startswith("s") else "rechazar"
+        salida = pendientes.run(accion, "todo" if que in ("todo", "todas") else que)
+        _refrescar_cara(salida)
+
+        return str(salida["explanation"]) + _lo_hecho(salida)
 
     if plano.startswith("aprobar ") or plano.startswith("rechazar "):
         accion, _, que = plano.partition(" ")
+        salida = pendientes.run(accion, que.strip())
+        _refrescar_cara(salida)
 
-        return str(pendientes.run(accion, que.strip())["explanation"])
+        return str(salida["explanation"]) + _lo_hecho(salida)
 
     if conversar.hay_permiso_pendiente():
         decision = conversar.decidir_permiso(limpio)
@@ -64,6 +78,59 @@ def atender(texto: str, project: str, si: bool) -> str:
         respuesta += "\n- ".join(permiso) + "\n\nResponde «sí» o «no»."
 
     return respuesta
+
+
+def pendientes_para_el_celular() -> str:
+    """Lo que espera permiso, con su id corto y cómo contestar."""
+    from ai_architect.commands import pendientes
+
+    lista = pendientes.run("listar")
+
+    if not lista.get("pending"):
+        return "No hay nada pendiente de tu permiso."
+
+    filas = [f"• {a['id'][:8]} · {a['description'][:160]}" for a in lista["pending"]]
+
+    return (
+        f"{len(filas)} cambio(s) esperando tu permiso:\n"
+        + "\n".join(filas)
+        + "\n\nContesta /si <id>, /no <id> o /si todo."
+    )
+
+
+def botones_de_permiso(ids: list[str]) -> list[list[tuple[str, str]]]:
+    """Una fila de botones por cambio, y una para todos."""
+    filas = [
+        [
+            ("✅ Aprobar " + i[:8], f"si:{i[:8]}"),
+            ("❌ Rechazar " + i[:8], f"no:{i[:8]}"),
+        ]
+        for i in ids[:8]
+    ]
+
+    if len(ids) > 1:
+        filas.append([("✅ Aprobar todo", "si:todo"), ("❌ Rechazar todo", "no:todo")])
+
+    return filas
+
+
+def _lo_hecho(salida: dict[str, Any]) -> str:
+    hechos = salida.get("done") or []
+
+    return ("\n" + "\n".join(str(h)[:200] for h in hechos)) if hechos else ""
+
+
+def _refrescar_cara(salida: dict[str, Any]) -> None:
+    """Si la cara está abierta, que se entere de que el permiso ya se resolvió."""
+    try:
+        from ai_architect.agente import progreso
+        from ai_architect.commands import conversar
+
+        conversar.olvidar_permiso_pendiente()
+        progreso.avisar("fase", fase="listo" if salida.get("success") else "error")
+
+    except Exception:  # noqa: BLE001 - la cara es un extra
+        pass
 
 
 def run(

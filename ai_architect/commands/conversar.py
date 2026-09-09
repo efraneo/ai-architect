@@ -342,6 +342,13 @@ def hay_permiso_pendiente() -> bool:
     return bool(_permiso_pendiente)
 
 
+def olvidar_permiso_pendiente() -> None:
+    """El permiso se resolvió por otro lado (el celular): la cara deja de esperarlo."""
+    global _permiso_pendiente
+
+    _permiso_pendiente = []
+
+
 def decidir_permiso(texto: str) -> str:
     """``"si"``, ``"no"`` o ``""`` si eso no era una respuesta al permiso."""
     plano = sin_adornos(texto)
@@ -397,12 +404,19 @@ def _avisar_al_celular(permiso: list[str]) -> None:
         if not telegram.configurado():
             return
 
+        from ai_architect.commands import telegram as telegram_cmd
+
+        ids = [p["id"] for p in _permiso_pendiente]
         threading.Thread(
             target=telegram.enviar,
             args=(
-                f"Tengo {len(permiso)} cambio(s) esperando tu permiso:\n- "
-                + "\n- ".join(permiso)
-                + "\n\nResponde «sí» o «no».",
+                f"🔐 Tengo {len(permiso)} cambio(s) esperando tu permiso:\n- "
+                + "\n- ".join(
+                    f"{i[:8]} · {d}" for i, d in zip(ids, permiso, strict=False)
+                )
+                + "\n\nPulsa un botón o contesta /si <id>, /no <id>, /si todo.",
+                "",
+                telegram_cmd.botones_de_permiso(ids),
             ),
             daemon=True,
         ).start()
@@ -1130,6 +1144,7 @@ def _trabajar(buzon: queue.Queue, dicho: str, project: str, si: bool) -> None:
         target=lambda: caja.update(atender(dicho, project, si)),
         daemon=True,
     )
+    faena.resultado = caja  # type: ignore[attr-defined]
 
     faena.start()
     faena.join(MERECE_RELLENO)
@@ -1148,7 +1163,16 @@ def _trabajar(buzon: queue.Queue, dicho: str, project: str, si: bool) -> None:
     # termine—, y al pedirla se sacaba el buzón del diccionario. Cuando la
     # tarea acababa ya no encontraba dónde dejar el resultado, lo tiraba, y
     # la página se quedaba esperando algo que nunca iba a llegar.
-    if not caja:
+    if not caja and faena.is_alive():
+        # Una auditoría o una corrección larga no se abandona: se avisa y se
+        # sigue detrás; al terminar se cuenta en voz alta y por el celular.
+        texto = "Esto va para largo. Sigo con ello y te aviso cuando termine."
+        caja = {"respuesta": texto, "dicho": texto, "ms": 0, "instantanea": True}
+        threading.Thread(
+            target=_contar_al_terminar, args=(faena, dicho), daemon=True
+        ).start()
+
+    elif not caja:
         from ai_architect import autoreparacion
 
         averia = autoreparacion.registrar("conversar", dicho, "la faena no terminó")
@@ -1241,3 +1265,39 @@ def _voz_autorizada(dicho: str) -> tuple[bool, str]:
 
     except Exception:  # noqa: BLE001 - la huella nunca bloquea por error propio
         return True, ""
+
+
+def _contar_al_terminar(faena: threading.Thread, dicho: str) -> None:
+    """Espera a la faena larga y, cuando acaba, cuenta el resultado."""
+    faena.join(ESPERA_LARGA)
+    resultado = getattr(faena, "resultado", None) or {}
+
+    if faena.is_alive() or not resultado:
+        from ai_architect import autoreparacion
+
+        averia = autoreparacion.registrar("conversar", dicho, "la faena no terminó")
+        decir_proactivo(
+            "No pude terminar lo que me pediste. "
+            + autoreparacion.aviso_de_averia(averia)
+        )
+
+        return
+
+    texto = str(resultado.get("respuesta") or "Terminé.")
+    permiso = _anotar_permiso(resultado)
+
+    if permiso:
+        texto += f" Tengo {len(permiso)} cambio(s) esperando tu permiso."
+
+    decir_proactivo("Terminé lo que me pediste. " + texto)
+
+    if resultado.get("panel"):
+        progreso.avisar("panel", panel=resultado["panel"])
+
+    if permiso:
+        progreso.avisar("fase", fase="permiso", pendientes=len(permiso))
+        _avisar_al_celular(permiso)
+
+
+# Cuánto se espera, detrás, a una faena larga antes de darla por perdida.
+ESPERA_LARGA = 1800.0

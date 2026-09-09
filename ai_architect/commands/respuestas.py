@@ -211,6 +211,52 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
     return None
 
 
+TOPE = re.compile(
+    r"^(?:sube|subele|subelo|aumenta|pon|cambia)\s+(?:el\s+)?(?:tope|limite|presupuesto)(?:\s+de\s+(?:gasto|la\s+sesion|hoy|del\s+dia))?\s*(?:a|hasta|en)?\s*(?P<n>\d+(?:[.,]\d+)?|[a-z]+)?\s*(?:dolares|usd|d[oó]lar)?\.?$"
+)
+SUBELO = (
+    "subelo tu mismo",
+    "subelo",
+    "sube el tope",
+    "sube el limite",
+    "quita el tope",
+    "sin tope",
+    "sube el presupuesto",
+)
+
+
+def _tope_de_gasto(frase: str) -> dict[str, Any] | None:
+    """«Sube el tope a diez dólares», «súbelo tú mismo»: se sube y se guarda."""
+    from ai_architect.core import gasto
+
+    limpia = sin_adornos(frase)
+
+    if not limpia:
+        return None
+
+    m = TOPE.match(limpia)
+
+    if m is None and limpia not in SUBELO:
+        return None
+
+    de_hoy = "hoy" in limpia or "dia" in limpia
+    actual = gasto.tope_dia() if de_hoy else gasto.tope_sesion()
+    from ai_architect.agenda import NUMEROS
+
+    numero = m.group("n") if m else None
+
+    if numero and not numero[0].isdigit():
+        numero = str(NUMEROS.get(numero, "")) or None
+
+    nuevo = float(numero.replace(",", ".")) if numero else actual * 2
+    valor = gasto.subir_tope(nuevo, de_hoy=de_hoy)
+
+    return {
+        "respuesta": f"Listo: el tope {'de hoy' if de_hoy else 'de la conversación'} queda en {valor:.0f} dólares. "
+        f"Llevo {gasto.sesion():.2f} en esta conversación."
+    }
+
+
 def _de_la_vida() -> list[Any]:
     from ai_architect import agenda, auditoria, investigar, vision
     from ai_architect.agente.memoria import episodios
@@ -222,6 +268,7 @@ def _de_la_vida() -> list[Any]:
         lambda frase: huella.por_voz(frase, escuchar.ultimo_audio),
         biblioteca_voz.por_voz,
         auditoria.por_voz,
+        _tope_de_gasto,
         vision.por_voz,
         agenda.por_voz,
         episodios.por_voz,

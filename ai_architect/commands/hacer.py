@@ -87,6 +87,12 @@ def run(
     def antes(nombre: str, argumentos: dict[str, Any]) -> bool:
         if si or nombre not in caja.ESCRIBEN:
             return True
+
+        # Mirar no cambia nada: rg, grep, git status, pytest… pasan sin permiso.
+        if nombre == "shell_exec" and caja.es_solo_lectura(
+            str(argumentos.get("command", ""))
+        ):
+            return True
         try:
             accion = pendientes.encolar(repositorio, nombre, argumentos, frase)
             encoladas.append(f"{accion.id[:8]} · {accion.description}")

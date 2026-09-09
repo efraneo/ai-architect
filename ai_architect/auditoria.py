@@ -45,6 +45,17 @@ PIDE = (
     "hackea el proyecto",
     "hackea este proyecto",
     "hackeate",
+    # Como lo transcribe el oído cuando lo oye mal:
+    "haquea el proyecto",
+    "jaquea el proyecto",
+    "hakea el proyecto",
+    "jakea el proyecto",
+    "hackea el codigo",
+    "haquea el codigo",
+    "jaquea el codigo",
+    "hackealo",
+    "haquealo",
+    "jaquealo",
     "ataca el proyecto",
     "busca agujeros",
     "busca vulnerabilidades",
@@ -57,8 +68,15 @@ PIDE = (
     "es seguro el proyecto",
 )
 
+# «Hackea», «haquea», «jaquea», «hakéalo»: como lo oiga, es lo mismo.
+HACKEA = re.compile(r"^(?:h|j)a[ckq]{1,3}e+a(?:lo|me|te)?(?:\s|$)")
+
 CORRIGE = (
     "corrige los agujeros",
+    "corrige los errores de seguridad",
+    "corrige los errores encontrados",
+    "corrige los errores",
+    "arregla los errores",
     "parcha los agujeros",
     "parchea los agujeros",
     "corrige las vulnerabilidades",
@@ -691,7 +709,7 @@ def por_voz(frase: str) -> dict[str, Any] | None:
             "hacer": orden_de_correccion("."),
         }
 
-    if contiene(limpia, *PIDE):
+    if contiene(limpia, *PIDE) or HACKEA.match(limpia):
         return {
             "respuesta": "Voy a atacar el proyecto: escáneres reales y luego los especialistas.",
             "hacer": orden_de_auditoria("."),

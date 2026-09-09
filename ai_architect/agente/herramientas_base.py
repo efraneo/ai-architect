@@ -328,8 +328,13 @@ class ToolExecutor:
             if isinstance(params, dict):
                 params.pop("_taint", None)
 
-        # Confirmation check for sensitive tools
-        if tool.spec.requires_confirmation:
+        # Confirmation check for sensitive tools. A tool may say that this
+        # particular call is harmless (a read-only shell command): then no gate.
+        inofensiva = getattr(tool, "sin_confirmacion", None)
+
+        if tool.spec.requires_confirmation and not (
+            callable(inofensiva) and isinstance(params, dict) and inofensiva(params)
+        ):
             if not self._interactive or self._confirm_callback is None:
                 return ToolResult(
                     tool_name=tool_call.name,

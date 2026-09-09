@@ -73,3 +73,14 @@ no lo conoce, manda el nombre y el teléfono busca en su agenda.
 Estas órdenes se reconocen en el sitio (`ai_architect/canales/celular.py`,
 `entender`) y salen al instante, sin pasar por el modelo: llamar y mandar SMS
 piden un «sí» antes; lo demás va directo.
+
+## Aprobar desde el celular
+
+Cuando Architect deja un cambio esperando permiso, te llega a Telegram con
+botones: **✅ Aprobar** / **❌ Rechazar** por cambio, y **Aprobar todo**.
+También por texto: `/si <id>`, `/no <id>`, `/si todo`, `/pendientes`. Al
+aprobar, se aplica y te contesta qué hizo; si la cara está abierta, se entera.
+
+Las tareas largas (una auditoría, una corrección) ya no se abandonan a los
+tres minutos: Architect dice «sigo con ello» y, al terminar, lo cuenta en voz
+alta y por Telegram con el permiso que haga falta.
