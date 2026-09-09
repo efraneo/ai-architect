@@ -280,6 +280,35 @@ def _adelante(limpia: str) -> dict[str, Any] | None:
             )
         }
 
+    if limpia in (
+        "reconstruye el instalador",
+        "reconstruye tu instalador",
+        "empaqueta",
+        "empaquetate",
+        "reconstruyete",
+    ):
+        import threading
+
+        from ai_architect.commands import conversar
+
+        threading.Thread(
+            target=lambda: conversar.decir_proactivo(
+                str(autoreparacion.reconstruir().get("informe", ""))
+            ),
+            daemon=True,
+        ).start()
+
+        return {"respuesta": "Reconstruyo el instalador. Tarda unos minutos; te aviso."}
+
+    if limpia in (
+        "reiniciate",
+        "reinicia architect",
+        "reinicia",
+        "reiniciar",
+        "vuelve a arrancar",
+    ):
+        return {"respuesta": autoreparacion.reiniciar()["informe"]}
+
     if limpia in CONECTAR_CELULAR:
         from ai_architect.canales import asistente
 

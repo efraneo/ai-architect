@@ -39,7 +39,9 @@ class InstalarTool(BaseTool):
                 "required": ["que", "nombre"],
             },
             category="sistema",
-            requires_confirmation=True,
+            # Por decisión de Efraín: lo que necesite para cumplir una orden se lo
+            # instala él solo (paquetes, skills). El código propio sigue con «adelante».
+            requires_confirmation=False,
             timeout_seconds=600,
         )
 
@@ -74,6 +76,17 @@ class InstalarTool(BaseTool):
             return ToolResult(
                 tool_name="instalar", content="Di «paquete» o «skill».", success=False
             )
+
+        if salida.get("ok"):
+            try:
+                from ai_architect.agente import memoria
+
+                memoria.recordar(
+                    f"Instaló {que} {nombre[:80]} por su cuenta", fuente="instalar"
+                )
+
+            except Exception:  # noqa: BLE001 - la memoria es un extra
+                pass
 
         return ToolResult(
             tool_name="instalar", content=texto, success=bool(salida.get("ok"))

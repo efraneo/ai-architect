@@ -412,6 +412,14 @@ sobre su código fuente (`ARCHITECT_FUENTE`), corre sus pruebas de verdad y te
 cuenta; otro «adelante» reconstruye el instalador. Nunca lo hace solo ni lo
 aprende: siempre pide tu orden.
 
+**Aprende lo que no sabe, con tu «adelante».** Cada vez que contesta «no puedo»
+o «no entendí», lo pedido queda apuntado como capacidad nueva y te lo ofrece.
+«Adelante» la programa en su propio código (con Claude Code si está instalado,
+si no con su agente), instala por su cuenta los paquetes o skills que le hagan
+falta, corre sus pruebas de verdad, lo apunta en su memoria y, con otro
+«adelante», se reinicia con el cambio. «Reconstruye el instalador» lo
+reempaqueta.
+
 **Se configura hablando.** «Llama a Juan» sin bot de Telegram: te pide el
 token de @BotFather en un campo de la cara, descubre él solo tu chat cuando le
 escribes, y sigue con la orden. «Conéctate al celular» y «configura el correo»

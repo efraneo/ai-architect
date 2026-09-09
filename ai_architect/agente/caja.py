@@ -35,7 +35,6 @@ ESCRIBEN = frozenset(
         "enviar_telegram",
         "enviar_correo",
         "enviar_whatsapp",
-        "instalar",
         "celular_llamar",
     }
 )

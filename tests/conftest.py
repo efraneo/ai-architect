@@ -51,3 +51,21 @@ def _sin_ventanas_ni_programas(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         word, "_app", lambda: (_ for _ in ()).throw(RuntimeError("sin Word en pruebas"))
     )
+    # Ni el CLI de Claude Code: con él instalado, un «adelante» de prueba lo
+    # lanzaba de verdad sobre la carpeta temporal (hasta media hora y con
+    # costo). Las pruebas de esa vía quitan la variable y doblan `shutil.which`.
+    monkeypatch.setenv("ARCHITECT_REPARADOR", "hacer")
+
+
+@pytest.fixture(autouse=True)
+def _pide_sin_estado_de_otra_prueba():
+    """`conversar.run` deja a `pide` en modo conciso y con el saludo dado: cada
+    prueba empieza como si nadie hubiera hablado."""
+    from ai_architect.commands import pide
+
+    pide.conciso(False)
+    pide.reiniciar_saludo()
+
+    yield
+
+    pide.conciso(False)

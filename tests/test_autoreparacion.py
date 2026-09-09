@@ -15,6 +15,8 @@ from ai_architect.commands import reparar, respuestas
 @pytest.fixture(autouse=True)
 def limpio(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ARCHITECT_FUENTE", "")
+    # Las pruebas del ciclo usan el agente propio; la vía de Claude Code tiene la suya.
+    monkeypatch.setenv("ARCHITECT_REPARADOR", "hacer")
     autoreparacion._en_curso.clear()
     autoreparacion._ultimo_informe = ""
     asistente.cancelar()
@@ -178,15 +180,15 @@ def test_adelante_repara_y_luego_reconstruye(tmp_path: Path, monkeypatch) -> Non
 
     assert "reviso" in dicho and avisos and "adelante" in avisos[-1]
 
-    hecho = mock.Mock(returncode=0, stdout="Listo", stderr="")
-    (f / "salida").mkdir()
-    (f / "salida" / "ArquitectoSetup.exe").write_bytes(b"x" * 10)
-
-    with mock.patch.object(autoreparacion.subprocess, "run", return_value=hecho) as run:
+    with mock.patch.object(
+        autoreparacion,
+        "reiniciar",
+        return_value={"ok": True, "informe": "Me reinicio."},
+    ) as reiniciar:
         dicho = autoreparacion.adelante(avisar=avisos.append, en_hilo=False)
 
-    assert "reconstruyo" in dicho and "Instalador reconstruido" in avisos[-1]
-    assert run.call_args.args[0][:2] == ["cmd", "/c"]
+    assert "reinicio" in dicho and avisos[-1] == "Me reinicio."
+    reiniciar.assert_called_once()
     assert autoreparacion.pendiente() is None
 
 
@@ -354,3 +356,167 @@ def test_reparate_con_averia_la_nombra() -> None:
     salida = respuestas.responder("arréglate")
 
     assert salida is not None and "review" in salida["respuesta"]
+
+
+# --- Aprender lo que no sabe -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "No puedo abrir programas.",
+        "Lo siento, no tengo la capacidad de leer PDF.",
+        "No sé cómo hacer eso todavía.",
+    ],
+)
+def test_reconoce_un_no_puedo(texto: str) -> None:
+    assert autoreparacion.es_incapacidad(texto)
+
+
+def test_una_respuesta_normal_no_es_incapacidad() -> None:
+    assert not autoreparacion.es_incapacidad(
+        "Son las nueve. Revisé el proyecto y está bien."
+    )
+
+
+def test_pide_apunta_lo_que_no_supo_hacer_y_ofrece_aprender() -> None:
+    from ai_architect.commands import pide
+
+    with mock.patch.object(
+        pide,
+        "_preguntar",
+        return_value='{"comando": "", "respuesta": "No puedo leer archivos PDF."}',
+    ):
+        salida = pide.run(".", frase="lee este PDF", engine=object())
+
+    assert "adelante" in salida["explanation"] and "aprendo" in salida["explanation"]
+    averia = autoreparacion.pendiente()
+    assert averia["comando"] == "mejora" and averia["frase"] == "lee este PDF"
+
+
+def test_lo_que_no_entiende_tambien_se_apunta() -> None:
+    from ai_architect.commands import pide
+
+    with mock.patch.object(
+        pide, "_preguntar", return_value='{"comando": "", "respuesta": ""}'
+    ):
+        salida = pide.run(".", frase="haz algo rarísimo", engine=object())
+
+    assert "adelante" in salida["explanation"]
+    assert autoreparacion.pendiente()["frase"] == "haz algo rarísimo"
+
+
+def test_reiniciar_relanza_y_cierra(monkeypatch) -> None:
+    from ai_architect.commands import conversar
+
+    monkeypatch.setattr(
+        autoreparacion.sys, "argv", ["architect", "conversar", "--flotante"]
+    )
+
+    with mock.patch.object(autoreparacion.subprocess, "Popen") as popen:
+        with mock.patch.object(conversar, "cerrar_sesion") as cerrar:
+            salida = autoreparacion.reiniciar()
+
+    assert salida["ok"] and "reinicio" in salida["informe"]
+    orden = popen.call_args.args[0]
+    assert orden[-2:] == ["conversar", "--flotante"] and "ai_architect.cli" in orden
+    cerrar.assert_called_once()
+
+
+def test_la_mejora_hecha_queda_en_la_memoria(tmp_path: Path, monkeypatch) -> None:
+    from ai_architect.agente import memoria
+
+    f = fuente_falsa(tmp_path)
+    monkeypatch.setenv("ARCHITECT_FUENTE", str(f))
+    a = autoreparacion.registrar("mejora", "leer archivos PDF", "capacidad")
+
+    with mock.patch(
+        "ai_architect.commands.hacer.run", return_value={"explanation": "Añadí pdf.py."}
+    ):
+        with mock.patch.object(
+            autoreparacion, "correr_pruebas", return_value={"ok": True, "resumen": "ok"}
+        ):
+            autoreparacion.reparar(a)
+
+    assert any("leer archivos PDF" in h.text for h in memoria.hechos())
+
+
+def test_reconstruir_el_instalador_por_voz() -> None:
+    with mock.patch.object(
+        autoreparacion, "reconstruir", return_value={"ok": True, "informe": "Listo."}
+    ) as rec:
+        with mock.patch("ai_architect.commands.conversar.decir_proactivo") as decir:
+            salida = respuestas.responder("reconstruye el instalador")
+
+            import time
+
+            for _ in range(50):
+                if decir.called:
+                    break
+
+                time.sleep(0.02)
+
+    assert salida is not None and "Reconstruyo" in salida["respuesta"]
+    rec.assert_called_once()
+    assert decir.call_args.args[0] == "Listo."
+
+
+def test_instalar_ya_no_pide_permiso(tmp_path: Path) -> None:
+    from ai_architect.agente import caja
+
+    herramientas = {h.spec.name: h for h in caja.herramientas_para(tmp_path)}
+
+    assert herramientas["instalar"].spec.requires_confirmation is False
+    assert "instalar" not in caja.ESCRIBEN
+
+
+# --- Con Claude Code ------------------------------------------------------------------------
+
+
+def test_si_esta_claude_code_repara_con_el(tmp_path: Path, monkeypatch) -> None:
+    f = fuente_falsa(tmp_path)
+    monkeypatch.setenv("ARCHITECT_FUENTE", str(f))
+    monkeypatch.delenv("ARCHITECT_REPARADOR", raising=False)
+    a = autoreparacion.registrar("mejora", "leer PDF", "capacidad")
+    hecho = mock.Mock(
+        returncode=0,
+        stdout="Añadí ai_architect/commands/pdf.py y sus pruebas.",
+        stderr="",
+    )
+
+    with mock.patch.object(
+        autoreparacion.shutil, "which", return_value="C:/claude.cmd"
+    ):
+        with mock.patch.object(
+            autoreparacion.subprocess, "run", return_value=hecho
+        ) as run:
+            with mock.patch.object(
+                autoreparacion,
+                "correr_pruebas",
+                return_value={"ok": True, "resumen": "ok"},
+            ):
+                with mock.patch("ai_architect.commands.hacer.run") as hacer:
+                    salida = autoreparacion.reparar(a)
+
+    hacer.assert_not_called()
+    orden = run.call_args.args[0]
+    assert (
+        orden[0] == "C:/claude.cmd"
+        and orden[1] == "-p"
+        and "TU PROPIO CÓDIGO" in orden[2]
+    )
+    assert "--dangerously-skip-permissions" in orden
+    assert run.call_args.kwargs["cwd"] == str(f)
+    assert salida["ok"] and "pdf.py" in salida["informe"]
+
+
+def test_sin_claude_code_repara_el_agente(monkeypatch) -> None:
+    monkeypatch.delenv("ARCHITECT_REPARADOR", raising=False)
+
+    with mock.patch.object(autoreparacion.shutil, "which", return_value=None):
+        assert autoreparacion.reparador() == "hacer"
+
+    monkeypatch.setenv("ARCHITECT_REPARADOR", "hacer")
+
+    with mock.patch.object(autoreparacion.shutil, "which", return_value="claude"):
+        assert autoreparacion.reparador() == "hacer"

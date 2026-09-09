@@ -33,7 +33,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -42,6 +44,15 @@ from pathlib import Path
 from typing import Any
 
 from ai_architect.agente.rutas_agente import get_config_dir
+
+# Cómo suena «no sé hacerlo» en una respuesta. Cada vez que Architect contesta
+# así, lo que se pidió queda apuntado como capacidad nueva.
+INCAPACIDAD = re.compile(
+    r"\bno (?:puedo|podr[ií]a|tengo (?:la )?capacidad|es posible|s[eé] c[oó]mo|"
+    r"s[eé] hacer|estoy capacitad[oa]|logro|supe|entend[ií]|conozco|dispongo)\b|"
+    r"no (?:me es|resulta) posible|no lo s[eé] hacer|fuera de mi alcance|no est[aá] en mis",
+    re.IGNORECASE,
+)
 
 PALABRA_MAESTRA = (
     "adelante",
@@ -182,7 +193,10 @@ def orden_de_reparacion(averia: dict[str, Any]) -> str:
             f"capacidad nueva: «{averia['frase']}». Impleméntala de la forma más pequeña y "
             "coherente con el proyecto: mira cómo están hechos los comandos en "
             "ai_architect/commands, los atajos de voz en commands/respuestas.py y la tabla "
-            "del CLI en cli.py; añade pruebas nuevas en tests/. Corre `python -m pytest -q -x` "
+            "del CLI en cli.py; añade pruebas nuevas en tests/. Si hace falta un paquete de "
+            "Python, una skill (carpeta con skill.toml en ~/.ai_architect/skills) o un agente "
+            "nuevo (ai_architect/agents), instálalo o créalo tú mismo: tienes la herramienta "
+            "`instalar` y permiso para escribir. Corre `python -m pytest -q -x` "
             "y `python -m ruff check ai_architect` hasta que pasen. No empaquetes, no hagas "
             "commit y no automatices este ciclo: el usuario lo autoriza cada vez con su "
             "palabra maestra. Termina con un informe breve: qué añadiste (archivo por archivo) "
@@ -200,6 +214,63 @@ def orden_de_reparacion(averia: dict[str, Any]) -> str:
         "palabra maestra. Termina con un informe breve: qué fallaba, qué cambiaste "
         "(archivo por archivo) y el resultado de las pruebas."
     )
+
+
+# --- Con quién se repara ---------------------------------------------------------
+#
+# Efraín pidió que se conecte «directamente con Claude» para arreglarse y
+# reescribir su código. Si está el CLI de Claude Code en esta máquina, la
+# reparación se la encarga a él, en la carpeta del código fuente, con la misma
+# orden; si no, la hace el propio agente `hacer`.
+
+TIEMPO_CLAUDE = 1800
+
+
+def reparador() -> str:
+    """``"claude"`` si el CLI de Claude Code está y no se ha pedido otra cosa."""
+
+    elegido = os.getenv("ARCHITECT_REPARADOR", "").strip().lower()
+
+    if elegido in ("hacer", "agente"):
+        return "hacer"
+
+    return "claude" if shutil.which("claude") else "hacer"
+
+
+def reparar_con_claude(fuente_: Path, orden: str) -> dict[str, Any]:
+    """Claude Code, en modo no interactivo, sobre el código fuente."""
+
+    ejecutable = shutil.which("claude")
+
+    if not ejecutable:
+        return {"ok": False, "informe": "No encuentro el CLI de Claude Code."}
+
+    try:
+        salida = subprocess.run(
+            [
+                ejecutable,
+                "-p",
+                orden,
+                "--output-format",
+                "text",
+                # Sin terminal no hay a quién preguntar: se le deja editar y
+                # correr las pruebas dentro de su propio repositorio.
+                "--dangerously-skip-permissions",
+            ],
+            cwd=str(fuente_),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=TIEMPO_CLAUDE,
+        )
+
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "informe": f"Claude Code no pudo correr: {e}"}
+
+    texto = (salida.stdout or "").strip() or (salida.stderr or "").strip()
+
+    return {"ok": salida.returncode == 0, "informe": texto[-3000:]}
 
 
 def correr_pruebas(fuente_: Path) -> dict[str, Any]:
@@ -246,12 +317,18 @@ def reparar(averia: dict[str, Any], motor: Any = None) -> dict[str, Any]:
     _actualizar(averia["id"], estado="reparando")
 
     try:
-        from ai_architect.commands import hacer
+        if reparador() == "claude" and motor is None:
+            hecho = reparar_con_claude(fuente_, orden_de_reparacion(averia))
+            informe = str(hecho.get("informe", ""))
 
-        resultado = hacer.run(
-            str(fuente_), orden_de_reparacion(averia), si=True, motor=motor
-        )
-        informe = str(resultado.get("explanation") or resultado.get("error") or "")
+        else:
+            from ai_architect.commands import hacer
+
+            resultado = hacer.run(
+                str(fuente_), orden_de_reparacion(averia), si=True, motor=motor
+            )
+            informe = str(resultado.get("explanation") or resultado.get("error") or "")
+
         pruebas = correr_pruebas(fuente_)
 
     finally:
@@ -272,8 +349,25 @@ def reparar(averia: dict[str, Any], motor: Any = None) -> dict[str, Any]:
 
         _ultimo_informe = (
             f"{cabeza} y las pruebas pasan ({pruebas['resumen']}). {informe[:600]}"
-            "\n\nSi dices «adelante», reconstruyo el instalador."
+            "\n\nSi dices «adelante», me reinicio con el cambio."
         )
+
+        # Lo aprendido queda en la memoria a largo plazo, con fecha.
+        try:
+            from ai_architect.agente import memoria
+
+            memoria.recordar(
+                (
+                    f"Aprendió a: {averia['frase'][:120]}"
+                    if averia.get("comando") == "mejora"
+                    else f"Se reparó una avería en «{averia['comando']}»"
+                )
+                + f" ({time.strftime('%d/%m/%Y')})",
+                fuente="autoreparacion",
+            )
+
+        except Exception as e:  # noqa: BLE001 - la memoria es un extra
+            logger.debug("se ignora: %s", e)
 
         return {"ok": True, "informe": _ultimo_informe, "pruebas": pruebas}
 
@@ -372,8 +466,9 @@ def adelante(avisar: Any = None, motor: Any = None, en_hilo: bool = True) -> str
         return "No tengo nada pendiente de tu «adelante»."
 
     if averia.get("estado") == "reparada":
-        trabajo = lambda: reconstruir(averia)  # noqa: E731 - es un despacho
-        dicho = "Adelante: reconstruyo el instalador. Te aviso cuando esté."
+        _actualizar(averia["id"], estado="aplicada")
+        trabajo = reiniciar
+        dicho = "Adelante: me reinicio con el código nuevo. Dame unos segundos."
 
     else:
         trabajo = lambda: reparar(averia, motor=motor)  # noqa: E731 - es un despacho
@@ -406,6 +501,65 @@ def adelante(avisar: Any = None, motor: Any = None, en_hilo: bool = True) -> str
         _hacerlo()
 
     return dicho
+
+
+def es_incapacidad(texto: str) -> bool:
+    return bool(INCAPACIDAD.search(texto or ""))
+
+
+def apuntar_incapacidad(frase: str, respuesta: str) -> tuple[dict[str, Any], str]:
+    """Lo que no supo hacer queda como mejora pendiente, y se ofrece aprenderlo."""
+    averia = registrar(
+        "mejora",
+        frase,
+        "no supe hacerlo: " + " ".join((respuesta or "").split())[:300],
+    )
+
+    return averia, (
+        "Eso todavía no lo sé hacer. Si dices «adelante», aprendo: programo la capacidad "
+        "en mi código, instalo lo que haga falta, la pruebo y me reinicio con ella."
+    )
+
+
+def reiniciar() -> dict[str, Any]:
+    """Se vuelve a lanzar a sí mismo con el código nuevo y cierra esta sesión.
+
+    Solo tras un «adelante»: la reparación cambia archivos, pero el proceso
+    que está corriendo sigue con los viejos hasta que arranca otra vez.
+    """
+    global _ultimo_informe
+
+    if getattr(sys, "frozen", False):
+        orden = [sys.executable, *sys.argv[1:]]
+    else:
+        orden = [sys.executable, "-m", "ai_architect.cli", *sys.argv[1:]]
+
+    try:
+        banderas = 0
+
+        if os.name == "nt":
+            banderas = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+
+        subprocess.Popen(orden, creationflags=banderas, close_fds=True)
+
+    except (OSError, AttributeError) as e:
+        _ultimo_informe = f"No pude reiniciarme: {e}. Cierra y vuelve a abrirme."
+
+        return {"ok": False, "informe": _ultimo_informe}
+
+    try:
+        from ai_architect.commands import conversar
+
+        conversar.cerrar_sesion(2.0)
+
+    except (
+        Exception
+    ) as e:  # noqa: BLE001 - sin conversación abierta no hay nada que cerrar
+        logger.debug("se ignora: %s", e)
+
+    _ultimo_informe = "Me reinicio con el código nuevo. Dame unos segundos."
+
+    return {"ok": True, "informe": _ultimo_informe}
 
 
 def aviso_de_averia(averia: dict[str, Any]) -> str:

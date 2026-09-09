@@ -322,7 +322,9 @@ def run(
                         "panel": dicho.get("panel"),
                         "written": dicho.get("written", ""),
                         "explanation": _con_trato(
-                            _recordado(frase, dicho["explanation"], dicho)
+                            _con_mejora(
+                                frase, _recordado(frase, dicho["explanation"], dicho)
+                            )
                         ),
                     },
                     decir,
@@ -337,22 +339,27 @@ def run(
                     "executed": False,
                     "command": "",
                     "conversation": True,
-                    "explanation": _con_trato(_recordado(frase, charla, {})),
+                    "explanation": _con_trato(
+                        _con_mejora(frase, _recordado(frase, charla, {}))
+                    ),
                 },
                 decir,
                 cara,
             )
 
         return _error(
-            str(intencion.get("motivo") or "no supe qué comando usar"),
+            _con_mejora(
+                frase, str(intencion.get("motivo") or "no supe qué comando usar")
+            ),
             frase=frase,
         )
 
     if nombre not in tabla:
         # El modelo se inventó un comando. Se para aquí: ejecutar algo que no
-        # está en la tabla es exactamente lo que no puede pasar.
+        # está en la tabla es exactamente lo que no puede pasar. Pero es una
+        # capacidad que el usuario pidió y no hay: se apunta.
         return _error(
-            f"el modelo pidió un comando que no existe: {nombre}",
+            _con_mejora(frase, f"el modelo pidió un comando que no existe: {nombre}"),
             disponibles=sorted(tabla),
         )
 
@@ -504,6 +511,28 @@ def reiniciar_saludo() -> None:
     global _ya_saludo
 
     _ya_saludo = False
+
+
+def _con_mejora(frase: str, texto: str) -> str:
+    """Si la respuesta es un «no puedo» o un «no entendí», lo pedido queda como
+    capacidad pendiente y se ofrece aprenderla con la palabra maestra."""
+    from ai_architect import autoreparacion
+
+    if (
+        not autoreparacion.es_incapacidad(texto)
+        and "no supe" not in texto
+        and "no existe" not in texto
+    ):
+        return texto
+
+    ya = autoreparacion.pendiente()
+
+    if ya is not None and ya.get("frase") == frase:
+        return texto
+
+    _averia, aviso = autoreparacion.apuntar_incapacidad(frase, texto)
+
+    return texto.rstrip() + "\n\n" + aviso
 
 
 def _aprender(frase: str, respuesta: str, engine: Any) -> None:
