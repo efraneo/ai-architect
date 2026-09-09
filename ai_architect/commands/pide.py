@@ -254,6 +254,7 @@ def run(
                 "descubrir": rapida.get("descubrir", ""),
                 "cerrar": bool(rapida.get("cerrar")),
                 "rostro": rapida.get("rostro", ""),
+                "mirar": rapida.get("mirar", ""),
                 "ventana_app": rapida.get("ventana_app", ""),
                 "dictando": rapida.get("dictando"),
                 "explanation": _con_trato(

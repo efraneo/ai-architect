@@ -938,6 +938,15 @@ def atender_lo_oido(
 
     nombrado, resto = oido_nombre.separar(dicho)
 
+    # La huella de voz: lo sensible solo con la voz de quien manda.
+    permitido, motivo = _voz_autorizada(dicho)
+
+    if not permitido:
+        _registro(f"  ! (voz no reconocida) {dicho}")
+        decir_proactivo(motivo)
+
+        return {"oido": dicho, "respuesta": "", "ms": 0, "ajeno": True, "error": "voz"}
+
     # Mientras habla, un trozo corto sin su nombre es casi seguro su propia
     # voz llegando a cachos: con menos de tres palabras `es_eco` no puede
     # juzgar, así que aquí se descarta directamente.
@@ -1093,6 +1102,7 @@ def atender(texto: str, project: str, si: bool) -> dict[str, Any]:
         "permiso": permiso,
         "pedir": resultado.get("pedir"),
         "rostro": resultado.get("rostro", ""),
+        "mirar": resultado.get("mirar", ""),
         "cerrar": bool(resultado.get("cerrar")),
         "_audio": preparado,
     }
@@ -1191,3 +1201,43 @@ def _apagar(servidor: Any) -> None:
 
 def rostro() -> Path:
     return avatar.ROSTRO
+
+
+# --- Los sentidos ---------------------------------------------------------------
+
+
+def respuesta_hablada(texto: str) -> dict[str, Any]:
+    """Un texto listo para la cara: con su audio y su duración."""
+    preparado = motor_de_voz.preparar(texto)
+    _recordar_dicho(preparado, texto)
+
+    return {
+        "respuesta": texto,
+        "dicho": preparado.get("texto", texto),
+        "ms": int(float(preparado.get("segundos", 0) or 0) * 1000),
+        "_audio": preparado,
+    }
+
+
+def mirar_imagen(imagen: str, pregunta: str) -> dict[str, Any]:
+    """Un fotograma de la cámara: se describe y se contesta como cualquier orden."""
+    from ai_architect import vision
+
+    if not imagen:
+        return respuesta_hablada("No tengo la cámara encendida para mirar.")
+
+    salida = vision.describir(imagen, pregunta)
+    texto = str(salida["texto"]) if salida.get("ok") else str(salida.get("error"))
+    _registro(f"  < (vista) {_resumen(texto)}")
+
+    return respuesta_hablada(texto)
+
+
+def _voz_autorizada(dicho: str) -> tuple[bool, str]:
+    try:
+        from ai_architect.voz import huella
+
+        return huella.autoriza(dicho)
+
+    except Exception:  # noqa: BLE001 - la huella nunca bloquea por error propio
+        return True, ""

@@ -212,11 +212,19 @@ def responder(frase: str, ahora: datetime | None = None) -> dict[str, Any] | Non
 
 
 def _de_la_vida() -> list[Any]:
-    from ai_architect import agenda, investigar
+    from ai_architect import agenda, investigar, vision
     from ai_architect.agente.memoria import episodios
     from ai_architect.canales import hogar
+    from ai_architect.voz import escuchar, huella
 
-    return [agenda.por_voz, episodios.por_voz, hogar.por_voz, investigar.por_voz]
+    return [
+        lambda frase: huella.por_voz(frase, escuchar.ultimo_audio),
+        vision.por_voz,
+        agenda.por_voz,
+        episodios.por_voz,
+        hogar.por_voz,
+        investigar.por_voz,
+    ]
 
 
 # --- La memoria -------------------------------------------------------------

@@ -119,6 +119,23 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
 
                 return
 
+            if ruta == "/mirar":
+                # Un fotograma de la cámara y la pregunta: se describe y se dice.
+                try:
+                    largo = min(int(self.headers.get("Content-Length") or 0), 6_000_000)
+                    cuerpo = json.loads(self.rfile.read(largo) or b"{}")
+                    imagen = str(cuerpo.get("imagen", ""))
+                    pregunta = str(cuerpo.get("pregunta", ""))
+
+                except (ValueError, OSError, AttributeError):
+                    self.send_error(400)
+
+                    return
+
+                self._enviar(c.mirar_imagen(imagen, pregunta))
+
+                return
+
             if ruta == "/sonar":
                 # La página no pudo reproducir el audio: suena aquí.
                 sono = c.sonar_aqui(self._parametro("t"))
@@ -231,6 +248,15 @@ def levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
             tipo = self.headers.get("Content-Type", "")
 
             oido = escuchar.transcribir(audio, ".wav" if "wav" in tipo else ".webm")
+
+            # La huella de voz: se compara siempre que haya una aprendida.
+            try:
+                from ai_architect.voz import huella
+
+                huella.comparar(audio)
+
+            except Exception:  # noqa: BLE001 - la huella es un extra
+                pass
 
             self._enviar(
                 c.atender_lo_oido(

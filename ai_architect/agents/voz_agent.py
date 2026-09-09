@@ -103,6 +103,42 @@ class VozAgent(BaseAgent):
         except Exception as e:  # noqa: BLE001
             findings.append({"type": "word", "issue": str(e)})
 
+        # --- los sentidos: oído local, visión, huella de voz -------------------------------
+        try:
+            from ai_architect import vision
+            from ai_architect.voz import escuchar, huella
+
+            estado["oido_local"] = escuchar.oido_local_disponible()
+            estado["vision"] = vision.disponible()
+            estado["huella"] = huella.estado()
+
+            if not estado["oido_local"]:
+                findings.append(
+                    {
+                        "type": "oido local",
+                        "issue": "sin faster-whisper no puede oír sin red (ordenar voz instalar_oido_local)",
+                    }
+                )
+
+            if not huella.disponible():
+                findings.append(
+                    {
+                        "type": "huella",
+                        "issue": "sin resemblyzer no reconoce tu voz (ordenar voz instalar_huella)",
+                    }
+                )
+
+            elif not huella.aprendida():
+                findings.append(
+                    {
+                        "type": "huella",
+                        "issue": "aún no ha aprendido tu voz: di «aprende mi voz»",
+                    }
+                )
+
+        except Exception as e:  # noqa: BLE001
+            findings.append({"type": "sentidos", "issue": str(e)})
+
         # --- memoria y aprendizaje -------------------------------------------------------
         try:
             from ai_architect import autoreparacion

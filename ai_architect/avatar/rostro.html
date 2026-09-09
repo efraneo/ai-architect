@@ -1218,6 +1218,7 @@ async function encenderCamara() {
 
   const video = document.createElement("video");
 
+  camara.video = video;
   video.srcObject = flujo;
   video.muted = true;
   video.playsInline = true;
@@ -1708,6 +1709,38 @@ function procesarRespuesta(datos, margen, mostrar) {
   decir(datos, margen);
 
   if (datos.permiso && datos.permiso.length) arquitecto.permiso(datos.permiso);
+
+  // «Que ves»: se toma un fotograma de la camara y se manda a describir.
+  if (datos.mirar) mirarConLaCamara(datos.mirar);
+}
+
+async function mirarConLaCamara(pregunta) {
+  let imagen = "";
+
+  if (camara.video) {
+    const foto = document.createElement("canvas");
+
+    foto.width = 640;
+    foto.height = 480;
+    foto.getContext("2d").drawImage(camara.video, 0, 0, 640, 480);
+    imagen = foto.toDataURL("image/jpeg", 0.7);
+  }
+
+  ocupado = true;
+
+  try {
+    const r = await fetch("/mirar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imagen: imagen, pregunta: pregunta }),
+    });
+
+    procesarRespuesta(await r.json(), 600, true);
+
+  } catch (e) {
+    mostrarOido("No pude mirar: " + e.message, true);
+    escucharDeNuevo();
+  }
 }
 
 // --- La ventana flotante -----------------------------------------------------

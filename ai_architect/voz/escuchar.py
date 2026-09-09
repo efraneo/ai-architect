@@ -114,6 +114,8 @@ def es_alucinacion(texto: str) -> bool:
 
 def transcribir(datos: bytes, sufijo: str = ".webm") -> dict[str, Any]:
     """Convierte el audio en texto. Nunca lanza."""
+    global ultimo_audio
+
     if not datos:
         return {"texto": "", "modelo": "", "error": "no llegó audio"}
 
@@ -123,6 +125,11 @@ def transcribir(datos: bytes, sufijo: str = ".webm") -> dict[str, Any]:
             "modelo": "",
             "error": f"el audio pesa {len(datos) // 1024} KB y no cabe",
         }
+
+    ultimo_audio = datos
+
+    if _usar_local():
+        return _transcribir_local(datos, sufijo)
 
     try:
         cliente = _con_openai()
@@ -177,4 +184,70 @@ def disponible() -> bool:
 
     _asegurar_entorno()
 
-    return bool(os.getenv("OPENAI_API_KEY"))
+    return bool(os.getenv("OPENAI_API_KEY")) or _usar_local()
+
+
+# --- El oído local ----------------------------------------------------------------
+#
+# Híbrido: la voz puede quedarse en la máquina. Con ``faster-whisper`` instalado
+# y ``ARCHITECT_OIDO=local`` (o sin clave de OpenAI), se transcribe aquí, sin
+# red. Modelo por ``ARCHITECT_WHISPER_LOCAL`` (``small`` por defecto).
+
+ultimo_audio: bytes = b""
+
+_modelo_local: Any = None
+
+
+def oido_local_disponible() -> bool:
+    try:
+        import faster_whisper  # noqa: F401
+
+    except ImportError:
+        return False
+
+    return True
+
+
+def _usar_local() -> bool:
+    import os
+
+    modo = os.getenv("ARCHITECT_OIDO", "").strip().lower()
+
+    if modo == "local":
+        return oido_local_disponible()
+
+    if modo in ("nube", "openai"):
+        return False
+
+    return not os.getenv("OPENAI_API_KEY") and oido_local_disponible()
+
+
+def _transcribir_local(datos: bytes, sufijo: str) -> dict[str, Any]:
+    global _modelo_local
+
+    import os
+
+    archivo = Path(tempfile.gettempdir()) / f"arquitecto-oido-local{sufijo}"
+
+    try:
+        archivo.write_bytes(datos)
+
+        if _modelo_local is None:
+            from faster_whisper import WhisperModel
+
+            _modelo_local = WhisperModel(
+                os.getenv("ARCHITECT_WHISPER_LOCAL", "small"), compute_type="int8"
+            )
+
+        segmentos, _ = _modelo_local.transcribe(
+            str(archivo), language=IDIOMA, initial_prompt=CONTEXTO, vad_filter=True
+        )
+        texto = " ".join(s.text.strip() for s in segmentos).strip()
+
+    except Exception as e:  # noqa: BLE001 - sin oído local se dice
+        return {"texto": "", "modelo": "local", "error": f"oído local: {e}"}
+
+    if es_alucinacion(texto):
+        return {"texto": "", "modelo": "local", "error": "ruido"}
+
+    return {"texto": texto, "modelo": "local", "error": ""}

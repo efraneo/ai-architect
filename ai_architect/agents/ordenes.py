@@ -640,6 +640,16 @@ CATALOGO: dict[str, dict[str, Tarea]] = {
             False,
             {"texto": "opcional"},
         ),
+        "instalar_huella": Tarea(
+            "instalar_huella",
+            "instala resemblyzer para reconocer tu voz (huella de voz)",
+            lambda raiz, args: _instalar_paquete(raiz, {"paquete": "resemblyzer"}),
+        ),
+        "instalar_oido_local": Tarea(
+            "instalar_oido_local",
+            "instala faster-whisper para oír sin red (ARCHITECT_OIDO=local)",
+            lambda raiz, args: _instalar_paquete(raiz, {"paquete": "faster-whisper"}),
+        ),
         "configurar_canal": Tarea(
             "configurar_canal",
             "empieza la configuración guiada de un canal",
