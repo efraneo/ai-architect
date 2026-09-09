@@ -5,11 +5,10 @@ rem
 rem      hablar
 rem
 rem  Abre el rostro, enciende el microfono y se queda
-rem  escuchando. Se le llama por su nombre: "Architect,
-rem  revisa el proyecto". Nombrado una vez, sigue oyendo
-rem  90 s sin que se repita. Ctrl+C para terminar.
+rem  escuchando. Se le habla sin mas; "Architect" delante
+rem  es opcional. Ctrl+C para terminar.
 rem
-rem      hablar --sin-nombre     atiende todo lo que oiga
+rem      hablar --nombre         solo atiende si lo llamas
 rem      hablar --flotante       en ventana propia, sin marco
 rem
 rem  Para que ademas pueda TOCAR archivos del repositorio:

@@ -237,11 +237,21 @@ def test_sin_nombre_llega_al_comando() -> None:
     assert run.call_args.kwargs["nombre"] is False
 
 
-def test_por_defecto_conversar_pide_el_nombre() -> None:
+def test_por_defecto_conversar_atiende_todo() -> None:
     from ai_architect import cli
 
     with mock.patch.object(cli.conversar, "run", return_value={"success": True}) as run:
         with mock.patch("sys.argv", ["ai-architect", "conversar"]):
+            cli.main()
+
+    assert run.call_args.kwargs["nombre"] is False
+
+
+def test_con_nombre_se_exige() -> None:
+    from ai_architect import cli
+
+    with mock.patch.object(cli.conversar, "run", return_value={"success": True}) as run:
+        with mock.patch("sys.argv", ["ai-architect", "conversar", "--nombre"]):
             cli.main()
 
     assert run.call_args.kwargs["nombre"] is True

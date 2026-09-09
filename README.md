@@ -384,9 +384,8 @@ queda en la cola de aprobaciones con sus argumentos exactos. Con la cara
 abierta, la cola se contesta de viva voz.
 
 **Hablando.** `hablar` (o `architect conversar`) abre el rostro y el
-micrófono. Se le llama por su nombre —«Architect, revisa el proyecto»— y
-después sigue oyendo 90 s sin repetirlo; `--sin-nombre` para que atienda
-todo. Se le puede cortar hablándole encima («Architect, calla»). Cuando
+micrófono. Se le habla sin más; «Architect» delante es opcional, y con
+`--nombre` solo atiende si lo llamas. Se le puede cortar hablándole encima («Architect, calla»). Cuando
 `hacer` trabaja, la cara enseña una tarjeta por herramienta; si pidió
 permiso, se pone en ámbar y espera un «sí» o un «no» (o los botones).
 `--flotante` la abre en una ventana propia, sin marco y siempre encima

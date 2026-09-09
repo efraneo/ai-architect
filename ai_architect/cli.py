@@ -85,9 +85,9 @@ COMANDOS: tuple[Comando, ...] = (
     Comando(
         "conversar",
         "Hablarle por el micrófono y que conteste (--si autoriza lo que escribe, "
-        "--sin-nombre para no tener que llamarlo «Architect»)",
+        "--nombre para que solo atienda si lo llamas «Architect»)",
         lambda a: conversar.run(
-            a.project, si=a.si, nombre=not a.sin_nombre, flotante=a.flotante
+            a.project, si=a.si, nombre=a.nombre, flotante=a.flotante
         ),
         elegible=False,
     ),
@@ -473,9 +473,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--nombre",
+        action="store_true",
+        help="For conversar: only attend when called 'Architect' first (default: attend everything)",
+    )
+
+    parser.add_argument(
         "--sin-nombre",
         action="store_true",
-        help="For conversar: attend everything it hears, without saying 'Architect' first",
+        help="For conversar: kept for compatibility; attending everything is now the default",
     )
 
     parser.add_argument(

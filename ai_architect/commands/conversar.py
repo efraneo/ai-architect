@@ -109,13 +109,16 @@ def run(
     project: str = ".",
     si: bool = False,
     servir_para_siempre: bool = True,
-    nombre: bool = True,
+    nombre: bool = False,
     flotante: bool = False,
 ) -> dict[str, Any]:
     """Abre la cara en modo conversación y se queda escuchando.
 
-    ``nombre``: si hay que llamarlo «Architect» para que atienda (lo normal), o
-    si atiende todo lo que oiga (``--sin-nombre``). ``flotante``: en una ventana
+    ``nombre``: si hay que llamarlo «Architect» para que atienda (``--nombre``).
+    Por defecto atiende todo lo que oiga: en las pruebas reales Efraín no lo
+    nombraba y cada orden se perdía como «no era para mí». Del eco de sus
+    altavoces se encarga la propia página (el audio suena ahí y el navegador lo
+    resta del micrófono) más ``es_eco``. ``flotante``: en una ventana
     propia, sin marco y siempre encima (pywebview), en vez del navegador.
     """
     configurar_oido("nombre" if nombre else "libre")
@@ -470,11 +473,11 @@ def _como_llamarlo() -> str:
             "  Llámalo por su nombre: «Architect, revisa el proyecto». Después de\n"
             f"  nombrarlo te sigue oyendo {int(SEGUIMIENTO)} s sin que lo repitas.\n"
             "  Si está hablando y quieres cortarlo, háblale encima: «Architect, calla».\n"
-            "  (--sin-nombre para que atienda todo lo que oiga)"
+            "  (sin --nombre atiende todo lo que oiga)"
         )
 
     return (
-        "  Háblale sin más: no hace falta llamarlo por su nombre.\n"
+        "  Háblale sin más: no hace falta llamarlo por su nombre (--nombre para exigirlo).\n"
         "  Si está hablando y quieres cortarlo, háblale encima."
     )
 
