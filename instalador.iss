@@ -22,7 +22,7 @@
 ; =========================================================
 
 #define Nombre     "Arquitecto"
-#define Version    "0.2.0"
+#define Version    "0.3.0"
 #define Autor      "Xentris Tech"
 #define Ejecutable "arquitecto.exe"
 
