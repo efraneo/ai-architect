@@ -11,6 +11,18 @@ from ai_architect.commands import celular as cmd_celular
 from ai_architect.commands import respuestas
 
 
+@pytest.fixture(autouse=True)
+def perfil_de_prueba(tmp_path, monkeypatch):
+    """Sin perfil, `pide` contesta «es la primera vez que hablamos» en vez de la orden."""
+    from pathlib import Path as _P
+
+    from ai_architect.core import perfil
+
+    archivo = _P(tmp_path) / "perfil.json"
+    monkeypatch.setattr(perfil, "ARCHIVO", archivo)
+    perfil.configurar("Efraín", archivo=archivo)
+
+
 @pytest.fixture
 def con_telegram(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t0k")
