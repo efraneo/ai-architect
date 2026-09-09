@@ -341,7 +341,7 @@ def run(
     # vale "." por defecto, así que analizaba el que tuviera delante y no
     # decía nada. Cuando acierta parece listo; cuando falla, ha trabajado
     # media hora sobre el proyecto equivocado.
-    if encargo.falta_el_sitio(frase, nombre, dicha):
+    if encargo.falta_el_sitio(frase, nombre, dicha, repositorio):
         return _decir_si_toca(
             {**encargo.anotar(nombre, frase, intencion), "instant": True},
             decir,

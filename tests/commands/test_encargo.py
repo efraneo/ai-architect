@@ -161,3 +161,30 @@ def test_si_no_parece_una_ubicacion_sigue_su_camino(
 
 def test_sin_encargo_pendiente_no_interpreta_nada() -> None:
     assert encargo.con_el_sitio("autosgsst", ".") is None
+
+
+def test_dentro_de_un_proyecto_el_proyecto_es_este(tmp_path: Path) -> None:
+    """«Revisa el proyecto» estando en uno no pregunta dónde; fuera, sí."""
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+    assert encargo.falta_el_sitio("revisa el proyecto", "agents", "", tmp_path) is False
+    assert (
+        encargo.falta_el_sitio("revisa el proyecto", "agents", "", tmp_path / "no")
+        is True
+    )
+    # lo indefinido pregunta siempre
+    assert encargo.falta_el_sitio("revisa un proyecto", "agents", "", tmp_path) is True
+
+
+def test_una_orden_larga_no_es_el_nombre_de_una_carpeta(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("AI_ARCHITECT_RAICES", str(tmp_path))
+
+    encargo.anotar("analyze", "x", {})
+
+    assert (
+        encargo.con_el_sitio("examina el archivo texto.py y dime qué hace", tmp_path)
+        is None
+    )
+    assert encargo.hay_encargo() is False

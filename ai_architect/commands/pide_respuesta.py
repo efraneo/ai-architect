@@ -75,7 +75,9 @@ def explicar(nombre: str, resultado: Any) -> str:
             )
         )
 
-    return "Hecho."
+    # `hacer` y los comandos nuevos ya traen su informe: se dice ese, no un
+    # «Hecho.» que se comía cuarenta segundos de trabajo en cuatro letras.
+    return str(resultado.get("explanation") or resultado.get("written") or "Hecho.")
 
 
 def _explicar_mejora(resultado: dict[str, Any]) -> str:

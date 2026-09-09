@@ -64,17 +64,36 @@ EN_PLURAL = (
     "necesito revisar",
 )
 
-# Lo que se dice cuando se habla de un sitio sin nombrarlo.
+# Lo que se dice cuando se habla de un sitio sin nombrarlo. Lo indefinido
+# («un repositorio») siempre pregunta; lo definido («el proyecto») solo si la
+# conversación no está ya dentro de uno: estando en él, «el proyecto» es este.
 SIN_NOMBRE = (
     "un repositorio",
-    "el repositorio",
     "un proyecto",
-    "el proyecto",
     "un programa",
     "una carpeta",
-    "el codigo",
     "un codigo",
 )
+
+DEFINIDOS = ("el repositorio", "el proyecto", "el codigo")
+
+# Con qué se reconoce que una carpeta es un proyecto de verdad.
+SENAS_DE_PROYECTO = (
+    ".git",
+    "pyproject.toml",
+    "package.json",
+    "setup.py",
+    "requirements.txt",
+    "Cargo.toml",
+    "go.mod",
+)
+
+
+def es_un_proyecto(base: Path | str) -> bool:
+    raiz = Path(base)
+
+    return any((raiz / sena).exists() for sena in SENAS_DE_PROYECTO)
+
 
 # Lo pedido y todavía sin sitio. Se guarda entero para poder ejecutarlo tal
 # cual en cuanto se sepa dónde.
@@ -89,7 +108,9 @@ def olvidar() -> None:
     _esperando.clear()
 
 
-def falta_el_sitio(frase: str, nombre: str, carpeta_dicha: str) -> bool:
+def falta_el_sitio(
+    frase: str, nombre: str, carpeta_dicha: str, base: Path | str = "."
+) -> bool:
     """Si esa orden necesita un sitio y no lo trae.
 
     Tres condiciones, y las tres tienen que darse:
@@ -109,10 +130,15 @@ def falta_el_sitio(frase: str, nombre: str, carpeta_dicha: str) -> bool:
 
     limpia = sin_adornos(frase)
 
-    if contiene(limpia, *SIN_NOMBRE):
+    if contiene(limpia, *SIN_NOMBRE) or contiene(limpia, *EN_PLURAL):
         return True
 
-    return contiene(limpia, *EN_PLURAL)
+    # «Revisa el proyecto» estando dentro de uno habla de este. Preguntar
+    # «¿dónde está?» ahí fue lo primero que cansó en la prueba real.
+    if contiene(limpia, *DEFINIDOS):
+        return not es_un_proyecto(base)
+
+    return False
 
 
 def anotar(nombre: str, frase: str, intencion: dict[str, Any]) -> dict[str, Any]:
@@ -144,6 +170,15 @@ def con_el_sitio(frase: str, base: Path | str = ".") -> dict[str, Any] | None:
     dicho = _limpiar(frase)
 
     if not dicho:
+        return None
+
+    # Una frase larga no es el nombre de una carpeta: es otra orden. Se
+    # suelta la pregunta y la frase sigue su camino. Sin esto, «examina el
+    # archivo X y dime qué hace» se contestaba con «no encuentro ninguna
+    # carpeta que se llame examina el archivo…».
+    if len(dicho.split()) > 4:
+        olvidar()
+
         return None
 
     if contiene(dicho, "dejalo", "olvidalo", "da igual", "cancela", "nada"):
