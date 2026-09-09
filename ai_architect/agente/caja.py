@@ -36,6 +36,8 @@ ESCRIBEN = frozenset(
         "enviar_correo",
         "enviar_whatsapp",
         "celular_llamar",
+        # Las órdenes al equipo que cambian algo (formatear, commit, subir, actualizar…).
+        "ordenar",
     }
 )
 

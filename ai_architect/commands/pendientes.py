@@ -65,6 +65,9 @@ def _describir(herramienta: str, args: dict[str, Any]) -> str:
         return f"ejecutar: {str(args.get('command', ''))[:120]}"
     if herramienta == "git_commit":
         return f"commit: {str(args.get('message', ''))[:120]}"
+    if herramienta == "ordenar":
+        detalle = json.dumps(args.get("argumentos") or {}, ensure_ascii=False)[:80]
+        return f"ordenar a {args.get('agente', '?')}: {args.get('tarea', '?')} {detalle}".strip()
     return f"{herramienta} {json.dumps(args, ensure_ascii=False)[:120]}"
 
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from ai_architect.agente.herramientas_base import BaseTool, ToolSpec
 from ai_architect.agente.tipos import ToolResult
+from ai_architect.agents import ordenes
 
 # clave → (atributo en AgentManager, qué hace)
 EQUIPO: dict[str, tuple[str, str]] = {
@@ -168,5 +169,115 @@ class EquipoTool(BaseTool):
         )
 
 
+class _OrdenBase(BaseTool):
+    """Architect manda; el agente obedece y cuenta qué hizo."""
+
+    tool_id = ""
+    cambia = True
+
+    def __init__(self, project: str) -> None:
+        self._project = project
+
+    def _parametros(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "agente": {
+                    "type": "string",
+                    "enum": sorted(
+                        c
+                        for c, t in ordenes.CATALOGO.items()
+                        if any(x.cambia == self.cambia for x in t.values())
+                    ),
+                },
+                "tarea": {"type": "string"},
+                "argumentos": {"type": "object", "additionalProperties": True},
+            },
+            "required": ["agente", "tarea"],
+        }
+
+    def execute(self, **params: Any) -> ToolResult:
+        agente = str(params.get("agente", "")).strip()
+        tarea = str(params.get("tarea", "")).strip()
+        argumentos = params.get("argumentos") or {}
+
+        if not isinstance(argumentos, dict):
+            argumentos = {}
+
+        definida = ordenes.tareas_de(agente).get(tarea)
+
+        if definida is not None and definida.cambia != self.cambia:
+            otra = "ordenar" if definida.cambia else "consultar"
+
+            return ToolResult(
+                tool_name=self.tool_id,
+                content=f"{agente}.{tarea} {'cambia cosas' if definida.cambia else 'solo consulta'}: usa la herramienta {otra}.",
+                success=False,
+            )
+
+        salida = ordenes.ejecutar(agente, tarea, self._project, **argumentos)
+        texto = f"{agente}.{tarea}: {salida.get('hecho', '')}"
+        extra = {
+            k: v
+            for k, v in salida.items()
+            if k not in ("ok", "hecho") and v not in ("", None)
+        }
+
+        if extra:
+            texto += "\n" + json.dumps(extra, ensure_ascii=False, default=str)[:3000]
+
+        return ToolResult(
+            tool_name=self.tool_id, content=texto, success=bool(salida.get("ok"))
+        )
+
+
+class OrdenarTool(_OrdenBase):
+    """Órdenes que cambian algo: pasan por el permiso del usuario."""
+
+    tool_id = "ordenar"
+    cambia = True
+
+    @property
+    def spec(self) -> ToolSpec:
+        return ToolSpec(
+            name="ordenar",
+            description=(
+                "Da una orden a un agente del equipo para que la CUMPLA (cambia archivos, git, "
+                "paquetes o la máquina; pide permiso al usuario). Tareas por agente:\n"
+                + ordenes.catalogo_en_texto(True)
+            ),
+            parameters=self._parametros(),
+            category="equipo",
+            requires_confirmation=True,
+            timeout_seconds=900,
+        )
+
+
+class ConsultarTool(_OrdenBase):
+    """Órdenes que solo consultan: correr pruebas, ver la CI, verificar, probar la voz."""
+
+    tool_id = "consultar"
+    cambia = False
+
+    @property
+    def spec(self) -> ToolSpec:
+        return ToolSpec(
+            name="consultar",
+            description=(
+                "Pide a un agente del equipo una tarea que no cambia nada (corre pruebas, mira "
+                "la CI, verifica calidad, prueba la voz). Tareas por agente:\n"
+                + ordenes.catalogo_en_texto(False)
+            ),
+            parameters=self._parametros(),
+            category="equipo",
+            timeout_seconds=900,
+        )
+
+
 def herramientas_del_equipo(project: str) -> list[BaseTool]:
-    return [EquipoTool(project), *(AgenteTool(clave, project) for clave in EQUIPO)]
+    return [
+        EquipoTool(project),
+        OrdenarTool(project),
+        ConsultarTool(project),
+        *(AgenteTool(clave, project) for clave in EQUIPO),
+    ]

@@ -78,3 +78,30 @@ detalles de cada módulo están en sus docstrings; esto es el mapa.
 `black --check`, `ruff check`, `mypy ai_architect` y `pytest` (unas 1 240
 pruebas, sin red ni micrófono: los proveedores y la voz se doblan). Los archivos
 portados llevan `# mypy: ignore-errors`. La CI corre eso en Ubuntu y Windows.
+
+## El equipo de agentes: Architect manda, ellos obedecen
+
+Architect no analiza ni arregla nada «a mano» cuando hay un agente para eso. Trece
+agentes revisan el repositorio con herramientas reales (ruff, mypy, black, git, gh,
+pip, pytest, osv.dev) y uno más, Voz y Canales, revisa la máquina. Como herramientas:
+
+- `equipo` corre a todos y da el veredicto; `agente_<tema>` corre uno.
+- `ordenar` (agente, tarea, argumentos) hace cumplir una tarea que cambia algo y
+  **pasa por tu permiso** (cola de aprobaciones, recuadro ámbar en el rostro, «sí» por voz).
+- `consultar` pide una tarea que no cambia nada, sin permiso.
+
+| Agente | Órdenes que obedece |
+|---|---|
+| calidad | formatear (black), corregir (ruff --fix), verificar |
+| errores | corregir (ruff --fix, solo errores reales) |
+| dependencias | instalar `paquete`, actualizar (`paquete` o todos) |
+| git | commit `mensaje`, subir, traer, rama `nombre` |
+| publicacion | anotar_changelog, subir_version `x.y.z` |
+| empaquetado | reconstruir (instalador), etiquetar |
+| pruebas | correr (`ruta`, `filtro`) |
+| devops | ver_ci, relanzar_ci |
+| seguridad | proteger_secretos (.gitignore) |
+| voz | instalar_ventana, probar_voz, configurar_canal `canal` |
+
+Por voz: «formatea el código», «sube los cambios», «corre las pruebas», «actualiza las
+dependencias», «anota el changelog», «etiqueta la versión», «reconstruye el instalador».
