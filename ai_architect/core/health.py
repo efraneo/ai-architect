@@ -33,7 +33,7 @@ ESTADOS_MALOS = {"error", "failed", "not_configured", "unavailable", "down"}
 class Componente(Protocol):
     """Lo que hace falta para poder preguntarle a algo por su salud.
 
-    Es la misma forma que declara ``core/contracts.Component``: un nombre y
+    Es la misma forma que declara un componente: un nombre y
     un ``health()``. ``ProviderManager`` y ``AgentManager`` ya la cumplen.
     """
 

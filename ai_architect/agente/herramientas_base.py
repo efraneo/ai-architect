@@ -297,13 +297,6 @@ class ToolExecutor:
         # security floor: a missing (or accidentally weakened) ToolSpec must
         # not turn a privileged built-in into an unguarded tool.
         required_capabilities = list(tool.spec.required_capabilities)
-        if self._capability_policy is not None:
-            from openjarvis.security.capabilities import canonical_tool_capabilities
-
-            for cap in canonical_tool_capabilities(tool):
-                cap_value = cap.value if hasattr(cap, "value") else cap
-                if cap_value not in required_capabilities:
-                    required_capabilities.append(cap_value)
 
         if self._capability_policy is not None:
             for cap in required_capabilities:
@@ -331,30 +324,6 @@ class ToolExecutor:
                         success=False,
                     )
 
-        # Taint checking (sink policy)
-        taint_set = params.get("_taint") if isinstance(params, dict) else None
-        if taint_set is not None:
-            try:
-                from openjarvis.security.taint import TaintSet, check_taint
-
-                if isinstance(taint_set, TaintSet):
-                    violation = check_taint(tool_call.name, taint_set)
-                    if violation:
-                        if self._bus:
-                            self._bus.publish(
-                                EventType.TAINT_VIOLATION,
-                                {
-                                    "tool": tool_call.name,
-                                    "violation": violation,
-                                },
-                            )
-                        return ToolResult(
-                            tool_name=tool_call.name,
-                            content=f"Taint violation: {violation}",
-                            success=False,
-                        )
-            except ImportError:
-                pass
             # Remove internal taint key before passing to tool
             if isinstance(params, dict):
                 params.pop("_taint", None)
@@ -433,17 +402,6 @@ class ToolExecutor:
         latency = time.time() - t0
         result.latency_seconds = latency
         result.metadata["arguments"] = params
-
-        # Auto-detect taints in results
-        if result.success:
-            try:
-                from openjarvis.security.taint import auto_detect_taint
-
-                detected = auto_detect_taint(result.content)
-                if detected and detected.labels:
-                    result.metadata["_taint"] = detected
-            except ImportError:
-                pass
 
         # Emit end event
         if self._bus:

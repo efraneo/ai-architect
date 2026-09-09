@@ -110,42 +110,13 @@ def load_skill(
         disable_model_invocation=skill_data.get("disable_model_invocation", False),
     )
 
-    # Verify signature if requested
+    # La verificación de firmas y el escáner de inyección eran de OpenJarvis y
+    # no viajaron: aquí las skills son tuyas o de tu proyecto. Pedir firma
+    # sin poder comprobarla sería fingir seguridad.
     if verify_signature and public_key and manifest.signature:
-        try:
-            from openjarvis.security.signing import verify_b64
-
-            valid = verify_b64(
-                manifest.manifest_bytes(),
-                manifest.signature,
-                public_key,
-            )
-            if not valid:
-                raise ValueError(
-                    f"Invalid signature for skill '{manifest.name}'"
-                ) from None
-        except ImportError as exc:
-            raise ImportError(
-                "Signature verification requires 'cryptography'. "
-                "Install with: uv sync --extra security-signing"
-            ) from exc
-
-    # Scan for prompt injection if requested
-    if scan_for_injection:
-        try:
-            from openjarvis.security.scanner import SecretScanner
-
-            scanner = SecretScanner()
-            for step in manifest.steps:
-                scan_result = scanner.scan(step.arguments_template)
-                if scan_result.findings:
-                    raise ValueError(
-                        f"Potential prompt injection in skill '{manifest.name}', "
-                        f"step '{step.tool_name}': "
-                        f"{scan_result.findings[0].description}"
-                    )
-        except ImportError:
-            pass
+        raise ValueError(
+            f"Architect no verifica firmas de skills (skill '{manifest.name}')"
+        )
 
     return manifest
 

@@ -278,54 +278,6 @@ class SkillManager:
     # Trace-driven skill discovery (Plan 2A)
     # ------------------------------------------------------------------
 
-    def discover_from_traces(
-        self,
-        trace_store: Any,
-        *,
-        min_frequency: int = 3,
-        min_outcome: float = 0.5,
-        output_dir: Path | None = None,
-    ) -> list[dict[str, Any]]:
-        """Mine the trace store for recurring tool sequences.
-
-        For each recurring sequence found by :class:`SkillDiscovery`, write
-        a TOML skill manifest into *output_dir* (default
-        ``~/.openjarvis/skills/discovered/``).  Returns a list of dicts with
-        ``name`` and ``path`` for each manifest written.
-
-        Names are normalized to spec-compliant kebab-case (lowercase with
-        hyphens, no underscores) so the resulting manifests load cleanly
-        through the discovery walker.
-        """
-        from openjarvis.learning.agents.skill_discovery import SkillDiscovery
-
-        traces = trace_store.list_traces(limit=10000)
-        discovery = SkillDiscovery(
-            min_frequency=min_frequency,
-            min_outcome=min_outcome,
-        )
-        discovered = discovery.analyze_traces(traces)
-
-        if output_dir is None:
-            output_dir = get_config_dir() / "skills" / "discovered"
-        output_dir = Path(output_dir).expanduser()
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        written: list[dict[str, Any]] = []
-        for skill in discovered:
-            name = self._normalize_skill_name(skill.name)
-            skill_subdir = output_dir / name
-            skill_subdir.mkdir(parents=True, exist_ok=True)
-            toml_path = skill_subdir / "skill.toml"
-            toml_path.write_text(
-                self._serialize_discovered_skill(name, skill),
-                encoding="utf-8",
-            )
-            written.append({"name": name, "path": str(toml_path)})
-
-        return written
-
-    @staticmethod
     def _normalize_skill_name(raw_name: str) -> str:
         """Convert an arbitrary discovered name to a spec-compliant kebab name.
 

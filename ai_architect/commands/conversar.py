@@ -50,10 +50,8 @@ conversación, no en mitad de ella.
 
 from __future__ import annotations
 
-import http.server
 import json
 import queue
-import random
 import secrets
 import threading
 import time
@@ -63,7 +61,15 @@ from pathlib import Path
 from typing import Any
 
 from ai_architect.agente import progreso
-from ai_architect.commands import avatar, pendientes
+from ai_architect.commands import avatar, conversar_servidor, pendientes
+from ai_architect.commands.conversar_muletillas import (  # noqa: F401 - la API sigue aquí
+    MERECE_RELLENO,
+    RELLENOS,
+    _apartar,
+    _rellenos_listos,
+    preparar_rellenos,
+    soltar_relleno,
+)
 from ai_architect.core import perfil
 from ai_architect.core.texto import sin_adornos
 from ai_architect.voz import hablar as motor_de_voz
@@ -499,81 +505,6 @@ def es_eco(oido: str, dicho: str) -> bool:
     return SequenceMatcher(None, a, b).ratio() > 0.62
 
 
-# Lo que dice mientras trabaja. Una cara callada durante tres segundos
-# parece colgada; con esto se sabe que te oyó y está en ello.
-#
-# Varias y al azar para que no suene a grabación. Se sintetizan una sola vez
-# al arrancar —con Piper son milisegundos— porque generarlas en el momento
-# añadiría justo la espera que vienen a tapar.
-RELLENOS = (
-    "Dame un segundo.",
-    "Voy con eso.",
-    "Un momento, lo miro.",
-    "Enseguida te digo.",
-    "Déjame ver.",
-)
-
-# Por debajo de esto no da tiempo ni a abrir la boca: decir "dame un
-# segundo" y contestar en el mismo aliento queda peor que no decir nada.
-#
-# Sube de 0,9 a 1,8 por algo que se vio en uso: "cierra la ventana" se
-# resuelve al instante, pero **sintetizar la respuesta también cuenta**, y
-# Piper tarda casi un segundo. Con el listón en 0,9 saltaba la muletilla
-# para contestar "Cerrada" — un "enseguida te digo" delante de una palabra.
-# Lo que de verdad tarda —los agentes, una revisión— se pasa de 1,8 de
-# sobra, así que no se pierde nada.
-MERECE_RELLENO = 1.8
-
-_rellenos_listos: list[dict[str, Any]] = []
-
-
-def preparar_rellenos() -> int:
-    """Deja las muletillas sintetizadas antes de que hagan falta."""
-    _rellenos_listos.clear()
-
-    for frase in RELLENOS:
-        listo = motor_de_voz.preparar(frase)
-
-        if listo.get("archivo") or listo.get("motor") == "windows":
-            # Cada una en su archivo: comparten el temporal de `hablar` y
-            # la última pisaría a todas las anteriores.
-            copia = _apartar(listo, len(_rellenos_listos))
-
-            if copia:
-                _rellenos_listos.append(copia)
-
-    return len(_rellenos_listos)
-
-
-def _apartar(listo: dict[str, Any], indice: int) -> dict[str, Any] | None:
-    origen = listo.get("archivo")
-
-    if origen is None:
-        return dict(listo)
-
-    destino = Path(origen).with_name(f"arquitecto-relleno-{indice}.wav")
-
-    try:
-        destino.write_bytes(Path(origen).read_bytes())
-
-    except OSError:
-        return None
-
-    return {**listo, "archivo": destino}
-
-
-def soltar_relleno() -> dict[str, Any] | None:
-    """Dice una muletilla ya preparada. Devuelve cuál dijo."""
-    if not _rellenos_listos:
-        return None
-
-    elegido = random.choice(_rellenos_listos)
-
-    motor_de_voz.emitir(elegido)
-
-    return elegido
-
-
 # Cómo se le llama. La lógica vive en ``ai_architect.voz.nombre``; aquí queda
 # el estado de la sesión: el modo y cuándo se le habló por última vez.
 NOMBRES = oido_nombre.NOMBRES
@@ -934,258 +865,6 @@ def _trabajar(buzon: queue.Queue, dicho: str, project: str, si: bool) -> None:
         pass
 
 
-class UnSoloDuenio(http.server.ThreadingHTTPServer):
-    """Un servidor que **no** comparte el puerto.
-
-    `HTTPServer` trae `allow_reuse_address = 1`, y en Windows eso no
-    significa lo que en Unix: alli permite reciclar un puerto en TIME_WAIT,
-    pero aqui deja que un segundo proceso se ate a un puerto que ya esta
-    escuchando. Las dos instancias quedan vivas y el sistema reparte las
-    conexiones entre ellas a capricho.
-
-    Se vio en una prueba: con una conversacion abierta, levantar otro
-    servidor no fallaba —como se esperaba— sino que se colaba, y las
-    peticiones se iban a la conversacion de al lado. Poniendolo en False,
-    el puerto ocupado se nota al instante y se puede decir.
-    """
-
-    allow_reuse_address = False
-
-
-def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
-    class Manos(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 - lo exige la librería
-            ruta = self.path.split("?")[0]
-
-            if ruta == "/respuesta":
-                self._recoger()
-
-                return
-
-            if ruta == "/progreso":
-                desde = 0
-
-                if "?" in self.path:
-                    from urllib.parse import parse_qs
-
-                    try:
-                        desde = int(
-                            parse_qs(self.path.split("?", 1)[1]).get("desde", ["0"])[0]
-                        )
-
-                    except ValueError:
-                        desde = 0
-
-                self._responder(
-                    json.dumps(progreso_desde(desde), ensure_ascii=False).encode(
-                        "utf-8"
-                    ),
-                    "application/json; charset=utf-8",
-                )
-
-                return
-
-            if ruta not in ("/", "/index.html", "/rostro.html"):
-                self.send_error(404)
-
-                return
-
-            self._responder(pagina.encode("utf-8"), "text/html; charset=utf-8")
-
-        def do_POST(self) -> None:  # noqa: N802 - lo exige la librería
-            ruta = self.path.split("?")[0]
-
-            if ruta == "/oir":
-                self._oir()
-
-                return
-
-            if ruta == "/permiso":
-                self._permiso()
-
-                return
-
-            if ruta != "/orden":
-                self.send_error(404)
-
-                return
-
-            try:
-                largo = min(int(self.headers.get("Content-Length") or 0), LIMITE * 4)
-
-                cuerpo = json.loads(self.rfile.read(largo) or b"{}")
-
-                dicho = cuerpo.get("texto", "")
-
-            except (ValueError, OSError, AttributeError):
-                self.send_error(400)
-
-                return
-
-            salida = atender_lo_dicho(
-                str(dicho), project, si, interrumpe=bool(cuerpo.get("interrumpe"))
-            )
-
-            audio = salida.pop("_audio", None)
-
-            self._responder(
-                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-
-            # Después de contestar, no antes: la cara empieza a gesticular
-            # al recibir la respuesta, y el sonido tiene que salir a la vez.
-            if audio:
-                threading.Thread(
-                    target=motor_de_voz.emitir, args=(audio,), daemon=True
-                ).start()
-
-            _registro(f"  < {_resumen(salida['respuesta'])}")
-
-        def _permiso(self) -> None:
-            """Los botones «Sí, hazlo» / «No» de la cara."""
-            try:
-                largo = min(int(self.headers.get("Content-Length") or 0), 4096)
-
-                cuerpo = json.loads(self.rfile.read(largo) or b"{}")
-
-                decision = "si" if cuerpo.get("decision") == "si" else "no"
-
-            except (ValueError, OSError, AttributeError):
-                self.send_error(400)
-
-                return
-
-            salida = resolver_permiso(decision)
-
-            sonido = salida.pop("_audio", None)
-
-            self._responder(
-                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-
-            if sonido:
-                threading.Thread(
-                    target=motor_de_voz.emitir, args=(sonido,), daemon=True
-                ).start()
-
-        def _oir(self) -> None:
-            """Audio en crudo: se transcribe aquí y se trata como una orden."""
-            from ai_architect.voz import escuchar
-
-            largo = min(
-                int(self.headers.get("Content-Length") or 0),
-                escuchar.LIMITE_BYTES,
-            )
-
-            try:
-                audio = self.rfile.read(largo)
-
-            except OSError:
-                self.send_error(400)
-
-                return
-
-            # Solo escucha la ultima pestana que se abrio. Abrir la cara
-            # dos veces dejaba dos micros encendidos: mientras una hablaba,
-            # la otra la oia por los altavoces y la mandaba de vuelta como
-            # si fuera una orden. Se veian los ecos por duplicado.
-            if self.headers.get("X-Turno") and self.headers["X-Turno"] != _turno:
-                self._responder(
-                    json.dumps({"detener": True}, ensure_ascii=False).encode("utf-8"),
-                    "application/json; charset=utf-8",
-                )
-
-                return
-
-            tipo = self.headers.get("Content-Type", "")
-
-            oido = escuchar.transcribir(audio, ".wav" if "wav" in tipo else ".webm")
-
-            salida = atender_lo_oido(
-                oido["texto"],
-                project,
-                si,
-                interrumpe=self.headers.get("X-Interrumpe") == "1",
-                error=oido["error"],
-            )
-
-            sonido = salida.pop("_audio", None)
-
-            self._responder(
-                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-
-            if sonido:
-                threading.Thread(
-                    target=motor_de_voz.emitir, args=(sonido,), daemon=True
-                ).start()
-
-        def _recoger(self) -> None:
-            """La respuesta, cuando esté. La página espera aquí colgada."""
-            resguardo = ""
-
-            if "?" in self.path:
-                from urllib.parse import parse_qs
-
-                resguardo = parse_qs(self.path.split("?", 1)[1]).get("r", [""])[0]
-
-            buzon = _pendientes.pop(resguardo, None)
-
-            if buzon is None:
-                self.send_error(404)
-
-                return
-
-            try:
-                salida = buzon.get(timeout=ESPERA_TRABAJO)
-
-            except queue.Empty:
-                salida = {
-                    "respuesta": "Se me hizo largo y lo dejé.",
-                    "dicho": "Se me hizo largo y lo dejé.",
-                    "ms": 0,
-                }
-
-            sonido = salida.pop("_audio", None)
-
-            self._responder(
-                json.dumps(salida, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-
-            _registro(f"  < {_resumen(salida.get('respuesta', ''))}")
-
-            if sonido:
-                threading.Thread(
-                    target=motor_de_voz.emitir, args=(sonido,), daemon=True
-                ).start()
-
-        def _responder(self, cuerpo: bytes, tipo: str) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", tipo)
-            self.send_header("Content-Length", str(len(cuerpo)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-
-            self.wfile.write(cuerpo)
-
-        def log_message(self, *_: Any) -> None:
-            """El servidor no ensucia la conversación con líneas de acceso."""
-
-    try:
-        servidor = UnSoloDuenio(("127.0.0.1", avatar.PUERTO), Manos)
-
-    except OSError:
-        return (None, "")
-
-    servidor.daemon_threads = True
-
-    return (servidor, f"http://127.0.0.1:{avatar.PUERTO}/")
-
-
 def _resumen(respuesta: str) -> str:
     """El meollo de la respuesta, sin el saludo ni la despedida.
 
@@ -1198,8 +877,17 @@ def _resumen(respuesta: str) -> str:
     return partes[1] if len(partes) > 2 else (partes[0] if partes else "")
 
 
+UnSoloDuenio = conversar_servidor.UnSoloDuenio
+
+
+def _levantar(pagina: str, project: str, si: bool) -> tuple[Any, str]:
+    """El servidor vive en ``conversar_servidor``; esto queda para quien lo
+    llamaba (y para las pruebas, que lo doblan aquí)."""
+    return conversar_servidor.levantar(pagina, project, si)
+
+
 def _apagar(servidor: Any) -> None:
-    servidor.server_close()
+    conversar_servidor.apagar(servidor)
 
 
 def rostro() -> Path:
